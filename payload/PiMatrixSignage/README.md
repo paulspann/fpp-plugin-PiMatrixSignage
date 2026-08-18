@@ -1,4 +1,12 @@
-# Pi Matrix Signage v0.6.9
+# Pi Matrix Signage v0.6.10
+
+
+## v0.6.10 – animated sky and weather shader
+
+- Adds a built-in **Sky Weather** generator with clear, partly cloudy, overcast, rain, snow and storm modes.
+- Provides day, sunset and night phases with a moving sun or moon, stars, horizon glow and layered wind-driven clouds.
+- Adds controls for movement speed, wind direction, cloud cover, precipitation intensity, sun/moon size and all key colours.
+- Keeps rain streaks, snow particles, clouds and lightning readable on low-resolution P5/P10 panels.
 
 
 ## v0.6.9 – settings menu

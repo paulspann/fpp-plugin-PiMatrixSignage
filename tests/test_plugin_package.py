@@ -31,9 +31,9 @@ def test_fpp_menu_opens_pimatrix_directly():
     assert "Pi Matrix Signage" in menu
 
 
-def test_payload_is_v069_or_later():
+def test_payload_is_v0610_or_later():
     version = tuple(int(x) for x in (ROOT / 'payload' / 'PiMatrixSignage' / 'VERSION').read_text().strip().split('.')[:3])
-    assert version >= (0, 6, 9)
+    assert version >= (0, 6, 10)
 
 
 def test_plugin_info_uses_published_repository():
