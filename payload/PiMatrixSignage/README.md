@@ -1,5 +1,13 @@
-# Pi Matrix Signage v0.6.6
+# Pi Matrix Signage v0.6.7
 
+
+## v0.6.7 – FPP-managed updates
+
+- Removes the customer-facing **Upgrade** tab now that Pi Matrix Signage is installed and updated through the FPP Plugin Manager.
+- Removes the obsolete Upgrade checkbox from the Users tab; existing backend `can_upgrade` data remains untouched for legacy maintenance endpoints.
+- Adds a **Software updates** information panel under Display setup showing the installed version and directing administrators to **FPP → Content Setup → Plugin Manager → Pi Matrix Signage → Update**.
+- Keeps the existing privileged upgrade helper, health-check, safety backup and rollback code packaged underneath rather than deleting the proven recovery machinery.
+- Makes legacy upgrade-page JavaScript conditional so removing the page cannot cause browser startup errors.
 
 ## v0.6.6 – FPP Plugin installer support
 

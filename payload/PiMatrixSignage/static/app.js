@@ -755,7 +755,7 @@
 
   // Users
   function userRightsSummary(u){
-    const labels=[];if(u.can_messages)labels.push('Messages');if(u.can_playlists)labels.push('Playlists');if(u.can_schedules)labels.push('Schedules');if(u.can_display_setup)labels.push('Display setup');if(u.can_upgrade)labels.push('Upgrade');if(u.can_backup)labels.push('Backup');if(u.can_users)labels.push('Users');return labels.length?labels.join(' · '):'Dashboard only';
+    const labels=[];if(u.can_messages)labels.push('Messages');if(u.can_playlists)labels.push('Playlists');if(u.can_schedules)labels.push('Schedules');if(u.can_display_setup)labels.push('Display setup');if(u.can_backup)labels.push('Backup');if(u.can_users)labels.push('Users');return labels.length?labels.join(' · '):'Dashboard only';
   }
   function renderUserList(){
     if(!$('userList'))return;
@@ -764,18 +764,18 @@
   }
   function blankUser(){
     state.selectedUser=null;$('userId').value='';$('userEditorTitle').textContent='New user';$('userUsername').value='';$('userDisplayName').value='';$('userActive').checked=true;
-    ['permMessages','permPlaylists','permSchedules','permDisplaySetup','permUpgrade','permBackup','permUsers'].forEach(id=>$(id).checked=false);
+    ['permMessages','permPlaylists','permSchedules','permDisplaySetup','permBackup','permUsers'].forEach(id=>$(id).checked=false);
     $('userPassword').value='';$('userMustChange').checked=true;$('userPasswordHint').textContent='required for a new user';$('deleteUser').disabled=true;$('currentUserRightsNotice').classList.add('hidden');renderUserList();
   }
   function selectUser(id){
     const u=state.users.find(x=>+x.id===+id);if(!u)return;state.selectedUser=+u.id;$('userId').value=u.id;$('userEditorTitle').textContent=u.display_name||u.username;$('userUsername').value=u.username;$('userDisplayName').value=u.display_name||'';$('userActive').checked=!!u.is_active;
-    $('permMessages').checked=!!u.can_messages;$('permPlaylists').checked=!!u.can_playlists;$('permSchedules').checked=!!u.can_schedules;$('permDisplaySetup').checked=!!u.can_display_setup;$('permUpgrade').checked=!!u.can_upgrade;$('permBackup').checked=!!u.can_backup;$('permUsers').checked=!!u.can_users;
+    $('permMessages').checked=!!u.can_messages;$('permPlaylists').checked=!!u.can_playlists;$('permSchedules').checked=!!u.can_schedules;$('permDisplaySetup').checked=!!u.can_display_setup;$('permBackup').checked=!!u.can_backup;$('permUsers').checked=!!u.can_users;
     $('userPassword').value='';$('userMustChange').checked=!!u.must_change_password;$('userPasswordHint').textContent='leave blank to keep current password';$('deleteUser').disabled=+u.id===+state.auth?.user?.id;$('currentUserRightsNotice').classList.toggle('hidden',+u.id!==+state.auth?.user?.id);renderUserList();
   }
   async function loadUsers(){
     if(!can('users'))return;try{state.users=await api('/api/users');renderUserList();if(state.selectedUser&&state.users.some(u=>+u.id===+state.selectedUser))selectUser(state.selectedUser);else if(state.users.length)selectUser(state.users[0].id);else blankUser();}catch(e){toast(e.message,true);}
   }
-  function userPayload(){return {username:$('userUsername').value.trim(),display_name:$('userDisplayName').value.trim(),is_active:$('userActive').checked,messages:$('permMessages').checked,playlists:$('permPlaylists').checked,schedules:$('permSchedules').checked,display_setup:$('permDisplaySetup').checked,upgrade:$('permUpgrade').checked,backup:$('permBackup').checked,users:$('permUsers').checked,password:$('userPassword').value,must_change_password:$('userMustChange').checked};}
+  function userPayload(){return {username:$('userUsername').value.trim(),display_name:$('userDisplayName').value.trim(),is_active:$('userActive').checked,messages:$('permMessages').checked,playlists:$('permPlaylists').checked,schedules:$('permSchedules').checked,display_setup:$('permDisplaySetup').checked,backup:$('permBackup').checked,users:$('permUsers').checked,password:$('userPassword').value,must_change_password:$('userMustChange').checked};}
   async function saveUser(){
     try{const id=$('userId').value,body=userPayload();if(!body.username)throw new Error('Enter a username');if(!id&&!body.password)throw new Error('Enter an initial password');const saved=await api(id?`/api/users/${id}`:'/api/users',{method:id?'PUT':'POST',body});state.selectedUser=+saved.id;await refreshAuth();if(!can('users')){toast('User saved. Your access rights have changed.');showDashboard();return;}await loadUsers();selectUser(saved.id);toast(id?'User updated':'User created');}catch(e){toast(e.message,true);}
   }
@@ -1154,12 +1154,17 @@
   backupZone.addEventListener('drop',ev=>{if($('backupRestoreFile').disabled)return;const file=ev.dataTransfer?.files?.[0];if(file)restoreUploadedBackup(file);});
   $('backupRestoreFile').addEventListener('change',()=>{const file=$('backupRestoreFile').files?.[0];if(file)restoreUploadedBackup(file);});
 
+  // The customer-facing Upgrade tab was removed in v0.6.7. Keep these
+  // listeners conditional so the legacy browser-upgrade engine can remain
+  // packaged for rollback/service-maintenance use without requiring its UI.
   const upgradeZone=$('upgradeDropZone');
-  ['dragenter','dragover'].forEach(name=>upgradeZone.addEventListener(name,ev=>{ev.preventDefault();if(!$('upgradeFile').disabled)upgradeZone.classList.add('dragover');}));
-  ['dragleave','drop'].forEach(name=>upgradeZone.addEventListener(name,ev=>{ev.preventDefault();upgradeZone.classList.remove('dragover');}));
-  upgradeZone.addEventListener('drop',ev=>{if($('upgradeFile').disabled)return;const file=ev.dataTransfer?.files?.[0];if(file)startUpgrade(file);});
-  $('upgradeFile').addEventListener('change',()=>{const file=$('upgradeFile').files?.[0];if(file)startUpgrade(file);});
-  $('refreshUpgradeStatus').addEventListener('click',()=>loadUpgradeStatus());
+  if(upgradeZone){
+    ['dragenter','dragover'].forEach(name=>upgradeZone.addEventListener(name,ev=>{ev.preventDefault();if(!$('upgradeFile').disabled)upgradeZone.classList.add('dragover');}));
+    ['dragleave','drop'].forEach(name=>upgradeZone.addEventListener(name,ev=>{ev.preventDefault();upgradeZone.classList.remove('dragover');}));
+    upgradeZone.addEventListener('drop',ev=>{if($('upgradeFile').disabled)return;const file=ev.dataTransfer?.files?.[0];if(file)startUpgrade(file);});
+    $('upgradeFile').addEventListener('change',()=>{const file=$('upgradeFile').files?.[0];if(file)startUpgrade(file);});
+    $('refreshUpgradeStatus')?.addEventListener('click',()=>loadUpgradeStatus());
+  }
   $('logoutButton').addEventListener('click',async()=>{try{await api('/api/auth/logout',{method:'POST'});}finally{location.href='/login';}});
 
   setupMessageEditorWorkspace();

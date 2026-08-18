@@ -31,12 +31,20 @@ def test_fpp_menu_opens_pimatrix_directly():
     assert "Pi Matrix Signage" in menu
 
 
-def test_payload_is_v066_or_later():
+def test_payload_is_v067_or_later():
     version = tuple(int(x) for x in (ROOT / 'payload' / 'PiMatrixSignage' / 'VERSION').read_text().strip().split('.')[:3])
-    assert version >= (0, 6, 6)
+    assert version >= (0, 6, 7)
 
 
 def test_plugin_info_uses_published_repository():
     info = json.loads((ROOT / 'pluginInfo.json').read_text(encoding='utf-8'))
     assert info['srcURL'] == 'https://github.com/paulspann/fpp-plugin-PiMatrixSignage.git'
     assert info['versions'][0]['branch'] == 'main'
+
+
+def test_plugin_update_is_the_customer_facing_application_update_path():
+    upgrade = (ROOT / 'scripts' / 'fpp_upgrade.sh').read_text(encoding='utf-8')
+    html = (ROOT / 'payload' / 'PiMatrixSignage' / 'templates' / 'index.html').read_text(encoding='utf-8')
+    assert 'fpp_install.sh' in upgrade
+    assert 'data-tab="upgrade"' not in html
+    assert 'Content Setup → Plugin Manager' in html

@@ -1,22 +1,21 @@
-# Pi Matrix Signage v0.6.2 – Install / Upgrade
+# Pi Matrix Signage v0.6.7 – Install / Upgrade
 
-v0.6.2 switches the commercial-licensing integration to the native **Pi Matrix Signage Licensing** WHMCS addon while keeping licence enforcement **disabled by default** (`development` mode). Existing installations therefore continue to operate normally while WHMCS is commissioned.
+Pi Matrix Signage is intended to be installed and updated through the **FPP Plugin Manager** on FPP 10+. The old customer-facing browser Upgrade tab has been removed; the underlying health-check and rollback machinery remains installed for safe application replacement.
 
-## Upgrade from v0.5.x / v0.6.x
+## Normal FPP Plugin installation / upgrade
 
-1. Open **Upgrade** in Pi Matrix Signage.
-2. Upload `PiMatrixSignage-v0.6.2.zip`.
-3. Wait for the service to restart and reconnect.
-4. Confirm the interface reports `v0.6.2`.
-5. If this installation predates v0.6.0, run `sudo ./install.sh` once from the release folder so `python3-cryptography` and the persistent `license.env` systemd configuration are installed.
+1. Open **FPP → Content Setup → Plugin Manager**.
+2. Install **Pi Matrix Signage**, or choose **Update** when a newer plugin release is offered.
+3. FPP runs the Pi Matrix plugin installer without SSH, preserves persistent Pi Matrix data, starts the service and verifies `http://127.0.0.1:8090/health`.
+4. Open **Content Setup → Pi Matrix Signage** to return directly to the application.
 
-The browser upgrade preserves the database, media, uploaded shaders, users, messages, scenes, schedules, playlists, backups and FPP/display configuration.
+The FPP-managed upgrade preserves the Pi Matrix database, media, uploaded shaders, users, messages, scenes, schedules, playlists, backups and licensing data.
 
 ## Manual / fresh install
 
 ```bash
 cd /home/fpp/media/upload
-unzip -o PiMatrixSignage-v0.6.2.zip
+unzip -o PiMatrixSignage-v0.6.7.zip
 cd PiMatrixSignage
 sudo ./install.sh
 ```

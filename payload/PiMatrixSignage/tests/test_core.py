@@ -454,11 +454,15 @@ class CoreTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 helper.inspect_zip(bad)
 
-    def test_upgrade_ui_and_helper_are_packaged(self):
+    def test_upgrade_engine_is_packaged_without_customer_upgrade_tab(self):
         html = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
         install = (ROOT / "install.sh").read_text(encoding="utf-8")
-        self.assertIn('data-tab="upgrade"', html)
-        self.assertIn('id="upgradeDropZone"', html)
+        app_py = (ROOT / "app.py").read_text(encoding="utf-8")
+        self.assertNotIn('data-tab="upgrade"', html)
+        self.assertNotIn('id="upgradeDropZone"', html)
+        self.assertIn('Software updates', html)
+        self.assertIn('Content Setup → Plugin Manager', html)
+        self.assertIn('/api/upgrade', app_py)
         self.assertIn('/usr/local/sbin/pi-matrix-signage-upgrade', install)
         self.assertTrue((ROOT / "systemd" / "pi-matrix-signage-upgrade").is_file())
 

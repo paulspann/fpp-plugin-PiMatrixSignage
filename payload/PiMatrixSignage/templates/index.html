@@ -31,7 +31,6 @@
     <button class="tab permission-gated" data-tab="playlists" data-permission="playlists">Playlists</button>
     <button class="tab permission-gated" data-tab="schedules" data-permission="schedules">Schedules</button>
     <button class="tab permission-gated" data-tab="setup" data-permission="display_setup">Display setup</button>
-    <button class="tab permission-gated" data-tab="upgrade" data-permission="upgrade">Upgrade</button>
     <button class="tab permission-gated" data-tab="backup" data-permission="backup">Backup &amp; restore</button>
     <button class="tab permission-gated" data-tab="users" data-permission="users">Users</button>
   </nav>
@@ -655,6 +654,13 @@
           </div>
           <div class="callout compact-callout" id="licenceHelp"><strong>Device locking:</strong> one WHMCS licence is bound to this controller's Device ID. Use WHMCS Reissue before moving the licence to replacement hardware.</div>
         </article>
+        <article class="card full-span software-update-card">
+          <div class="card-head">
+            <div><h2>Software updates</h2><p>Updates are managed by Falcon Player so customers do not need to download or upload release ZIP files.</p></div>
+            <div class="version-badge">Installed <strong>v{{ app_version }}</strong></div>
+          </div>
+          <div class="callout compact-callout"><strong>Update from FPP:</strong> open <em>Content Setup → Plugin Manager</em>, find <strong>Pi Matrix Signage</strong> and choose <strong>Update</strong> when a newer plugin release is available. The existing Pi Matrix health-check and rollback machinery remains installed underneath for safe application replacement.</div>
+        </article>
         <article class="card">
           <div class="card-head"><div><h2>Panel layout</h2><p>Tell the app the pixel size and arrangement of the physical panels.</p></div></div>
           <div class="form-grid cols-3"><label>Pixels per panel – width<input type="number" id="panelWidth" min="8" max="512"></label><label>Pixels per panel – height<input type="number" id="panelHeight" min="8" max="512"></label><label>Panel scan rate<select id="panelScan"><option value="1/16">1/16 scan</option><option value="1/8">1/8 scan</option></select></label></div>
@@ -807,40 +813,6 @@
       </div>
     </section>
 
-    <section class="page" id="page-upgrade">
-      <div class="grid upgrade-grid">
-        <article class="card full-span">
-          <div class="card-head">
-            <div><h2>Software upgrade</h2><p>Drop a Pi Matrix Signage release ZIP here. It is validated, backed up, installed and the service restarts automatically.</p></div>
-            <div class="version-badge">Installed <strong id="upgradeCurrentVersion">v{{ app_version }}</strong></div>
-          </div>
-          <div class="callout compact-callout"><strong>Protected area:</strong> only signed-in users with Upgrade permission can install software releases.</div>
-          <div id="upgradeHelperNotice" class="callout warn hidden"><strong>Upgrade helper not installed:</strong> install this release once with <code>sudo ./install.sh</code>. Future normal releases can then be installed from this tab.</div>
-          <label class="upgrade-dropzone" id="upgradeDropZone">
-            <input type="file" id="upgradeFile" accept=".zip,application/zip">
-            <span class="upgrade-drop-icon">⇧</span>
-            <strong>Drop release ZIP here</strong>
-            <span>or click to choose a file</span>
-            <small>Installation starts automatically after validation. Do not power off the Pi during an upgrade.</small>
-          </label>
-          <div id="upgradeSelected" class="upgrade-selected muted">No release selected.</div>
-        </article>
-
-        <article class="card full-span">
-          <div class="card-head"><div><h2>Upgrade status</h2><p>The page may disconnect briefly while the signage service restarts.</p></div><button class="btn secondary" id="refreshUpgradeStatus">Refresh</button></div>
-          <div class="upgrade-status-grid">
-            <div><span>State</span><strong id="upgradeState">Ready</strong></div>
-            <div><span>From</span><strong id="upgradeFrom">—</strong></div>
-            <div><span>To</span><strong id="upgradeTo">—</strong></div>
-            <div><span>Rollback backup</span><strong id="upgradeBackup">—</strong></div>
-          </div>
-          <div class="upgrade-progress hidden" id="upgradeProgress"><div id="upgradeProgressBar"></div></div>
-          <div class="callout compact-callout" id="upgradeMessage">Drop a newer Pi Matrix Signage ZIP above when you are ready to upgrade.</div>
-          <p class="hint" id="upgradeCompleted"></p>
-        </article>
-      </div>
-    </section>
-
     <section class="page permission-page" id="page-users" data-permission="users">
       <div class="split-layout users-layout">
         <aside class="card list-card users-list-card">
@@ -862,7 +834,6 @@
               <label class="permission-card"><input type="checkbox" id="permPlaylists"><span><strong>Playlists</strong><small>Create and run playlists</small></span></label>
               <label class="permission-card"><input type="checkbox" id="permSchedules"><span><strong>Schedules</strong><small>Manage timed content</small></span></label>
               <label class="permission-card"><input type="checkbox" id="permDisplaySetup"><span><strong>Display setup</strong><small>Panel output and Pi shutdown</small></span></label>
-              <label class="permission-card"><input type="checkbox" id="permUpgrade"><span><strong>Upgrade</strong><small>Install application updates</small></span></label>
               <label class="permission-card"><input type="checkbox" id="permBackup"><span><strong>Backup &amp; restore</strong><small>Create, download and restore full backups</small></span></label>
               <label class="permission-card"><input type="checkbox" id="permUsers"><span><strong>Users</strong><small>Manage accounts and rights</small></span></label>
             </div>
