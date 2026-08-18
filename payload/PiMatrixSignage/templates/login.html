@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10131a">
+  <title>Sign in · Pi Matrix Signage</title>
+  <link rel="stylesheet" href="/static/app.css?v={{ app_version }}">
+</head>
+<body class="auth-body">
+  <main class="auth-shell">
+    <section class="auth-card">
+      <div class="auth-brand">
+        <h1>Pi Matrix Signage</h1>
+        <p>Hanson rPI-MFC · P5/P10 LED display controller · v{{ app_version }}</p>
+      </div>
+      <h2>Sign in</h2>
+      <p class="muted">Use your named account to manage this display.</p>
+      {% if error %}<div class="callout warn auth-error">{{ error }}</div>{% endif %}
+      <form method="post" action="/login" class="auth-form" autocomplete="on">
+        <label>Username<input name="username" value="{{ username }}" autocomplete="username" autofocus required></label>
+        <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+        <button class="btn primary auth-submit" type="submit">Sign in</button>
+      </form>
+      {% if show_default_credentials %}<div class="callout compact-callout auth-first-login"><strong>First login:</strong> username <code>{{ default_username }}</code>, password <code>{{ default_password }}</code>. You will be required to choose a new password immediately.</div>{% endif %}
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,780 @@
+#!/usr/bin/python3
+"""Privileged, deliberately narrow updater for Pi Matrix Signage.
+
+The web app can only invoke this file with no arguments through sudo.  That
+entry point schedules a transient systemd unit so the actual updater is not
+killed when it stops/restarts the main signage service.  The worker accepts a
+single, fixed pending ZIP path and never executes scripts from the ZIP.
+"""
+from __future__ import annotations
+
+import fcntl
+import json
+import os
+import re
+import shutil
+import sqlite3
+import socket
+import stat
+import subprocess
+import sys
+import time
+import urllib.request
+import zipfile
+from datetime import datetime, timezone
+from pathlib import Path, PurePosixPath
+
+SERVICE = "pi-matrix-signage.service"
+HELPER = Path("/usr/local/sbin/pi-matrix-signage-upgrade")
+POWER_HELPER = Path("/usr/local/sbin/pi-matrix-signage-poweroff")
+SERVICE_FILE = Path("/etc/systemd/system/pi-matrix-signage.service")
+SUDOERS_FILE = Path("/etc/sudoers.d/pi-matrix-signage")
+DEST = Path("/home/fpp/media/pi-matrix-signage")
+PERSIST = Path("/home/fpp/media/pi-matrix-signage-data")
+UPGRADE = PERSIST / "upgrade"
+PENDING = UPGRADE / "pending.zip"
+STATUS = UPGRADE / "status.json"
+BACKUPS = UPGRADE / "backups"
+DB = PERSIST / "data" / "signage.db"
+USER_BACKUPS = PERSIST / "backups"
+BACKUP_STATUS = USER_BACKUPS / "status.json"
+FPP_BACKUP_URL = "http://127.0.0.1/backup.php"
+BACKUP_FORMAT = 1
+REQUIRED = {
+    "PiMatrixSignage/VERSION",
+    "PiMatrixSignage/app.py",
+    "PiMatrixSignage/database.py",
+    "PiMatrixSignage/renderer.py",
+    "PiMatrixSignage/shader_support.py",
+    "PiMatrixSignage/diagnostics.py",
+    "PiMatrixSignage/gpio_controls.py",
+    "PiMatrixSignage/licensing.py",
+    "PiMatrixSignage/ddp.py",
+    "PiMatrixSignage/templates/index.html",
+    "PiMatrixSignage/templates/login.html",
+    "PiMatrixSignage/templates/change_password.html",
+    "PiMatrixSignage/templates/remote.html",
+    "PiMatrixSignage/static/app.js",
+    "PiMatrixSignage/static/app.css",
+}
+MAX_FILES = 2500
+MAX_UNCOMPRESSED = 300 * 1024 * 1024
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def write_status(**updates) -> None:
+    UPGRADE.mkdir(parents=True, exist_ok=True)
+    data = {}
+    try:
+        data = json.loads(STATUS.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    data.update(updates)
+    tmp = STATUS.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
+    os.replace(tmp, STATUS)
+    try:
+        shutil.chown(STATUS, user="fpp", group="fpp")
+    except Exception:
+        pass
+
+
+def safe_member_name(name: str) -> PurePosixPath:
+    if not name or "\\" in name or name.startswith("/"):
+        raise ValueError(f"Unsafe ZIP path: {name!r}")
+    p = PurePosixPath(name)
+    if p.is_absolute() or any(part in ("", ".", "..") for part in p.parts):
+        raise ValueError(f"Unsafe ZIP path: {name!r}")
+    if not p.parts or p.parts[0] != "PiMatrixSignage":
+        raise ValueError("Release ZIP must contain a single PiMatrixSignage/ folder")
+    return p
+
+
+def inspect_zip(path: Path) -> str:
+    if not path.is_file():
+        raise ValueError("No pending release ZIP was found")
+    try:
+        zf = zipfile.ZipFile(path)
+    except zipfile.BadZipFile as exc:
+        raise ValueError("The uploaded file is not a valid ZIP archive") from exc
+    with zf:
+        infos = zf.infolist()
+        if not infos or len(infos) > MAX_FILES:
+            raise ValueError("Release ZIP contains an unreasonable number of files")
+        total = 0
+        names = set()
+        for info in infos:
+            p = safe_member_name(info.filename.rstrip("/") if info.is_dir() else info.filename)
+            canonical = str(p)
+            if canonical in names and not info.is_dir():
+                raise ValueError(f"Duplicate ZIP entry: {canonical}")
+            names.add(canonical)
+            total += int(info.file_size)
+            if total > MAX_UNCOMPRESSED:
+                raise ValueError("Release ZIP is too large when unpacked")
+            mode = (info.external_attr >> 16) & 0xFFFF
+            if mode and stat.S_IFMT(mode) and not info.is_dir() and not stat.S_ISREG(mode):
+                raise ValueError(f"Release ZIP contains a non-regular file: {canonical}")
+        missing = REQUIRED - names
+        if missing:
+            raise ValueError("Not a complete Pi Matrix Signage release; missing " + ", ".join(sorted(missing)))
+        raw_version = zf.read("PiMatrixSignage/VERSION")
+        if len(raw_version) > 80:
+            raise ValueError("Invalid VERSION file")
+        version = raw_version.decode("utf-8", "strict").strip()
+        if not re.fullmatch(r"\d+\.\d+\.\d+(?:[-+][A-Za-z0-9._-]+)?", version):
+            raise ValueError(f"Invalid release version: {version!r}")
+        return version
+
+
+def extract_safe(path: Path, stage: Path) -> Path:
+    if stage.exists():
+        shutil.rmtree(stage)
+    stage.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(path) as zf:
+        for info in zf.infolist():
+            raw = info.filename.rstrip("/") if info.is_dir() else info.filename
+            p = safe_member_name(raw)
+            out = stage.joinpath(*p.parts)
+            if info.is_dir():
+                out.mkdir(parents=True, exist_ok=True)
+                continue
+            out.parent.mkdir(parents=True, exist_ok=True)
+            with zf.open(info, "r") as src, open(out, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+            mode = (info.external_attr >> 16) & 0o777
+            os.chmod(out, mode if mode else 0o644)
+    root = stage / "PiMatrixSignage"
+    if not root.is_dir():
+        raise ValueError("Release root folder was not extracted")
+    return root
+
+
+def version_key(v: str):
+    m = re.match(r"^(\d+)\.(\d+)\.(\d+)", v or "")
+    return tuple(map(int, m.groups())) if m else (0, 0, 0)
+
+
+def current_version() -> str:
+    try:
+        return (DEST / "VERSION").read_text(encoding="utf-8").strip()
+    except Exception:
+        return "0.0.0"
+
+
+def chown_tree(path: Path) -> None:
+    import pwd, grp
+    uid = pwd.getpwnam("fpp").pw_uid
+    gid = grp.getgrnam("fpp").gr_gid
+    for root, dirs, files in os.walk(path):
+        os.chown(root, uid, gid)
+        for n in dirs:
+            try: os.chown(Path(root) / n, uid, gid)
+            except FileNotFoundError: pass
+        for n in files:
+            try: os.chown(Path(root) / n, uid, gid)
+            except FileNotFoundError: pass
+
+
+def sqlite_backup(src: Path, dst: Path) -> None:
+    if not src.exists():
+        return
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(str(src)) as s, sqlite3.connect(str(dst)) as d:
+        s.backup(d)
+
+
+def health_ok(timeout: float = 25.0) -> bool:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            with urllib.request.urlopen("http://127.0.0.1:8090/health", timeout=2) as response:
+                if response.status == 200:
+                    payload = json.loads(response.read().decode("utf-8"))
+                    if payload.get("ok") is True:
+                        return True
+        except Exception:
+            pass
+        time.sleep(1)
+    return False
+
+
+def prune_backups(keep: int = 5) -> None:
+    if not BACKUPS.exists():
+        return
+    app_dirs = sorted([p for p in BACKUPS.iterdir() if p.is_dir() and p.name.startswith("app-")], key=lambda p: p.stat().st_mtime, reverse=True)
+    for p in app_dirs[keep:]:
+        shutil.rmtree(p, ignore_errors=True)
+    db_files = sorted(BACKUPS.glob("signage-*.db"), key=lambda p: p.stat().st_mtime, reverse=True)
+    for p in db_files[keep:]:
+        try: p.unlink()
+        except OSError: pass
+
+
+
+def refresh_privileged_files(root: Path) -> None:
+    """Install privileged support files from a validated release.
+
+    This intentionally happens only after the new application has passed its
+    health check.  It never executes anything from the ZIP.
+    """
+    service_src = root / "systemd" / "pi-matrix-signage.service"
+    updater_src = root / "systemd" / "pi-matrix-signage-upgrade"
+    power_src = root / "systemd" / "pi-matrix-signage-poweroff"
+    if service_src.is_file():
+        shutil.copy2(service_src, SERVICE_FILE)
+        os.chmod(SERVICE_FILE, 0o644)
+    if power_src.is_file():
+        shutil.copy2(power_src, POWER_HELPER)
+        os.chown(POWER_HELPER, 0, 0); os.chmod(POWER_HELPER, 0o755)
+    if updater_src.is_file():
+        # Updating the on-disk helper while this process is running is safe;
+        # this process already has its code loaded. Future upgrades use it.
+        shutil.copy2(updater_src, HELPER)
+        os.chown(HELPER, 0, 0); os.chmod(HELPER, 0o755)
+    SUDOERS_FILE.write_text(f"fpp ALL=(root) NOPASSWD: {HELPER}, {POWER_HELPER}\n", encoding="utf-8")
+    os.chown(SUDOERS_FILE, 0, 0); os.chmod(SUDOERS_FILE, 0o440)
+    old_sudoers = Path("/etc/sudoers.d/pi-matrix-signage-upgrade")
+    try: old_sudoers.unlink()
+    except FileNotFoundError: pass
+    subprocess.run(["systemctl", "daemon-reload"], check=False, timeout=15)
+
+def worker() -> int:
+    lock_handle = open("/run/pi-matrix-signage-upgrade.lock", "w")
+    try:
+        fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        write_status(state="failed", completed_at=now_iso(), message="Another upgrade is already running", rolled_back=False)
+        return 1
+    UPGRADE.mkdir(parents=True, exist_ok=True)
+    BACKUPS.mkdir(parents=True, exist_ok=True)
+    old_version = current_version()
+    stage = UPGRADE / f"stage-{os.getpid()}"
+    old_dir = None
+    db_backup = None
+    target = None
+    service_stopped = False
+    try:
+        target = inspect_zip(PENDING)
+        if version_key(target) <= version_key(old_version):
+            raise ValueError(f"Release {target} is not newer than installed version {old_version}")
+        write_status(state="validating", from_version=old_version, to_version=target, started_at=now_iso(), completed_at=None, message="Validating and unpacking release", rolled_back=False)
+        new_root = extract_safe(PENDING, stage)
+        # Validate again after extraction so nothing from the archive is ever executed.
+        extracted_version = (new_root / "VERSION").read_text(encoding="utf-8").strip()
+        if extracted_version != target:
+            raise ValueError("Extracted VERSION does not match validated release")
+
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+        old_dir = BACKUPS / f"app-{stamp}-v{old_version}"
+        db_backup = BACKUPS / f"signage-{stamp}-v{old_version}.db"
+        write_status(state="installing", message="Stopping display service and creating rollback backup")
+        subprocess.run(["systemctl", "stop", SERVICE], check=True, timeout=20)
+        service_stopped = True
+        sqlite_backup(DB, db_backup)
+
+        if DEST.exists():
+            os.rename(DEST, old_dir)
+        os.rename(new_root, DEST)
+        chown_tree(DEST)
+
+        write_status(state="restarting", message=f"Installed v{target}; restarting display service", backup=str(old_dir))
+        subprocess.run(["systemctl", "start", SERVICE], check=True, timeout=20)
+        service_stopped = False
+        if not health_ok():
+            raise RuntimeError(f"v{target} did not pass the post-upgrade health check")
+
+        refresh_privileged_files(DEST)
+
+        try:
+            PENDING.unlink()
+        except OSError:
+            pass
+        prune_backups()
+        write_status(state="success", current_version=target, completed_at=now_iso(), message=f"Upgrade to v{target} completed successfully", rolled_back=False, backup=str(old_dir))
+        return 0
+    except Exception as exc:
+        message = str(exc)
+        rolled_back = False
+        # If the old application has already been moved, restore both code and DB.
+        if old_dir is not None and old_dir.exists():
+            try:
+                subprocess.run(["systemctl", "stop", SERVICE], check=False, timeout=15)
+                service_stopped = True
+                failed = BACKUPS / f"failed-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}-v{target or 'unknown'}"
+                if DEST.exists():
+                    os.rename(DEST, failed)
+                os.rename(old_dir, DEST)
+                chown_tree(DEST)
+                if db_backup is not None and db_backup.exists() and DB.parent.exists():
+                    for suffix in ("-wal", "-shm"):
+                        try: Path(str(DB) + suffix).unlink()
+                        except FileNotFoundError: pass
+                    shutil.copy2(db_backup, DB)
+                    shutil.chown(DB, user="fpp", group="fpp")
+                subprocess.run(["systemctl", "start", SERVICE], check=False, timeout=20)
+                service_stopped = False
+                rolled_back = health_ok(15)
+            except Exception as rollback_exc:
+                message += f"; rollback also failed: {rollback_exc}"
+        elif service_stopped and DEST.exists():
+            # A failure while making the backup must not leave the old service stopped.
+            try:
+                subprocess.run(["systemctl", "start", SERVICE], check=False, timeout=20)
+                service_stopped = False
+            except Exception as restart_exc:
+                message += f"; failed to restart unchanged version: {restart_exc}"
+        write_status(state="failed", current_version=current_version(), completed_at=now_iso(), message=message, rolled_back=rolled_back)
+        return 1
+    finally:
+        shutil.rmtree(stage, ignore_errors=True)
+
+
+
+def write_backup_status(**updates) -> None:
+    USER_BACKUPS.mkdir(parents=True, exist_ok=True)
+    data = {}
+    try:
+        data = json.loads(BACKUP_STATUS.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    data.update(updates)
+    tmp = BACKUP_STATUS.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
+    os.replace(tmp, BACKUP_STATUS)
+    try:
+        shutil.chown(BACKUP_STATUS, user="fpp", group="fpp")
+    except Exception:
+        pass
+
+
+def safe_backup_filename(value: str) -> str:
+    name = Path(str(value or "")).name
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,180}\.zip", name):
+        raise ValueError("Invalid backup filename")
+    return name
+
+
+def fpp_backup_json(destination: Path) -> None:
+    """Use FPP's supported backup.php 'all' backup, including sensitive settings."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    result = subprocess.run([
+        "curl", "--fail", "--silent", "--show-error", "--max-time", "90",
+        "-X", "POST", "-d", "btnDownloadConfig=1", "-d", "backuparea=all",
+        FPP_BACKUP_URL, "-o", str(destination),
+    ], capture_output=True, text=True, timeout=100)
+    if result.returncode != 0:
+        raise RuntimeError((result.stderr or result.stdout or "FPP configuration backup failed").strip())
+    try:
+        payload = json.loads(destination.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise RuntimeError("FPP did not return a valid configuration backup") from exc
+    if not isinstance(payload, dict) or "fpp_backup_version" not in payload:
+        raise RuntimeError("FPP configuration backup was not recognised")
+
+
+def fpp_restore_json(source: Path, keep_network: bool, keep_mode: bool) -> None:
+    cmd = [
+        "curl", "--fail", "--silent", "--show-error", "--max-time", "180",
+        "-X", "POST", "-F", "btnRestoreConfig=1", "-F", "restorearea=all",
+        "-F", f"conffile=@{source}",
+    ]
+    if keep_network:
+        cmd += ["-F", "keepExitingNetwork=1"]
+    if keep_mode:
+        cmd += ["-F", "keepMasterSlave=1"]
+    cmd += [FPP_BACKUP_URL]
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=195)
+    if result.returncode != 0:
+        raise RuntimeError((result.stderr or result.stdout or "FPP configuration restore failed").strip())
+    low = (result.stdout or "").lower()
+    if "invalid restore area" in low or "could not be decoded" in low:
+        raise RuntimeError("FPP rejected the configuration restore file")
+
+
+def add_tree_to_zip(zf: zipfile.ZipFile, source: Path, prefix: str, skip_names: set[str] | None = None) -> None:
+    skip_names = skip_names or set()
+    if not source.exists():
+        return
+    for root, dirs, files in os.walk(source):
+        root_p = Path(root)
+        dirs[:] = [d for d in dirs if d not in skip_names]
+        for filename in files:
+            src = root_p / filename
+            if src.is_symlink():
+                continue
+            if src.name in skip_names:
+                continue
+            rel = src.relative_to(source).as_posix()
+            zf.write(src, f"{prefix}/{rel}")
+
+
+def inspect_backup_archive(path: Path) -> dict:
+    if not path.is_file():
+        raise ValueError("Backup file not found")
+    try:
+        zf = zipfile.ZipFile(path)
+    except zipfile.BadZipFile as exc:
+        raise ValueError("Not a valid Pi Matrix Signage backup ZIP") from exc
+    with zf:
+        infos = zf.infolist()
+        if not infos or len(infos) > 50000:
+            raise ValueError("Backup ZIP contains an unreasonable number of files")
+        total = 0
+        names = set()
+        for info in infos:
+            raw = info.filename.rstrip("/") if info.is_dir() else info.filename
+            if not raw or "\\" in raw or raw.startswith("/"):
+                raise ValueError("Unsafe path in backup ZIP")
+            pp = PurePosixPath(raw)
+            if pp.is_absolute() or any(part in ("", ".", "..") for part in pp.parts):
+                raise ValueError("Unsafe path in backup ZIP")
+            total += int(info.file_size)
+            if total > 8 * 1024 * 1024 * 1024:
+                raise ValueError("Backup ZIP is too large when unpacked")
+            names.add(str(pp))
+            mode = (info.external_attr >> 16) & 0xFFFF
+            if mode and stat.S_IFMT(mode) and not info.is_dir() and not stat.S_ISREG(mode):
+                raise ValueError("Backup ZIP contains a non-regular file")
+        required = {"manifest.json", "pimatrix/data/signage.db"}
+        missing = required - names
+        if missing:
+            raise ValueError("Backup is incomplete; missing " + ", ".join(sorted(missing)))
+        has_official_fpp = "fpp/fpp-backup.json" in names
+        has_raw_fpp = "fpp/raw-media/settings" in names and any(n.startswith("fpp/raw-media/config/") for n in names)
+        if not has_official_fpp and not has_raw_fpp:
+            raise ValueError("Backup is incomplete; no usable FPP configuration snapshot was found")
+        manifest = json.loads(zf.read("manifest.json").decode("utf-8"))
+        if int(manifest.get("format") or 0) != BACKUP_FORMAT or manifest.get("product") != "Pi Matrix Signage":
+            raise ValueError("Backup format is not supported")
+        return manifest
+
+
+def add_fpp_raw_snapshot(zf: zipfile.ZipFile) -> None:
+    media = Path("/home/fpp/media")
+    for name in ("settings", "schedule", "timezone", "universes", "pixelnetDMX"):
+        src = media / name
+        if src.is_file() and not src.is_symlink():
+            zf.write(src, f"fpp/raw-media/{name}")
+    for name in ("config", "playlists", "scripts", "events", "channelmemorymaps"):
+        add_tree_to_zip(zf, media / name, f"fpp/raw-media/{name}")
+
+
+def _read_fpp_mode(settings_file: Path) -> str | None:
+    try:
+        for line in settings_file.read_text(encoding="utf-8", errors="replace").splitlines():
+            if line.startswith("fppMode="):
+                return line.split("=", 1)[1]
+    except Exception:
+        pass
+    return None
+
+
+def _write_fpp_mode(settings_file: Path, mode: str | None) -> None:
+    if not mode or not settings_file.is_file():
+        return
+    lines = settings_file.read_text(encoding="utf-8", errors="replace").splitlines()
+    changed = False
+    for i, line in enumerate(lines):
+        if line.startswith("fppMode="):
+            lines[i] = f"fppMode={mode}"
+            changed = True
+            break
+    if not changed:
+        lines.append(f"fppMode={mode}")
+    settings_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def restore_fpp_raw(stage: Path, keep_network: bool, keep_mode: bool) -> None:
+    src = stage / "fpp" / "raw-media"
+    if not (src / "settings").is_file() or not (src / "config").is_dir():
+        raise RuntimeError("Backup does not contain a usable raw FPP configuration snapshot")
+    media = Path("/home/fpp/media")
+    current_mode = _read_fpp_mode(media / "settings") if keep_mode else None
+    network_keep = {}
+    if keep_network:
+        cfg = media / "config"
+        if cfg.is_dir():
+            for item in cfg.iterdir():
+                if item.is_file() and (item.name.startswith("interface.") or item.name.startswith("leases.") or item.name == "dns"):
+                    network_keep[item.name] = item.read_bytes()
+    cfg_dst = media / "config"
+    old_cfg = media / f".pimatrix-restore-config-{os.getpid()}"
+    shutil.rmtree(old_cfg, ignore_errors=True)
+    if cfg_dst.exists():
+        os.rename(cfg_dst, old_cfg)
+    try:
+        shutil.copytree(src / "config", cfg_dst)
+        for name, data in network_keep.items():
+            (cfg_dst / name).write_bytes(data)
+        for name in ("settings", "schedule", "timezone", "universes", "pixelnetDMX"):
+            source = src / name
+            if source.is_file():
+                shutil.copy2(source, media / name)
+        for name in ("playlists", "scripts", "events", "channelmemorymaps"):
+            source = src / name
+            if not source.exists():
+                continue
+            target = media / name
+            shutil.rmtree(target, ignore_errors=True)
+            shutil.copytree(source, target)
+        if keep_mode:
+            _write_fpp_mode(media / "settings", current_mode)
+        for target in (cfg_dst, media / "settings", media / "schedule", media / "timezone", media / "playlists", media / "scripts", media / "events", media / "channelmemorymaps"):
+            if target.exists():
+                chown_tree(target) if target.is_dir() else shutil.chown(target, user="fpp", group="fpp")
+        shutil.rmtree(old_cfg, ignore_errors=True)
+    except Exception:
+        shutil.rmtree(cfg_dst, ignore_errors=True)
+        if old_cfg.exists():
+            os.rename(old_cfg, cfg_dst)
+        raise
+
+
+def create_backup_archive(filename: str, reason: str = "manual") -> Path:
+    USER_BACKUPS.mkdir(parents=True, exist_ok=True)
+    filename = safe_backup_filename(filename)
+    final = USER_BACKUPS / filename
+    temp_root = USER_BACKUPS / f".build-{os.getpid()}-{time.time_ns()}"
+    temp_root.mkdir(parents=True, exist_ok=True)
+    try:
+        fpp_json = temp_root / "fpp-backup.json"
+        fpp_backup_error = None
+        try:
+            fpp_backup_json(fpp_json)
+        except Exception as exc:
+            fpp_backup_error = str(exc)
+        db_copy = temp_root / "signage.db"
+        sqlite_backup(DB, db_copy)
+        manifest = {
+            "product": "Pi Matrix Signage",
+            "format": BACKUP_FORMAT,
+            "created_at": now_iso(),
+            "app_version": current_version(),
+            "reason": reason,
+            "hostname": socket.gethostname() if 'socket' in globals() else os.uname().nodename,
+            "contents": {
+                "pimatrix_database": True,
+                "pimatrix_media": True,
+                "users_and_permissions": True,
+                "fpp_configuration": True,
+                "fpp_sensitive_settings": True,
+                "fpp_official_backup": fpp_json.is_file(),
+                "fpp_raw_config_snapshot": True,
+                "fpp_official_backup_error": fpp_backup_error,
+            },
+        }
+        tmp_zip = final.with_suffix(".tmp")
+        with zipfile.ZipFile(tmp_zip, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6, allowZip64=True) as zf:
+            zf.writestr("manifest.json", json.dumps(manifest, indent=2, sort_keys=True))
+            zf.write(db_copy, "pimatrix/data/signage.db")
+            data_dir = PERSIST / "data"
+            if data_dir.exists():
+                for src in data_dir.iterdir():
+                    if src.name in {"signage.db", "signage.db-wal", "signage.db-shm"}:
+                        continue
+                    if src.is_file():
+                        zf.write(src, f"pimatrix/data/{src.name}")
+                    elif src.is_dir():
+                        add_tree_to_zip(zf, src, f"pimatrix/data/{src.name}")
+            add_tree_to_zip(zf, PERSIST / "uploads", "pimatrix/uploads")
+            if fpp_json.is_file():
+                zf.write(fpp_json, "fpp/fpp-backup.json")
+            if fpp_backup_error:
+                zf.writestr("fpp/fpp-backup-error.txt", fpp_backup_error + "\n")
+            add_fpp_raw_snapshot(zf)
+        os.replace(tmp_zip, final)
+        shutil.chown(final, user="fpp", group="fpp")
+        return final
+    finally:
+        shutil.rmtree(temp_root, ignore_errors=True)
+
+
+def extract_backup_safe(path: Path, stage: Path) -> dict:
+    manifest = inspect_backup_archive(path)
+    shutil.rmtree(stage, ignore_errors=True)
+    stage.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(path) as zf:
+        for info in zf.infolist():
+            pp = PurePosixPath(info.filename.rstrip("/") if info.is_dir() else info.filename)
+            out = stage.joinpath(*pp.parts)
+            if info.is_dir():
+                out.mkdir(parents=True, exist_ok=True)
+                continue
+            out.parent.mkdir(parents=True, exist_ok=True)
+            with zf.open(info) as src, open(out, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+    return manifest
+
+
+def restore_app_state(stage: Path) -> None:
+    src_data = stage / "pimatrix" / "data"
+    src_uploads = stage / "pimatrix" / "uploads"
+    if not (src_data / "signage.db").is_file():
+        raise RuntimeError("Backup does not contain the signage database")
+    dst_data = PERSIST / "data"
+    dst_uploads = PERSIST / "uploads"
+    old_data = PERSIST / f".restore-old-data-{os.getpid()}"
+    old_uploads = PERSIST / f".restore-old-uploads-{os.getpid()}"
+    shutil.rmtree(old_data, ignore_errors=True); shutil.rmtree(old_uploads, ignore_errors=True)
+    if dst_data.exists(): os.rename(dst_data, old_data)
+    if dst_uploads.exists(): os.rename(dst_uploads, old_uploads)
+    try:
+        shutil.copytree(src_data, dst_data)
+        if src_uploads.exists(): shutil.copytree(src_uploads, dst_uploads)
+        else: dst_uploads.mkdir(parents=True, exist_ok=True)
+        chown_tree(dst_data); chown_tree(dst_uploads)
+        shutil.rmtree(old_data, ignore_errors=True); shutil.rmtree(old_uploads, ignore_errors=True)
+    except Exception:
+        shutil.rmtree(dst_data, ignore_errors=True); shutil.rmtree(dst_uploads, ignore_errors=True)
+        if old_data.exists(): os.rename(old_data, dst_data)
+        if old_uploads.exists(): os.rename(old_uploads, dst_uploads)
+        raise
+
+
+def backup_create_worker(filename: str) -> int:
+    lock_handle = open("/run/pi-matrix-signage-backup.lock", "w")
+    try:
+        fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        write_backup_status(state="failed", message="Another backup or restore is already running", completed_at=now_iso())
+        return 1
+    try:
+        write_backup_status(state="creating", operation="backup", message="Creating Pi Matrix Signage and FPP backup", started_at=now_iso(), completed_at=None, filename=filename)
+        out = create_backup_archive(filename, "manual")
+        write_backup_status(state="success", operation="backup", message="Backup created successfully", completed_at=now_iso(), filename=out.name, size=out.stat().st_size)
+        return 0
+    except Exception as exc:
+        write_backup_status(state="failed", operation="backup", message=str(exc), completed_at=now_iso())
+        return 1
+
+
+def backup_restore_worker(filename: str, keep_network: bool, keep_mode: bool) -> int:
+    lock_handle = open("/run/pi-matrix-signage-backup.lock", "w")
+    try:
+        fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        write_backup_status(state="failed", message="Another backup or restore is already running", completed_at=now_iso())
+        return 1
+    filename = safe_backup_filename(filename)
+    source = USER_BACKUPS / filename
+    stage = USER_BACKUPS / f".restore-{os.getpid()}"
+    safety = None
+    try:
+        manifest = inspect_backup_archive(source)
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        safety_name = f"pre-restore-{stamp}-v{current_version()}.zip"
+        write_backup_status(state="safety_backup", operation="restore", message="Creating automatic safety backup before restore", started_at=now_iso(), completed_at=None, filename=filename)
+        safety = create_backup_archive(safety_name, "pre-restore")
+        write_backup_status(state="restoring", operation="restore", message="Restoring Pi Matrix Signage data", safety_backup=safety.name)
+        extract_backup_safe(source, stage)
+        subprocess.run(["systemctl", "stop", SERVICE], check=True, timeout=20)
+        restore_app_state(stage)
+        write_backup_status(state="restoring_fpp", operation="restore", message="Restoring FPP configuration", safety_backup=safety.name)
+        official = stage / "fpp" / "fpp-backup.json"
+        restored_via = "official"
+        if official.is_file():
+            try:
+                fpp_restore_json(official, keep_network, keep_mode)
+            except Exception as exc:
+                restored_via = "raw-fallback"
+                write_backup_status(state="restoring_fpp", operation="restore", message=f"FPP restore endpoint failed ({exc}); using raw configuration fallback", safety_backup=safety.name)
+                restore_fpp_raw(stage, keep_network, keep_mode)
+        else:
+            restored_via = "raw-fallback"
+            restore_fpp_raw(stage, keep_network, keep_mode)
+        subprocess.run(["systemctl", "restart", "fppd.service"], check=False, timeout=25)
+        subprocess.run(["systemctl", "start", SERVICE], check=True, timeout=20)
+        if not health_ok(30):
+            raise RuntimeError("Pi Matrix Signage did not return healthy after restore")
+        write_backup_status(state="success", operation="restore", message=f"Restore completed from {filename}", completed_at=now_iso(), filename=filename, safety_backup=safety.name, restored_app_version=manifest.get("app_version"), keep_network=keep_network, keep_mode=keep_mode, fpp_restore_method=restored_via)
+        return 0
+    except Exception as exc:
+        # Preserve the safety backup and make a best effort to get the service back online.
+        try: subprocess.run(["systemctl", "start", SERVICE], check=False, timeout=20)
+        except Exception: pass
+        write_backup_status(state="failed", operation="restore", message=str(exc), completed_at=now_iso(), filename=filename, safety_backup=safety.name if safety else None)
+        return 1
+    finally:
+        shutil.rmtree(stage, ignore_errors=True)
+
+
+def schedule_backup_action(action: str, filename: str, keep_network: bool = True, keep_mode: bool = True) -> int:
+    if os.geteuid() != 0:
+        return 1
+    filename = safe_backup_filename(filename)
+    unit = f"pi-matrix-signage-backup-{action}-{time.time_ns()}-{os.getpid()}"
+    args = [str(HELPER), f"--backup-worker-{action}", filename]
+    if action == "restore":
+        args += ["1" if keep_network else "0", "1" if keep_mode else "0"]
+    result = subprocess.run(["systemd-run", f"--unit={unit}", "--collect", "--property=Type=oneshot", *args], text=True, capture_output=True)
+    if result.returncode != 0:
+        print(result.stderr or result.stdout, file=sys.stderr)
+    return result.returncode
+
+def recover_fppd() -> int:
+    """Narrow recovery action used by the signage watchdog and Diagnostics UI."""
+    if os.geteuid() != 0:
+        print("This helper must run as root", file=sys.stderr)
+        return 1
+    try:
+        result = subprocess.run(["systemctl", "restart", "fppd.service"], capture_output=True, text=True, timeout=20)
+        if result.returncode != 0:
+            print((result.stderr or result.stdout or "Unable to restart fppd.service").strip(), file=sys.stderr)
+            return result.returncode or 1
+        deadline = time.time() + 12
+        while time.time() < deadline:
+            state = subprocess.run(["systemctl", "is-active", "fppd.service"], capture_output=True, text=True, timeout=3)
+            if state.returncode == 0 and state.stdout.strip() == "active":
+                print("FPPD restarted successfully")
+                return 0
+            time.sleep(1)
+        print("FPPD restart was requested but fppd.service did not become active", file=sys.stderr)
+        return 1
+    except Exception as exc:
+        print(f"FPPD recovery failed: {exc}", file=sys.stderr)
+        return 1
+
+
+def schedule_worker() -> int:
+    if os.geteuid() != 0:
+        print("This helper must run as root", file=sys.stderr)
+        return 1
+    # A transient unit gets a separate cgroup, so stopping the signage service
+    # cannot kill the updater that is performing the restart.
+    unit = f"pi-matrix-signage-upgrade-{time.time_ns()}-{os.getpid()}"
+    cmd = [
+        "systemd-run", f"--unit={unit}", "--collect", "--property=Type=oneshot",
+        str(HELPER), "--worker"
+    ]
+    result = subprocess.run(cmd, text=True, capture_output=True)
+    if result.returncode != 0:
+        print(result.stderr or result.stdout, file=sys.stderr)
+        return result.returncode
+    return 0
+
+
+if __name__ == "__main__":
+    if os.geteuid() != 0:
+        print("Pi Matrix Signage updater must run as root", file=sys.stderr)
+        raise SystemExit(1)
+    if len(sys.argv) == 1:
+        raise SystemExit(schedule_worker())
+    if sys.argv == [sys.argv[0], "--worker"]:
+        time.sleep(3.0)
+        raise SystemExit(worker())
+    if sys.argv == [sys.argv[0], "--recover-fppd"]:
+        raise SystemExit(recover_fppd())
+    if len(sys.argv) == 3 and sys.argv[1] == "--backup-create":
+        raise SystemExit(schedule_backup_action("create", sys.argv[2]))
+    if len(sys.argv) == 5 and sys.argv[1] == "--backup-restore":
+        raise SystemExit(schedule_backup_action("restore", sys.argv[2], sys.argv[3] == "1", sys.argv[4] == "1"))
+    if len(sys.argv) == 3 and sys.argv[1] == "--backup-worker-create":
+        raise SystemExit(backup_create_worker(sys.argv[2]))
+    if len(sys.argv) == 5 and sys.argv[1] == "--backup-worker-restore":
+        raise SystemExit(backup_restore_worker(sys.argv[2], sys.argv[3] == "1", sys.argv[4] == "1"))
+    print("Invalid arguments", file=sys.stderr)
+    raise SystemExit(2)

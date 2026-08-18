@@ -1,0 +1,24 @@
+[Unit]
+Description=Pi Matrix Signage web controller
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=10
+
+[Service]
+Type=simple
+User=fpp
+Group=fpp
+WorkingDirectory=/home/fpp/media/pi-matrix-signage
+Environment=PIMATRIX_DATA_DIR=/home/fpp/media/pi-matrix-signage-data/data
+Environment=PIMATRIX_UPLOAD_DIR=/home/fpp/media/pi-matrix-signage-data/uploads
+Environment=LOGDIR=/home/fpp/media/logs
+Environment=PIMATRIX_PORT=8090
+EnvironmentFile=-/home/fpp/media/pi-matrix-signage-data/license.env
+ExecStart=/usr/bin/python3 /home/fpp/media/pi-matrix-signage/app.py --host 0.0.0.0 --port 8090
+Restart=always
+RestartSec=3
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target

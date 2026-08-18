@@ -1,0 +1,40 @@
+{
+  "repoName": "fpp-plugin-PiMatrixSignage",
+  "name": "Pi Matrix Signage",
+  "author": "ISSL",
+  "description": "Installs and integrates Pi Matrix Signage with Falcon Player on Raspberry Pi.",
+  "homeURL": "https://github.com/paulspann/fpp-plugin-PiMatrixSignage",
+  "srcURL": "https://github.com/paulspann/fpp-plugin-PiMatrixSignage.git",
+  "bugURL": "https://github.com/paulspann/fpp-plugin-PiMatrixSignage/issues",
+  "documentation": "https://github.com/paulspann/fpp-plugin-PiMatrixSignage/blob/main/README.md",
+  "allowUpdates": 1,
+  "minMemoryMB": 1024,
+  "minCpuCores": 2,
+  "versions": [
+    {
+      "minFPPVersion": "10.0",
+      "maxFPPVersion": "0",
+      "branch": "main",
+      "sha": "",
+      "platforms": [
+        "Raspberry Pi"
+      ]
+    }
+  ],
+  "dependencies": {
+    "packages": [
+      "python3",
+      "python3-flask",
+      "python3-pil",
+      "python3-cryptography",
+      "fonts-dejavu-core",
+      "fonts-liberation2",
+      "ca-certificates",
+      "ffmpeg",
+      "libegl1",
+      "libgl1",
+      "libgles2",
+      "gpiod"
+    ]
+  }
+}

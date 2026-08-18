@@ -1,0 +1,899 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10131a">
+  <title>Pi Matrix Signage</title>
+  <link rel="stylesheet" href="/static/app.css?v={{ app_version }}">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Pi Matrix Signage</h1>
+      <p>Hanson rPI-MFC · P5/P10 LED display controller · v{{ app_version }}</p>
+    </div>
+    <div class="topbar-actions">
+      <div class="status-pill" id="statusPill"><span class="dot"></span><span>Starting…</span></div>
+      <div class="user-strip">
+        <span class="user-avatar" id="currentUserInitial">U</span>
+        <span class="user-name" id="currentUserName">User</span>
+        <a class="topbar-link" href="/remote">Remote</a>
+        <a class="topbar-link" href="/change-password">Password</a>
+        <button class="topbar-link button-link" id="logoutButton" type="button">Sign out</button>
+      </div>
+    </div>
+  </header>
+
+  <nav class="tabs" aria-label="Main navigation">
+    <button class="tab active" data-tab="dashboard">Dashboard</button>
+    <button class="tab permission-gated" data-tab="messages" data-permission="messages">Messages</button>
+    <button class="tab permission-gated" data-tab="playlists" data-permission="playlists">Playlists</button>
+    <button class="tab permission-gated" data-tab="schedules" data-permission="schedules">Schedules</button>
+    <button class="tab permission-gated" data-tab="setup" data-permission="display_setup">Display setup</button>
+    <button class="tab permission-gated" data-tab="upgrade" data-permission="upgrade">Upgrade</button>
+    <button class="tab permission-gated" data-tab="backup" data-permission="backup">Backup &amp; restore</button>
+    <button class="tab permission-gated" data-tab="users" data-permission="users">Users</button>
+  </nav>
+
+  <div class="license-banner hidden" id="licenseBanner"><strong id="licenseBannerTitle">Licence required</strong><span id="licenseBannerText">Activate Pi Matrix Signage under Display setup.</span><button class="btn secondary compact-license-button" id="openLicenseSetup" type="button">Open licence</button></div>
+
+  <main>
+    <section class="page active" id="page-dashboard">
+      <div class="grid dashboard-grid">
+        <article class="card preview-card">
+          <div class="card-head">
+            <div><h2>Live display</h2><p id="displaySize">—</p></div>
+            <div class="toolbar compact live-preview-toolbar">
+              <label class="switchline" title="Turn only the browser live preview on/off. The physical LED panels continue normally."><input type="checkbox" id="livePreviewEnabled" checked><span>Live preview</span></label>
+              <label class="mini-select">View<select id="livePreviewMode"><option value="pixels">Exact pixels</option><option value="p5" selected>P5 LEDs</option><option value="smooth">Smooth</option></select></label>
+              <label class="mini-select">Rate<select id="livePreviewRate"><option value="4">4 fps</option><option value="8" selected>8 fps</option><option value="12">12 fps</option></select></label>
+              <button class="btn secondary" id="refreshPreview">Refresh</button>
+              <button class="btn danger" id="clearOverride">Return to schedule</button>
+            </div>
+          </div>
+          <div class="led-frame live-preview-frame preview-simulation"><img id="livePreview" alt="Live LED display preview"><div class="live-preview-off hidden" id="livePreviewOff">Live browser preview is off<br><small>The physical LED display is still running.</small></div></div>
+          <div class="status-grid">
+            <div><span>Source</span><strong id="activeSource">—</strong></div>
+            <div><span>Frames sent</span><strong id="framesSent">0</strong></div>
+            <div><span>Output</span><strong id="outputTarget">—</strong></div>
+            <div><span>Last error</span><strong id="lastError">None</strong></div>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-head"><div><h2>Show something now</h2><p>Temporarily override the normal schedule.</p></div></div>
+          <label>Message<select id="quickMessage"></select></label>
+          <div class="row">
+            <label>Override duration
+              <select id="quickDuration">
+                <option value="0">Until I clear it</option>
+                <option value="30">30 seconds</option><option value="60">1 minute</option>
+                <option value="300">5 minutes</option><option value="900">15 minutes</option>
+                <option value="3600">1 hour</option>
+              </select>
+            </label>
+            <button class="btn primary align-end" id="quickShow">Show now</button>
+          </div>
+          <hr>
+          <div class="emergency-panel" id="emergencyPanel">
+            <div><h3>Emergency / priority</h3><p class="muted" id="emergencyConfigured">No emergency message configured.</p></div>
+            <div class="toolbar compact"><button class="btn danger emergency-button" id="activateEmergency">ACTIVATE EMERGENCY</button><button class="btn secondary" id="clearEmergency">End emergency</button></div>
+          </div>
+          <hr>
+          <h3>Panel test</h3>
+          <p class="muted">Useful while checking panel order, colour order and orientation.</p>
+          <div class="button-grid">
+            <button class="btn secondary test-pattern" data-pattern="grid">Grid</button>
+            <button class="btn secondary test-pattern" data-pattern="checker">Checker</button>
+            <button class="btn red test-pattern" data-pattern="red">Red</button>
+            <button class="btn green test-pattern" data-pattern="green">Green</button>
+            <button class="btn blue test-pattern" data-pattern="blue">Blue</button>
+            <button class="btn secondary test-pattern" data-pattern="white">White</button>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="page" id="page-messages">
+      <div class="messages-workspace messages-library-view" id="messagesWorkspace">
+        <aside class="card list-card messages-list-card">
+          <div class="card-head"><div><h2>Saved messages</h2><p>Select a message to open the full Designer, or create/import one.</p></div><div class="toolbar compact"><label class="btn secondary file-btn compact-file-btn">Import<input type="file" id="importMessageLibraryFile" accept=".zip,application/zip"></label><button class="btn primary" id="newMessage">+ New message</button></div></div>
+          <label class="message-search"><span>Find message</span><input id="messageSearch" type="search" placeholder="Search messages…" autocomplete="off"></label>
+          <div id="messageList" class="item-list"></div>
+        </aside>
+
+        <article class="card editor-card messages-editor-card">
+          <div class="card-head message-editor-card-head">
+            <div class="message-editor-heading"><button class="btn secondary message-back-button" id="backToMessages" title="Back to saved messages">← Messages</button><div><h2 id="messageEditorTitle">Message editor</h2><p>Preview updates as you type.</p></div></div>
+            <div class="toolbar compact message-main-actions"><button class="btn secondary" id="messageHistoryButton" title="Previous saved versions">History</button><button class="btn secondary" id="exportMessage">Export</button><label class="btn secondary file-btn compact-file-btn">Import<input type="file" id="importMessageFile" accept=".zip,application/zip"></label><button class="btn secondary" id="duplicateMessage">Duplicate</button><button class="btn secondary" id="showEditedMessage">Show now</button><button class="btn primary" id="saveMessage">Save</button><button class="btn danger ghost" id="deleteMessage">Delete</button></div>
+          </div>
+          <input type="hidden" id="messageId">
+
+          <div class="editor-heading-grid designer-only-heading">
+            <label>Message name<input id="msgName" maxlength="100" placeholder="e.g. Welcome message"></label>
+            <input type="hidden" id="msgEditorMode" value="designer">
+          </div>
+
+          <details class="message-history-panel" id="messageHistoryPanel">
+            <summary><span><strong>Version history</strong><small>Restore an earlier saved version without losing the current revision.</small></span></summary>
+            <div id="messageVersionList" class="message-version-list"><p class="muted">Save the message to start version history.</p></div>
+          </details>
+
+          <div class="designer-preview-wrap">
+            <div class="editor-preview designer-stage preview-simulation" id="designerStage">
+              <img id="editorPreview" alt="Message preview">
+              <div class="zone-overlays" id="zoneOverlays"></div>
+              <div class="designer-selection hidden" id="designerSelection"><span class="resize-handle" title="Drag to resize"></span></div>
+            </div>
+            <div class="preview-controls" id="designerPreviewControls">
+              <label class="mini-select">Preview<select id="designerPreviewMode"><option value="pixels">Exact pixels</option><option value="p5" selected>P5 LED dots</option><option value="smooth">Smooth</option></select></label>
+              <label class="checkline compact-check"><input type="checkbox" id="designerAnimatePreview"> Animate preview</label>
+              <label>Preview time <span class="inline-value" id="designerPreviewTimeValue">1.25s</span><input type="range" id="designerPreviewTime" min="0" max="10" step="0.05" value="1.25"></label>
+            </div>
+          </div>
+
+          <div id="quickEditor" hidden aria-hidden="true">
+            <div class="callout editor-mode-note"><strong>Quick editor:</strong> ideal for a single scrolling/static text block with an optional logo or full-screen graphic. Switch to Designer when you need several independent elements.</div>
+            <div class="form-grid cols-2">
+              <label>Font<select id="msgFont"><option value="">Default font</option></select></label>
+              <label>Font size<input type="number" id="msgFontSize" min="5" max="256" value="18"></label>
+            </div>
+            <div class="form-grid cols-4 pixel-render-controls">
+              <label>Text rendering<select id="msgRenderMode"><option value="pixel">Pixel sharp – recommended</option><option value="led3x5">LED 3×5 compact</option><option value="led4x6">LED 4×6</option><option value="led5x7">LED 5×7</option><option value="led6x8">LED 6×8</option><option value="led7x9">LED 7×9</option><option value="led8x8">LED 8×8</option><option value="led8x12">LED 8×12</option><option value="led8x16">LED 8×16</option><option value="led-condensed">LED condensed</option><option value="led-bold">LED bold</option><option value="led-digital">LED digital</option><option value="led-scoreboard">LED scoreboard</option><option value="led-dot">LED dot matrix</option><option value="smooth">Smooth / anti-aliased</option></select></label>
+              <label>Pixel / LED scale<select id="msgPixelScale"><option value="1">1×</option><option value="2">2×</option><option value="3">3×</option><option value="4">4×</option><option value="5">5×</option><option value="6">6×</option><option value="7">7×</option><option value="8">8×</option></select></label>
+              <label>Letter spacing<input type="number" id="msgLetterSpacing" min="0" max="8" step="1" value="0"></label>
+              <label class="checkline"><input type="checkbox" id="msgPixelBold"> Pixel bold</label>
+            </div>
+            <div class="callout compact-callout"><strong>For P5/P10:</strong> Pixel sharp removes anti-aliasing while keeping your selected font. The built-in LED font family uses true hard-edged bitmap pixels for the crispest small text; lowercase is displayed as capitals.</div>
+            <label>Text<textarea id="msgText" rows="4" placeholder="Type your message…"></textarea></label>
+            <div class="token-bar quick-token-bar"><span>Insert:</span><button data-token="{TIME}">Time</button><button data-token="{TIME_SECONDS}">Time + seconds</button><button data-token="{DATE}">Date</button><button data-token="{DATE_LONG}">Long date</button><button data-token="{DAY}">Day</button><button data-token="{DATETIME}">Date &amp; time</button></div>
+
+            <div class="form-grid cols-4">
+              <label>Text colour<input type="color" id="msgTextColor" value="#ffffff"></label>
+              <label>Background<input type="color" id="msgBgColor" value="#000000"></label>
+              <label>Outline<input type="color" id="msgOutlineColor" value="#000000"></label>
+              <label>Outline (LED px)<input type="number" id="msgOutlineWidth" min="0" max="12" step="1" value="0" title="1 = one physical matrix pixel around the glyph"></label>
+            </div>
+            <div class="form-grid cols-4">
+              <label class="checkline"><input type="checkbox" id="msgAutoFit"> Auto-fit text</label>
+              <label>Horizontal alignment<select id="msgAlign"><option value="left">Left</option><option value="center" selected>Centre</option><option value="right">Right</option></select></label>
+              <label>Vertical alignment<select id="msgVAlign"><option value="top">Top</option><option value="middle" selected>Middle</option><option value="bottom">Bottom</option></select></label>
+              <label>Edge padding<input type="number" id="msgPadding" min="0" max="100" value="1"></label>
+            </div>
+            <div class="form-grid cols-2">
+              <label>Movement<select id="msgDirection">
+                <option value="static">Static</option><option value="left" selected>Scroll left ←</option><option value="right">Scroll right →</option>
+                <option value="up">Scroll up ↑</option><option value="down">Scroll down ↓</option>
+                <option value="up-left">Up + left ↖</option><option value="up-right">Up + right ↗</option>
+                <option value="down-left">Down + left ↙</option><option value="down-right">Down + right ↘</option>
+              </select></label>
+              <label>Speed <span class="inline-value" id="speedValue">30 px/s</span><input type="range" id="msgSpeed" min="0.1" max="500" step="0.1" value="30"></label>
+            </div>
+
+            <hr>
+            <div class="card-head mini"><div><h3>Logo / graphic</h3><p>PNG, JPG, GIF, WebP or BMP. Animated GIFs are supported.</p></div><label class="btn secondary file-btn">Upload image<input type="file" id="imageUpload" accept="image/*"></label></div>
+            <div class="form-grid cols-3">
+              <label>Graphic<select id="msgImage"><option value="">No graphic</option></select></label>
+              <label>Graphic mode<select id="msgImageMode">
+                <option value="none">None</option><option value="logo-left">Logo left of text</option><option value="logo-right">Logo right of text</option>
+                <option value="logo-center">Centred graphic</option><option value="background-contain">Background – contain</option><option value="background-cover">Background – fill/crop</option>
+              </select></label>
+              <label>Graphic scale<input type="number" id="msgImageScale" min="0.05" max="20" step="0.05" value="1"></label>
+            </div>
+          </div>
+
+          <div id="designerEditor">
+            <details class="designer-help">
+              <summary>Designer help &amp; shortcuts</summary>
+              <p>Build the sign from independent layers. Shift/Cmd/Ctrl-click layers for multi-select; group them, snap them to zones/layers and use Undo/Redo while building the scene.</p>
+            </details>
+
+            <div class="designer-commandbar">
+              <div class="toolbar compact"><span class="toolbar-label">Edit</span><button class="btn secondary" id="undoDesigner" title="Undo (Ctrl/Cmd+Z)">↶ Undo</button><button class="btn secondary" id="redoDesigner" title="Redo (Ctrl/Cmd+Shift+Z)">↷ Redo</button><button class="btn secondary" id="copyLayers" title="Copy layers (Ctrl/Cmd+C)">Copy</button><button class="btn secondary" id="pasteLayers" title="Paste layers (Ctrl/Cmd+V)">Paste</button><button class="btn secondary" id="groupLayers">Group</button><button class="btn secondary" id="ungroupLayers">Ungroup</button><button class="btn secondary" id="showShortcuts" title="Keyboard shortcuts">⌨</button></div>
+              <div class="toolbar compact align-tools"><span class="toolbar-label">Align</span><button class="btn secondary" data-align="left" title="Align left">⇤</button><button class="btn secondary" data-align="hcenter" title="Align horizontal centres">↔</button><button class="btn secondary" data-align="right" title="Align right">⇥</button><button class="btn secondary" data-align="top" title="Align top">↥</button><button class="btn secondary" data-align="vcenter" title="Align vertical centres">↕</button><button class="btn secondary" data-align="bottom" title="Align bottom">↧</button><button class="btn secondary" data-align="distribute-h" title="Distribute horizontally">H≡</button><button class="btn secondary" data-align="distribute-v" title="Distribute vertically">V≡</button></div>
+              <div class="toolbar compact snap-tools"><span class="toolbar-label">Snap</span><label>Grid<select id="designerSnapGrid"><option value="1">1 px</option><option value="2">2 px</option><option value="4" selected>4 px</option><option value="8">8 px</option></select></label><label class="checkline compact-check"><input type="checkbox" id="designerSnapObjects" checked> Snap guides</label></div>
+            </div>
+
+            <div class="designer-toolbar">
+              <div class="toolbar template-library-toolbar"><span class="toolbar-label">Templates</span>
+                <button class="btn secondary template-button" data-template="headline">Headline</button>
+                <button class="btn secondary template-button" data-template="ticker">Ticker</button>
+                <button class="btn secondary template-button" data-template="notice">Notice</button>
+                <select id="templateLibrary" class="template-library-select" title="Template library">
+                  <option value="">More templates…</option>
+                  <optgroup label="Basic">
+                    <option value="headline">Headline</option><option value="ticker">Scrolling ticker</option><option value="notice">Notice</option><option value="blank">Blank canvas</option>
+                  </optgroup>
+                  <optgroup label="Welcome &amp; information">
+                    <option value="welcome">Welcome</option><option value="opening-hours">Opening hours</option><option value="information">Information</option><option value="queue">Queue / please wait</option><option value="thank-you">Thank you</option><option value="contact">Ask a member of staff</option>
+                  </optgroup>
+                  <optgroup label="Directions &amp; facilities">
+                    <option value="direction-left">Direction – left</option><option value="direction-right">Direction – right</option><option value="direction-up">Direction – up</option><option value="direction-down">Direction – down</option><option value="parking">Parking</option><option value="wifi">Free Wi-Fi</option><option value="accessibility">Accessibility</option>
+                  </optgroup>
+                  <optgroup label="Promotions &amp; events">
+                    <option value="sale">Sale</option><option value="price">Price</option><option value="event">Event today</option><option value="birthday">Happy birthday</option><option value="christmas">Christmas</option><option value="water-swim">Water / swim</option>
+                  </optgroup>
+                  <optgroup label="Safety">
+                    <option value="emergency">Emergency warning</option>
+                  </optgroup>
+                  <optgroup label="Live information">
+                    <option value="clock">Digital clock + date</option><option value="analog-clock">Analogue clock</option><option value="countdown">Countdown</option><option value="weather">Weather + clock</option>
+                  </optgroup>
+                  <optgroup label="Layouts"><option value="split-screen">Two-zone split screen</option></optgroup>
+                </select>
+                <button class="btn secondary" id="applyTemplateLibrary">Apply</button>
+              </div>
+              <div class="toolbar"><span class="toolbar-label">Add layer</span>
+                <button class="btn secondary" id="addTextLayer">+ Text</button>
+                <button class="btn secondary" id="addImageLayer">+ Image</button>
+                <button class="btn secondary" id="addVideoLayer">+ Video</button>
+                <button class="btn secondary" id="addShaderLayer">+ Shader</button>
+                <button class="btn secondary" id="addWidgetLayer">+ Widget</button>
+                <button class="btn secondary" id="addIconLayer">+ Icon</button>
+                <button class="btn secondary" id="addShapeLayer">+ Shape</button>
+              </div>
+            </div>
+
+            <details class="designer-background">
+              <summary>Scene appearance</summary>
+              <div class="form-grid cols-3">
+                <label>Background style<select id="sceneBgMode"><option value="solid">Solid</option><option value="gradient-h">Gradient – left to right</option><option value="gradient-v">Gradient – top to bottom</option><option value="shader">Shader</option></select></label>
+                <label id="sceneBgColor1Wrap"><span id="sceneBgColor1Label">Colour 1</span><input type="color" id="sceneBgColor1" value="#000000"></label>
+                <label id="sceneBgColor2Wrap">Colour 2<input type="color" id="sceneBgColor2" value="#000000"></label>
+              </div>
+              <div id="sceneBgShaderFields" class="scene-bg-shader hidden">
+                <div class="card-head mini"><div><h3>Shader background</h3><p>Runs behind every layer and automatically fills the whole scene.</p></div><label class="btn secondary file-btn">Upload shader<input type="file" id="backgroundShaderUpload" accept=".fs,.frag,.glsl,.json"></label></div>
+                <div class="form-grid cols-4">
+                  <label>Shader<select id="sceneBgShader"><option value="">Choose a shader</option></select></label>
+                  <label>Render rate<select id="sceneBgShaderFps"><option value="8">8 fps</option><option value="12">12 fps</option><option value="15" selected>15 fps</option><option value="20">20 fps</option><option value="25">25 fps</option></select></label>
+                  <label>Time speed ×<input type="number" id="sceneBgShaderTimeScale" min="-10" max="10" step="0.05" value="1"></label>
+                  <label>Performance<select id="sceneBgShaderQuality"><option value="auto" selected>Auto – fall back if heavy</option><option value="native">Native resolution</option><option value="half">½ resolution</option><option value="quarter">¼ resolution</option></select></label>
+                </div>
+                <div id="sceneBgShaderAssetInfo" class="shader-asset-info muted">Choose a shader to expose its controls.</div>
+                <div id="sceneBgShaderStatus" class="shader-render-status hidden" aria-live="polite"></div>
+                <div id="sceneBgShaderParameterFields" class="shader-parameter-fields"></div>
+                <p class="hint">Auto performance first tries native LED resolution, allows extra time for shader compilation, then automatically falls back to ½ or ¼ resolution only if the effect is too expensive for the Pi. The result is scaled back to the physical LED canvas.</p>
+              </div>
+            </details>
+
+            <details class="scene-playback">
+              <summary>Scene timing &amp; transition</summary>
+              <div class="form-grid cols-3">
+                <label>Scene duration (s)<input type="number" id="sceneDuration" min="0.25" max="3600" step="0.25" value="10"></label>
+                <label>Entrance transition<select id="sceneTransitionIn">
+                  <option value="none">None</option><option value="fade">Fade</option><option value="crossfade">Crossfade from previous</option>
+                  <option value="wipe-left">Wipe left</option><option value="wipe-right">Wipe right</option><option value="wipe-up">Wipe up</option><option value="wipe-down">Wipe down</option>
+                  <option value="push-left">Push left</option><option value="push-right">Push right</option><option value="push-up">Push up</option><option value="push-down">Push down</option>
+                  <option value="dissolve">Dissolve</option><option value="pixel-scatter">Pixel scatter</option><option value="blinds">Venetian blinds</option><option value="checker">Checkerboard</option><option value="zoom">Zoom</option><option value="roll-left">Roll left</option><option value="roll-right">Roll right</option>
+                </select></label>
+                <label>Entrance duration (s)<input type="number" id="sceneTransitionInDuration" min="0.05" max="30" step="0.05" value="0.5"></label>
+              </div>
+              <div class="form-grid cols-3">
+                <label>Exit transition<select id="sceneTransitionOut">
+                  <option value="none">None</option><option value="fade">Fade</option><option value="crossfade">Crossfade to next</option>
+                  <option value="wipe-left">Wipe left</option><option value="wipe-right">Wipe right</option><option value="wipe-up">Wipe up</option><option value="wipe-down">Wipe down</option>
+                  <option value="push-left">Push left</option><option value="push-right">Push right</option><option value="push-up">Push up</option><option value="push-down">Push down</option>
+                  <option value="dissolve">Dissolve</option><option value="pixel-scatter">Pixel scatter</option><option value="blinds">Venetian blinds</option><option value="checker">Checkerboard</option><option value="zoom">Zoom</option><option value="roll-left">Roll left</option><option value="roll-right">Roll right</option>
+                </select></label>
+                <label>Exit duration (s)<input type="number" id="sceneTransitionOutDuration" min="0.05" max="30" step="0.05" value="0.5"></label>
+                <div class="callout compact-callout scene-transition-note"><strong>Scene transition:</strong> runs around the whole composition. Layer entrance/exit effects still run independently inside it.</div>
+              </div>
+            </details>
+
+            <details class="timeline-panel">
+              <summary class="timeline-summary"><span><strong>Timeline</strong><small>Layer timing &amp; scene transitions</small></span><span class="timeline-time" id="timelineTime">0.00s / 10.00s</span></summary>
+              <p class="timeline-help">Click anywhere to move the playhead. Drag a layer bar to change its start delay; drag its right handle to set when its exit begins.</p>
+              <div class="timeline-ruler" id="timelineRuler"></div>
+              <div class="timeline-lanes" id="timelineLanes"></div>
+            </details>
+
+            <div class="designer-grid">
+              <aside class="designer-layer-panel">
+                <div class="designer-section-head"><div><h3>Layers</h3><p class="muted">Top item appears in front.</p></div></div>
+                <div id="designerLayerList" class="designer-layer-list"></div>
+                <div class="toolbar layer-actions">
+                  <button class="btn secondary" id="layerUp" title="Move layer forward">↑ Front</button>
+                  <button class="btn secondary" id="layerDown" title="Move layer backward">↓ Back</button>
+                  <button class="btn secondary" id="duplicateLayer">Duplicate</button>
+                  <button class="btn danger ghost" id="deleteLayer">Delete</button>
+                </div>
+                <details class="sidebar-group">
+                  <summary><span>Zones</span><small>Hard clipping areas</small></summary>
+                  <div class="designer-section-head compact-section-head"><p class="muted">Create reusable layout areas and clip layers to them.</p><button class="btn secondary" id="addZone">+ Zone</button></div>
+                  <div id="designerZoneList" class="designer-zone-list"></div>
+                  <div class="toolbar layer-actions"><button class="btn secondary" id="assignZone">Assign</button><button class="btn secondary" id="clearZone">Clear</button><button class="btn danger ghost" id="deleteZone">Delete</button></div>
+                </details>
+                <details class="sidebar-group">
+                  <summary><span>Components</span><small>Reusable layer groups</small></summary>
+                  <p class="muted">Save selected layers and insert them into other messages.</p>
+                  <select id="componentPicker"><option value="">Choose component…</option></select>
+                  <div class="toolbar layer-actions"><button class="btn secondary" id="saveComponent">Save selection</button><button class="btn secondary" id="insertComponent">Insert</button><button class="btn secondary" id="exportComponent">Export</button><label class="btn secondary file-btn small-file-btn">Import<input type="file" id="importComponentFile" accept=".zip,application/zip"></label><button class="btn danger ghost" id="deleteComponent">Delete</button></div>
+                </details>
+              </aside>
+
+              <section class="designer-properties">
+                <div id="noLayerSelected" class="callout">Add or select a layer to edit its properties.</div>
+                <div id="layerProperties" class="hidden">
+                  <div class="inspector-identity">
+                    <div class="form-grid cols-4">
+                      <label>Layer name<input id="layerName" maxlength="60"></label>
+                      <label>Layer type<input id="layerType" readonly></label>
+                      <label>Clip to zone<select id="layerZone"><option value="">No zone</option></select></label>
+                      <label class="checkline"><input type="checkbox" id="layerEnabled" checked> Visible</label>
+                    </div>
+                  </div>
+                  <details open class="inspector-group inspector-layout">
+                    <summary>Layout &amp; position</summary>
+                    <div class="form-grid cols-4 geometry-grid">
+                      <label>X<input type="number" id="layerX" step="1"></label><label>Y<input type="number" id="layerY" step="1"></label>
+                      <label>Width<input type="number" id="layerW" min="1" step="1"></label><label>Height<input type="number" id="layerH" min="1" step="1"></label>
+                    </div>
+                    <div class="form-grid cols-2">
+                      <label>Opacity %<input type="number" id="layerOpacity" min="0" max="100" value="100"></label>
+                      <label>Rotation °<input type="number" id="layerRotation" min="-360" max="360" value="0"></label>
+                    </div>
+                  </details>
+                  <details class="inspector-group inspector-motion">
+                    <summary>Motion &amp; animation</summary>
+                    <div class="form-grid cols-2">
+                      <label>Start delay (s)<input type="number" id="layerDelay" min="0" max="3600" step="0.1" value="0"></label>
+                      <label>Animation<select id="layerAnimation"><option value="static">Static</option><option value="auto-marquee">Auto marquee if too wide</option><option value="typewriter">Typewriter</option><option value="random-reveal">Random character reveal</option><option value="scroll-left">Scroll left</option><option value="scroll-right">Scroll right</option><option value="scroll-up">Scroll up</option><option value="scroll-down">Scroll down</option><option value="bounce-horizontal">Bounce horizontally</option><option value="bounce-vertical">Bounce vertically</option><option value="blink">Blink</option><option value="pulse">Pulse</option></select></label>
+                    </div>
+                    <div class="form-grid cols-3">
+                      <label>Movement speed (px/s)<input type="number" id="layerSpeed" min="0" max="1000" step="0.1" value="30"></label>
+                      <label>Effect period (s)<input type="number" id="layerEffectPeriod" min="0.1" max="60" step="0.1" value="1"></label>
+                      <label>Blink on %<input type="number" id="layerBlinkDuty" min="5" max="95" step="1" value="50"></label>
+                    </div>
+                    <p class="hint">Scroll and bounce animations stay clipped inside this layer's W × H box. For <strong>Random character reveal</strong>, use <strong>Effect period</strong> as the total reveal time.</p>
+                  </details>
+
+                  <details id="layerTransitionProperties" class="inspector-group inspector-transitions">
+                    <summary>Entrance &amp; exit</summary>
+                    <div class="form-grid cols-3">
+                      <label>Entrance<select id="layerEntranceEffect">
+                        <option value="none">None</option><option value="fade">Fade in</option>
+                        <option value="slide-left">Slide in from left</option><option value="slide-right">Slide in from right</option>
+                        <option value="slide-up">Slide in from top</option><option value="slide-down">Slide in from bottom</option>
+                        <option value="wipe-left">Wipe in from left</option><option value="wipe-right">Wipe in from right</option>
+                        <option value="wipe-up">Wipe in from top</option><option value="wipe-down">Wipe in from bottom</option>
+                        <option value="zoom">Zoom in</option>
+                      </select></label>
+                      <label>Entrance duration (s)<input type="number" id="layerEntranceDuration" min="0.05" max="60" step="0.05" value="0.5"></label>
+                      <label>Exit<select id="layerExitEffect">
+                        <option value="none">None</option><option value="fade">Fade out</option>
+                        <option value="slide-left">Slide out left</option><option value="slide-right">Slide out right</option>
+                        <option value="slide-up">Slide out top</option><option value="slide-down">Slide out bottom</option>
+                        <option value="wipe-left">Wipe out to left</option><option value="wipe-right">Wipe out to right</option>
+                        <option value="wipe-up">Wipe out to top</option><option value="wipe-down">Wipe out to bottom</option>
+                        <option value="zoom">Zoom out</option>
+                      </select></label>
+                    </div>
+                    <div class="form-grid cols-2">
+                      <label>Exit after (s)<input type="number" id="layerExitAfter" min="0" max="86400" step="0.1" value="0"></label>
+                      <label>Exit duration (s)<input type="number" id="layerExitDuration" min="0.05" max="60" step="0.05" value="0.5"></label>
+                    </div>
+                    <p class="hint">Text, image, video, widget and icon layers. Exit after is measured from the layer start, after Start delay. Set it to 0 to keep the layer on indefinitely. Entrance/exit effects can be combined with scrolling, bounce, blink or pulse.</p>
+                  </details>
+
+                  <div id="textLayerProperties" class="layer-kind-properties content-properties">
+                    <h3>Text content &amp; appearance</h3>
+                    <label>Text<textarea id="layerText" rows="4" placeholder="Type layer text…"></textarea></label>
+                    <div class="token-bar designer-token-bar"><span>Insert:</span><button data-token="{TIME}">Time</button><button data-token="{TIME_SECONDS}">Seconds</button><button data-token="{TIME_12}">12-hour</button><button data-token="{DATE}">Date</button><button data-token="{DATE_LONG}">Long date</button><button data-token="{DAY}">Day</button><button data-token="{MONTH}">Month</button><button data-token="{YEAR}">Year</button></div>
+                    <div class="form-grid cols-4">
+                      <label>Font<select id="layerFont"><option value="">Default font</option></select></label>
+                      <label>Font size<input type="number" id="layerFontSize" min="4" max="512" value="18"></label>
+                      <label class="checkline"><input type="checkbox" id="layerAutoFit"> Auto-fit to box</label>
+                      <label class="checkline"><input type="checkbox" id="layerWrap"> Wrap text</label>
+                    </div>
+                    <div class="form-grid cols-4 pixel-render-controls">
+                      <label>Text rendering<select id="layerRenderMode"><option value="pixel">Pixel sharp – TTF/OTF</option><option value="led3x5">LED 3×5 compact</option><option value="led4x6">LED 4×6</option><option value="led5x7">LED 5×7</option><option value="led6x8">LED 6×8</option><option value="led7x9">LED 7×9</option><option value="led8x8">LED 8×8</option><option value="led8x12">LED 8×12</option><option value="led8x16">LED 8×16</option><option value="led-condensed">LED condensed</option><option value="led-bold">LED bold</option><option value="led-digital">LED digital</option><option value="led-scoreboard">LED scoreboard</option><option value="led-dot">LED dot matrix</option><option value="smooth">Smooth / anti-aliased</option></select></label>
+                      <label>Pixel / LED scale<select id="layerPixelScale"><option value="1">1×</option><option value="2">2×</option><option value="3">3×</option><option value="4">4×</option><option value="5">5×</option><option value="6">6×</option><option value="7">7×</option><option value="8">8×</option></select></label>
+                      <label>Letter spacing<input type="number" id="layerLetterSpacing" min="0" max="8" step="1" value="0"></label>
+                      <label class="checkline"><input type="checkbox" id="layerPixelBold"> Pixel bold</label>
+                    </div>
+                    <p class="hint pixel-hint">The LED family is rendered as hard bitmap pixels and ignores the TTF/OTF font choice. Scale controls the exact LED-cell size.</p>
+                    <div class="form-grid cols-4">
+                      <label>Fit / overflow<select id="layerOverflow"><option value="manual">Manual</option><option value="shrink">Shrink to fit</option><option value="wrap">Wrap</option><option value="clip">Clip</option><option value="marquee">Marquee / no wrap</option></select></label>
+                      <label>Text transform<select id="layerTextTransform"><option value="none">As typed</option><option value="upper">UPPERCASE</option><option value="lower">lowercase</option><option value="title">Title Case</option></select></label>
+                      <label>Typewriter chars/s<input type="number" id="layerTypewriterSpeed" min="0.1" max="200" step="0.1" value="12"></label>
+                      <label>Colour effect<select id="layerColorEffect"><option value="none">Solid</option><option value="gradient">Gradient</option><option value="rainbow">Rainbow</option><option value="cycle">Colour cycle</option><option value="characters">Colour by character</option><option value="words">Colour by word</option></select></label>
+                    </div>
+                    <div class="form-grid cols-4">
+                      <label>Second colour<input type="color" id="layerColor2" value="#ff00ff"></label>
+                      <label>Colour speed<input type="number" id="layerColorSpeed" min="0.05" max="20" step="0.05" value="1"></label>
+                      <label>Glow (LED px)<input type="number" id="layerGlow" min="0" max="12" step="1" value="0"></label>
+                      <label>Glow colour<input type="color" id="layerGlowColor" value="#ffffff"></label>
+                    </div>
+                    <label>Character/word palette <span class="hint">comma-separated hex colours</span><input id="layerColorPalette" placeholder="#ff0000, #ffff00, #00ff00, #00aaff"></label>
+                    <div class="form-grid cols-4">
+                      <label>Text colour<input type="color" id="layerTextColor" value="#ffffff"></label>
+                      <label>Outline<input type="color" id="layerOutlineColor" value="#000000"></label>
+                      <label>Outline (LED px)<input type="number" id="layerOutlineWidth" min="0" max="20" step="1" value="0" title="1 = one physical matrix pixel around the glyph"></label>
+                      <label>Internal padding<input type="number" id="layerPadding" min="0" max="100" value="0"></label>
+                    </div>
+                    <div class="form-grid cols-4">
+                      <label>Horizontal<select id="layerAlign"><option value="left">Left</option><option value="center">Centre</option><option value="right">Right</option></select></label>
+                      <label>Vertical<select id="layerVAlign"><option value="top">Top</option><option value="middle">Middle</option><option value="bottom">Bottom</option></select></label>
+                      <label>Line spacing<input type="number" id="layerLineSpacing" min="0" max="1" step="0.01" value="0.12"></label>
+                      <label>Shadow colour<input type="color" id="layerShadowColor" value="#000000"></label>
+                    </div>
+                    <div class="form-grid cols-2"><label>Shadow X offset (LED px)<input type="number" id="layerShadowX" min="-50" max="50" step="1" value="0"></label><label>Shadow Y offset (LED px)<input type="number" id="layerShadowY" min="-50" max="50" step="1" value="0"></label></div>
+                    <p class="hint">For sharp matrix text, 1 outline pixel is one whole LED pixel. Shadow X/Y are offsets only; the shadow follows the glyph body and does not inherit the outline thickness.</p>
+                  </div>
+
+                  <div id="imageLayerProperties" class="layer-kind-properties content-properties hidden">
+                    <div class="card-head mini"><div><h3>Image / logo</h3><p>Images can be independently positioned, resized, rotated and animated.</p></div><label class="btn secondary file-btn">Upload image<input type="file" id="designerImageUpload" accept="image/*"></label></div>
+                    <div class="form-grid cols-2">
+                      <label>Image<select id="layerImage"><option value="">Choose an image</option></select></label>
+                      <label>Fit<select id="layerImageFit"><option value="contain">Contain</option><option value="cover">Fill / crop</option><option value="stretch">Stretch to box</option></select></label>
+                    </div>
+                    <div class="form-grid cols-2">
+                      <label>Animation speed ×<input type="number" id="layerMediaSpeed" min="0.05" max="20" step="0.05" value="1"></label>
+                      <label class="checkline"><input type="checkbox" id="layerMediaLoop" checked> Loop animated GIF/APNG/WebP</label>
+                    </div>
+                  </div>
+
+                  <div id="videoLayerProperties" class="layer-kind-properties content-properties hidden">
+                    <div class="card-head mini"><div><h3>Video</h3><p>MP4/WebM/MOV are pre-decoded to LED-sized frames during upload so playback stays smooth.</p></div><label class="btn secondary file-btn">Upload video<input type="file" id="designerVideoUpload" accept="video/mp4,video/webm,video/quicktime,.mkv,.m4v,.avi"></label></div>
+                    <div class="form-grid cols-2">
+                      <label>Video<select id="layerVideo"><option value="">Choose a video</option></select></label>
+                      <label>Fit<select id="layerVideoFit"><option value="contain">Contain</option><option value="cover">Fill / crop</option><option value="stretch">Stretch to box</option></select></label>
+                    </div>
+                    <div class="form-grid cols-2"><label>Playback speed ×<input type="number" id="layerVideoSpeed" min="0.05" max="20" step="0.05" value="1"></label><label class="checkline"><input type="checkbox" id="layerVideoLoop" checked> Loop video</label></div>
+                    <p class="hint" id="videoUploadHint">Upload processing defaults to 12 fps and the current LED canvas resolution.</p>
+                    <div class="video-upload-progress hidden" id="videoUploadProgress" aria-live="polite">
+                      <div class="video-upload-progress-head"><strong id="videoUploadStage">Uploading</strong><span id="videoUploadPercent">0%</span></div>
+                      <div class="video-progress-track"><div id="videoUploadBar"></div></div>
+                      <p id="videoUploadDetail">Waiting…</p>
+                    </div>
+                  </div>
+
+                  <div id="shaderLayerProperties" class="layer-kind-properties content-properties hidden">
+                    <div class="card-head mini"><div><h3>Shader</h3><p>GPU-generated animated backgrounds/effects rendered directly at the layer's LED resolution.</p></div><label class="btn secondary file-btn">Upload shader<input type="file" id="designerShaderUpload" accept=".fs,.frag,.glsl,.json"></label></div>
+                    <div class="form-grid cols-4">
+                      <label>Shader<select id="layerShader"><option value="">Choose a shader</option></select></label>
+                      <label>Render rate<select id="layerShaderFps"><option value="8">8 fps</option><option value="12">12 fps</option><option value="15" selected>15 fps</option><option value="20">20 fps</option><option value="25">25 fps</option></select></label>
+                      <label>Time speed ×<input type="number" id="layerShaderTimeScale" min="-10" max="10" step="0.05" value="1"></label>
+                      <label>Performance<select id="layerShaderQuality"><option value="auto" selected>Auto – fall back if heavy</option><option value="native">Native resolution</option><option value="half">½ resolution</option><option value="quarter">¼ resolution</option></select></label>
+                    </div>
+                    <div id="shaderAssetInfo" class="shader-asset-info muted">Choose a shader to expose its controls.</div>
+                    <div id="shaderRenderStatus" class="shader-render-status hidden" aria-live="polite"></div>
+                    <div id="shaderParameterFields" class="shader-parameter-fields"></div>
+                    <p class="hint">Supports ISF-style fragment shaders using <code>TIME</code>, <code>RENDERSIZE</code>, float/bool/int, point2D and colour inputs. Shader rendering runs in an isolated helper process and is frame-limited so a broken or heavy shader cannot block the LED output loop.</p>
+                  </div>
+
+                  <div id="widgetLayerProperties" class="layer-kind-properties content-properties hidden">
+                    <h3>Live widget</h3>
+                    <div class="form-grid cols-3">
+                      <label>Widget<select id="layerWidgetType"><option value="clock">Digital clock</option><option value="analog-clock">Analogue clock</option><option value="date">Date</option><option value="countdown">Countdown</option><option value="weather">Weather</option><option value="json">JSON / API value</option><option value="rss">RSS headline</option></select></label>
+                      <label>Display / format<input id="layerWidgetFormat" placeholder="e.g. %H:%M:%S"></label>
+                      <label>Refresh (s)<input type="number" id="layerWidgetRefresh" min="5" max="86400" step="1" value="300"></label>
+                    </div>
+                    <div id="widgetAnalogFields" class="widget-fields hidden">
+                      <div class="form-grid cols-4"><label>Ring<input type="color" id="clockRingColor" value="#ffffff"></label><label>Ticks<input type="color" id="clockTickColor" value="#ffffff"></label><label>Hour hand<input type="color" id="clockHourColor" value="#ffffff"></label><label>Minute hand<input type="color" id="clockMinuteColor" value="#ffffff"></label></div>
+                      <div class="form-grid cols-4"><label>Second hand<input type="color" id="clockSecondColor" value="#ff3030"></label><label>Face<input type="color" id="clockFaceColor" value="#000000"></label><label class="checkline"><input type="checkbox" id="clockShowSeconds" checked> Seconds</label><label class="checkline"><input type="checkbox" id="clockFillFace"> Fill face</label></div>
+                    </div>
+                    <div id="widgetCountdownFields" class="widget-fields hidden form-grid cols-2"><label>Target date/time<input type="datetime-local" id="layerCountdownTarget"></label><label>Countdown format<input id="layerCountdownFormat" value="{D}d {HH}:{MM}:{SS}"></label></div>
+                    <div id="widgetWeatherFields" class="widget-fields hidden weather-widget-fields">
+                      <div class="form-grid cols-4">
+                        <label>Latitude<input type="number" id="layerWeatherLat" step="0.0001" value="53.55"></label>
+                        <label>Longitude<input type="number" id="layerWeatherLon" step="0.0001" value="-2.52"></label>
+                        <label>Display<select id="layerWeatherDisplay"><option value="animated">Animated weather panel</option><option value="text">Text / template</option></select></label>
+                        <label>Temperature<select id="layerWeatherTempUnit"><option value="c">Celsius °C</option><option value="f">Fahrenheit °F</option></select></label>
+                      </div>
+                      <div class="form-grid cols-4"><label>Wind speed<select id="layerWeatherWindUnit"><option value="mph">mph</option><option value="kmh">km/h</option></select></label></div>
+                      <div id="weatherAnimatedOptions">
+                        <p class="hint">The weather code automatically selects a crisp animated sun, cloud, rain, snow, fog or thunder graphic. Choose which readings share the remaining LED space.</p>
+                        <div class="weather-option-grid">
+                          <label class="checkline"><input type="checkbox" id="weatherShowIcon" checked> Weather graphic</label>
+                          <label class="checkline"><input type="checkbox" id="weatherAnimateIcon" checked> Animate graphic</label>
+                          <label class="checkline"><input type="checkbox" id="weatherShowCondition" checked> Condition</label>
+                          <label class="checkline"><input type="checkbox" id="weatherShowFeels" checked> Feels like</label>
+                          <label class="checkline"><input type="checkbox" id="weatherShowWind" checked> Wind speed + direction</label>
+                          <label class="checkline"><input type="checkbox" id="weatherShowGusts"> Wind gusts</label>
+                          <label class="checkline"><input type="checkbox" id="weatherShowHumidity"> Humidity</label>
+                          <label class="checkline"><input type="checkbox" id="weatherShowPrecip"> Precipitation</label>
+                          <label class="checkline"><input type="checkbox" id="weatherCycleDetails" checked> Cycle extra readings</label>
+                        </div>
+                        <div class="form-grid cols-4"><label>Detail change every (s)<input type="number" id="weatherDetailPeriod" min="1" max="30" step="0.5" value="2.5"></label></div>
+                      </div>
+                      <div id="weatherTemplateOptions" class="hidden">
+                        <label>Weather template<input id="layerWeatherTemplate" value="{TEMP}{TEMP_UNIT} {CONDITION}"></label>
+                        <p class="hint">Tokens: {TEMP}, {TEMP_UNIT}, {FEELS}, {CONDITION}, {WIND}, {WIND_UNIT}, {WIND_DIR}, {GUST}, {HUMIDITY}, {PRECIP}, {RAIN}, {SHOWERS}, {SNOW}, {CLOUD}, {CODE}.</p>
+                      </div>
+                    </div>
+                    <div id="widgetDataFields" class="widget-fields hidden">
+                      <label>Data URL<input type="url" id="layerDataUrl" placeholder="https://example.com/data.json"></label>
+                      <div class="form-grid cols-3"><label>JSON path<input id="layerJsonPath" placeholder="status.temperature"></label><label>RSS item #<input type="number" id="layerRssItem" min="1" max="50" value="1"></label><label>Prefix / suffix<div class="inline-fields"><input id="layerDataPrefix" placeholder="Prefix"><input id="layerDataSuffix" placeholder="Suffix"></div></label></div>
+                    </div>
+                    <details id="widgetTextStyle" class="inspector-group widget-text-style">
+                      <summary>Widget text style</summary>
+                    <div class="form-grid cols-4"><label>Font<select id="widgetFont"><option value="">Default font</option></select></label><label>Font size<input type="number" id="widgetFontSize" min="4" max="512" value="18"></label><label>Rendering<select id="widgetRenderMode"><option value="pixel">Pixel sharp</option><option value="led3x5">LED 3×5 compact</option><option value="led4x6">LED 4×6</option><option value="led5x7">LED 5×7</option><option value="led6x8">LED 6×8</option><option value="led7x9">LED 7×9</option><option value="led8x12">LED 8×12</option><option value="led8x16">LED 8×16</option><option value="led-condensed">LED condensed</option><option value="led-bold">LED bold</option><option value="led-digital">7-segment digital</option><option value="led-scoreboard">Scoreboard</option><option value="led-dot">Dot matrix</option><option value="smooth">Smooth</option></select></label><label>Colour<input type="color" id="widgetColor" value="#ffffff"></label></div>
+                    <div class="form-grid cols-4"><label class="checkline"><input type="checkbox" id="widgetAutoFit" checked> Auto fit</label><label>Horizontal<select id="widgetAlign"><option value="left">Left</option><option value="center" selected>Centre</option><option value="right">Right</option></select></label><label>Vertical<select id="widgetVAlign"><option value="top">Top</option><option value="middle" selected>Middle</option><option value="bottom">Bottom</option></select></label><label>Padding<input type="number" id="widgetPadding" min="0" max="100" value="1"></label></div>
+                    </details>
+                  </div>
+
+                  <div id="iconLayerProperties" class="layer-kind-properties content-properties hidden">
+                    <h3>Built-in LED icon</h3>
+                    <p class="hint">Crisp vector-style pictograms are drawn directly on the LED pixel grid. Icon effects can run at the same time as the normal layer scroll/bounce/entrance/exit animation.</p>
+                    <div class="form-grid cols-3">
+                      <label>Icon<select id="layerIconName">
+                        <optgroup label="Directions"><option value="arrow-left">Arrow left</option><option value="arrow-right">Arrow right</option><option value="arrow-up">Arrow up</option><option value="arrow-down">Arrow down</option><option value="walking">Walking person</option><option value="queue">Queue / people</option></optgroup>
+                        <optgroup label="Information &amp; facilities"><option value="info">Information</option><option value="warning">Warning</option><option value="wheelchair">Wheelchair / accessible</option><option value="toilet">Toilets</option><option value="parking">Parking</option><option value="wifi">Wi-Fi</option><option value="phone">Telephone</option></optgroup>
+                        <optgroup label="Status"><option value="tick">Tick</option><option value="cross">Cross</option><option value="heart">Heart</option><option value="smile">Smiley</option><option value="bell">Bell</option><option value="star">Star</option></optgroup>
+                        <optgroup label="Events"><option value="gift">Gift</option><option value="snowflake">Snowflake</option><option value="sale-tag">Sale / price tag</option></optgroup>
+                      </select></label>
+                      <label>Primary colour<input type="color" id="layerIconColor" value="#ffffff"></label>
+                      <label>Secondary colour<input type="color" id="layerIconColor2" value="#31506a"></label>
+                    </div>
+                    <div class="form-grid cols-2">
+                      <label>Icon effect<select id="layerIconEffect"><option value="none">None</option><option value="native">Native animation</option><option value="flash">Flash</option><option value="pulse">Pulse</option><option value="spin">Spin</option><option value="wiggle">Wiggle</option><option value="chase">Arrow chase</option></select></label>
+                      <label>Effect period (s)<input type="number" id="layerIconPeriod" min="0.15" max="30" step="0.05" value="1"></label>
+                    </div>
+                    <p class="hint"><strong>Native animation</strong> animates walking, Wi-Fi, bell and heart icons appropriately. <strong>Arrow chase</strong> creates a three-step directional indicator.</p>
+                  </div>
+
+                  <div id="shapeLayerProperties" class="layer-kind-properties content-properties hidden">
+                    <h3>Shape</h3>
+                    <div class="form-grid cols-4">
+                      <label>Shape<select id="layerShape"><option value="rectangle">Rectangle</option><option value="rounded">Rounded rectangle</option><option value="ellipse">Ellipse</option></select></label>
+                      <label>Fill<input type="color" id="layerFill" value="#2255aa"></label>
+                      <label>Border<input type="color" id="layerBorderColor" value="#ffffff"></label>
+                      <label>Border px<input type="number" id="layerBorderWidth" min="0" max="20" value="0"></label>
+                    </div>
+                    <label>Corner radius<input type="number" id="layerRadius" min="0" max="100" value="0"></label>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+
+          <details class="font-manager">
+            <summary>Custom fonts</summary>
+            <div class="card-head mini"><div><p>TTF and OTF files are available in both editors.</p></div><label class="btn secondary file-btn">Upload font<input type="file" id="fontUpload" accept=".ttf,.otf"></label></div>
+          </details>
+        </article>
+      </div>
+    </section>
+
+    <section class="page" id="page-playlists">
+      <div class="split-layout">
+        <aside class="card list-card"><div class="card-head"><div><h2>Playlists</h2><p>Cycle through several saved messages.</p></div><button class="btn primary" id="newPlaylist">+ New</button></div><div id="playlistList" class="item-list"></div></aside>
+        <article class="card editor-card">
+          <div class="card-head"><div><h2>Playlist editor</h2><p>Messages play from top to bottom and repeat.</p></div><div class="toolbar compact"><button class="btn secondary" id="exportPlaylist">Export</button><label class="btn secondary file-btn compact-file-btn">Import<input type="file" id="importPlaylistFile" accept=".zip,application/zip"></label><button class="btn secondary" id="showPlaylist">Show now</button><button class="btn primary" id="savePlaylist">Save</button><button class="btn danger ghost" id="deletePlaylist">Delete</button></div></div>
+          <input type="hidden" id="playlistId">
+          <label>Playlist name<input id="playlistName" placeholder="e.g. Reception screen"></label>
+          <div class="row add-playlist-row"><label>Message<select id="playlistMessagePicker"></select></label><label>Duration (seconds)<input type="number" id="playlistDuration" min="0.5" step="0.5" value="10"></label><button class="btn secondary align-end" id="addPlaylistItem">Add</button></div>
+          <div id="playlistItems" class="playlist-items"></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="page" id="page-schedules">
+      <div class="split-layout">
+        <aside class="card list-card"><div class="card-head"><div><h2>Timed schedules</h2><p>Higher priority wins if times overlap.</p></div><button class="btn primary" id="newSchedule">+ New</button></div><div id="scheduleList" class="item-list"></div></aside>
+        <article class="card editor-card">
+          <div class="card-head"><div><h2>Schedule editor</h2><p>Run a message or playlist on selected days and times.</p></div><div class="toolbar compact"><button class="btn primary" id="saveSchedule">Save</button><button class="btn danger ghost" id="deleteSchedule">Delete</button></div></div>
+          <input type="hidden" id="scheduleId">
+          <div class="form-grid cols-2"><label>Schedule name<input id="scheduleName"></label><label>Priority<input type="number" id="schedulePriority" value="100"><span class="hint">200 overrides 100</span></label></div>
+          <div class="form-grid cols-2"><label>What to show<select id="scheduleTargetType"><option value="message">Message</option><option value="playlist">Playlist</option></select></label><label>Content<select id="scheduleTarget"></select></label></div>
+          <fieldset><legend>Days</legend><div class="day-picker">
+            <label><input type="checkbox" data-day="0" checked>Mon</label><label><input type="checkbox" data-day="1" checked>Tue</label><label><input type="checkbox" data-day="2" checked>Wed</label><label><input type="checkbox" data-day="3" checked>Thu</label><label><input type="checkbox" data-day="4" checked>Fri</label><label><input type="checkbox" data-day="5" checked>Sat</label><label><input type="checkbox" data-day="6" checked>Sun</label>
+          </div></fieldset>
+          <div class="form-grid cols-2"><label>Start time<input type="time" id="scheduleStartTime" value="00:00"></label><label>End time<input type="time" id="scheduleEndTime" value="23:59"></label></div>
+          <div class="form-grid cols-2"><label>Start date <span class="hint">optional</span><input type="date" id="scheduleStartDate"></label><label>End date <span class="hint">optional</span><input type="date" id="scheduleEndDate"></label></div>
+          <label class="checkline"><input type="checkbox" id="scheduleEnabled" checked> Schedule enabled</label>
+          <div class="callout"><strong>Overnight schedules:</strong> a start of 22:00 and end of 06:00 is treated as an overnight window automatically.</div>
+        </article>
+      </div>
+
+      <div class="automation-stack">
+        <details class="card automation-card" open>
+          <summary><strong>Conditional content</strong><span>Show content automatically when live conditions become true.</span></summary>
+          <div class="automation-split">
+            <div><div class="card-head compact-head"><div><h3>Rules</h3><p>Rules compete with timed schedules using priority.</p></div><button class="btn primary" id="newConditionalRule">+ New</button></div><div id="conditionalRuleList" class="item-list compact-list"></div></div>
+            <div class="automation-editor">
+              <input type="hidden" id="conditionalRuleId">
+              <div class="form-grid cols-2"><label>Rule name<input id="conditionalRuleName" value="New condition"></label><label>Priority<input type="number" id="conditionalRulePriority" value="150"><span class="hint">Higher wins</span></label></div>
+              <div class="form-grid cols-2"><label>What to show<select id="conditionalTargetType"><option value="message">Message</option><option value="playlist">Playlist</option></select></label><label>Content<select id="conditionalTarget"></select></label></div>
+              <div class="form-grid cols-3"><label>Condition<select id="conditionalType"><option value="weather_temp">Temperature</option><option value="weather_feels">Feels-like temperature</option><option value="weather_wind">Wind speed</option><option value="weather_gust">Wind gust</option><option value="weather_humidity">Humidity</option><option value="weather_condition">Weather condition</option><option value="json">JSON / API value</option></select></label><label>Comparison<select id="conditionalOperator"><option value="gt">greater than</option><option value="gte">greater than or equal</option><option value="lt">less than</option><option value="lte">less than or equal</option><option value="eq">equals</option><option value="neq">does not equal</option><option value="contains">contains</option><option value="not_contains">does not contain</option></select></label><label>Value<input id="conditionalValue" placeholder="e.g. 5"></label></div>
+              <div id="conditionalWeatherFields" class="form-grid cols-3"><label>Latitude<input type="number" step="0.00001" id="conditionalWeatherLat" placeholder="e.g. 53.55"></label><label>Longitude<input type="number" step="0.00001" id="conditionalWeatherLon" placeholder="e.g. -2.52"></label><label>Units<select id="conditionalWeatherUnits"><option value="c|mph">°C / mph</option><option value="c|kmh">°C / km/h</option><option value="f|mph">°F / mph</option><option value="f|kmh">°F / km/h</option></select></label></div>
+              <div id="conditionalJsonFields" class="form-grid cols-2 hidden"><label>JSON URL<input id="conditionalJsonUrl" placeholder="https://example.com/status.json"></label><label>JSON path<input id="conditionalJsonPath" placeholder="data.value"></label></div>
+              <div class="form-grid cols-2"><label>Must remain true for (s)<input type="number" min="0" step="1" id="conditionalTrueFor" value="0"></label><label>Minimum time on screen (s)<input type="number" min="0" step="1" id="conditionalHold" value="30"></label></div>
+              <label class="checkline"><input type="checkbox" id="conditionalEnabled" checked> Rule enabled</label>
+              <div class="condition-runtime" id="conditionalRuntime">Not evaluated yet.</div>
+              <div class="toolbar"><button class="btn primary" id="saveConditionalRule">Save rule</button><button class="btn danger ghost" id="deleteConditionalRule">Delete</button></div>
+            </div>
+          </div>
+        </details>
+
+        <details class="card automation-card">
+          <summary><strong>Brightness schedules</strong><span>Automatically change LED brightness by day and time.</span></summary>
+          <div class="automation-split">
+            <div><div class="card-head compact-head"><div><h3>Profiles</h3><p>Highest-priority matching profile is used.</p></div><button class="btn primary" id="newBrightnessSchedule">+ New</button></div><div id="brightnessScheduleList" class="item-list compact-list"></div></div>
+            <div class="automation-editor">
+              <input type="hidden" id="brightnessScheduleId">
+              <div class="form-grid cols-2"><label>Name<input id="brightnessScheduleName" value="Evening"></label><label>Priority<input type="number" id="brightnessSchedulePriority" value="100"></label></div>
+              <fieldset><legend>Days</legend><div class="day-picker brightness-days"><label><input type="checkbox" data-brightness-day="0" checked>Mon</label><label><input type="checkbox" data-brightness-day="1" checked>Tue</label><label><input type="checkbox" data-brightness-day="2" checked>Wed</label><label><input type="checkbox" data-brightness-day="3" checked>Thu</label><label><input type="checkbox" data-brightness-day="4" checked>Fri</label><label><input type="checkbox" data-brightness-day="5" checked>Sat</label><label><input type="checkbox" data-brightness-day="6" checked>Sun</label></div></fieldset>
+              <div class="form-grid cols-2"><label>Start time<input type="time" id="brightnessStartTime" value="18:00"></label><label>End time<input type="time" id="brightnessEndTime" value="22:00"></label></div>
+              <label>Brightness <span class="inline-value" id="brightnessScheduleValue">40%</span><input type="range" id="brightnessScheduleBrightness" min="0" max="100" value="40"></label>
+              <label class="checkline"><input type="checkbox" id="brightnessScheduleEnabled" checked> Profile enabled</label>
+              <div class="toolbar"><button class="btn primary" id="saveBrightnessSchedule">Save profile</button><button class="btn danger ghost" id="deleteBrightnessSchedule">Delete</button></div>
+            </div>
+          </div>
+        </details>
+
+        <details class="card automation-card">
+          <summary><strong>Emergency mode</strong><span>Choose the message used by the one-button emergency override.</span></summary>
+          <div class="form-grid cols-2"><label>Emergency message<select id="emergencyMessageSetting"></select></label><div class="callout compact-callout"><strong>Priority:</strong> Emergency mode overrides manual messages, conditional rules, timed schedules and the default message. Ending Emergency mode restores whatever should currently be playing.</div></div>
+          <div class="toolbar"><button class="btn primary" id="saveEmergencySetting">Save emergency message</button></div>
+        </details>
+      </div>
+    </section>
+
+    <section class="page" id="page-setup">
+      <div class="grid setup-grid">
+        <article class="card full-span licence-card" id="licenceCard">
+          <div class="card-head">
+            <div><h2>Software licence</h2><p>WHMCS licence status and the unique controller identity used to bind this installation.</p></div>
+            <span class="health-badge" id="licenceStatusBadge">Checking…</span>
+          </div>
+          <div class="licence-summary">
+            <div><span>Status</span><strong id="licenceStatus">Checking…</strong><small id="licenceMessage">Loading licence state.</small></div>
+            <div><span>Device ID</span><strong class="mono" id="licenceDeviceId">—</strong><small id="licenceDeviceSource">—</small></div>
+            <div><span>Licence key</span><strong id="licenceKeyMasked">—</strong><small id="licenceCustomer">—</small></div>
+            <div><span>Verification</span><strong id="licenceVerifiedUntil">—</strong><small id="licenceGraceUntil">—</small></div>
+          </div>
+          <div class="form-grid cols-2 licence-actions">
+            <label>Licence key<input id="licenceKey" autocomplete="off" spellcheck="false" placeholder="PMS-…"></label>
+            <div class="toolbar align-end">
+              <button class="btn primary" id="activateLicence" type="button">Activate / update licence</button>
+              <button class="btn secondary" id="checkLicence" type="button">Check now</button>
+              <button class="btn danger ghost" id="clearLocalLicence" type="button">Clear local licence</button>
+            </div>
+          </div>
+          <div class="callout compact-callout" id="licenceHelp"><strong>Device locking:</strong> one WHMCS licence is bound to this controller's Device ID. Use WHMCS Reissue before moving the licence to replacement hardware.</div>
+        </article>
+        <article class="card">
+          <div class="card-head"><div><h2>Panel layout</h2><p>Tell the app the pixel size and arrangement of the physical panels.</p></div></div>
+          <div class="form-grid cols-3"><label>Pixels per panel – width<input type="number" id="panelWidth" min="8" max="512"></label><label>Pixels per panel – height<input type="number" id="panelHeight" min="8" max="512"></label><label>Panel scan rate<select id="panelScan"><option value="1/16">1/16 scan</option><option value="1/8">1/8 scan</option></select></label></div>
+          <div class="form-grid cols-2"><label>Panels across<input type="number" id="panelsAcross" min="1" max="32"></label><label>Panels down<input type="number" id="panelsDown" min="1" max="32"></label></div>
+          <label>Whole-display rotation<select id="displayRotation"><option value="0">0° – normal</option><option value="90">90° clockwise</option><option value="180">180°</option><option value="270">270° clockwise</option></select></label>
+          <div class="layout-summary" id="layoutSummary"></div>
+          <div class="callout warn"><strong>Physical panel order/orientation:</strong> set each panel's wiring order and rotation once in FPP's LED Panels screen. This app then treats the result as one continuous canvas. The rPI-MFC's maximum panel count depends on panel size and scan rate, so do not assume every layout the editor can describe is electrically supported.</div>
+        </article>
+
+        <article class="card">
+          <div class="card-head"><div><h2>Display output</h2><p>Normal Hanson/FPP installation uses localhost DDP.</p></div></div>
+          <div class="form-grid cols-2"><label>Brightness <span class="inline-value" id="brightnessValue">60%</span><input type="range" id="brightness" min="0" max="100"></label><label>Frame rate<input type="number" id="frameRate" min="1" max="60"></label></div>
+          <div class="form-grid cols-2"><label>Colour order<select id="colorOrder"><option>RGB</option><option>RBG</option><option>GRB</option><option>GBR</option><option>BRG</option><option>BGR</option></select></label><label>Time zone<input id="timezone" value="Europe/London"></label></div>
+          <details><summary>Advanced DDP settings</summary><div class="form-grid cols-3"><label>Host<input id="ddpHost"></label><label>UDP port<input type="number" id="ddpPort"></label><label>Channel offset<input type="number" id="ddpOffset"></label></div></details>
+          <label>Default message<select id="defaultMessage"></select></label>
+          <div class="callout compact-callout"><strong>Access control:</strong> usernames, passwords and tab permissions are managed from the Users tab.</div>
+          <div class="toolbar"><button class="btn primary" id="saveSettings">Save display settings</button></div>
+        </article>
+
+        <article class="card full-span gpio-controls-card">
+          <div class="card-head">
+            <div><h2>GPIO / physical controls</h2><p>Use the three dedicated Hanson rPi-MFC user-input connectors for physical buttons or voltage-free relay contacts.</p></div>
+            <label class="switchline"><input type="checkbox" id="gpioControlsEnabled"> Enable physical controls</label>
+          </div>
+          <div class="callout compact-callout"><strong>rPi-MFC inputs:</strong> A = CN2 / GPIO6 / header pin 31, B = CN3 / GPIO13 / header pin 33, C = CN4 / GPIO26 / header pin 37. The board is designed to use pull-ups, so use a voltage-free switch/relay contact to ground; never feed 5V/12V into a GPIO input.</div>
+          <div class="gpio-input-grid" id="gpioInputGrid">
+            <div class="gpio-input-row" data-gpio-input="A"><div class="gpio-identity"><strong>Input A</strong><small>CN2 · GPIO6 · Pin 31</small><span class="gpio-state" data-gpio-state="A">Disabled</span></div><label>Enabled<input type="checkbox" data-gpio-field="enabled"></label><label>Action<select data-gpio-field="action"><option value="none">No action</option><option value="emergency">Activate Emergency</option><option value="end_emergency">End Emergency</option><option value="next_message">Next message</option><option value="previous_message">Previous message</option><option value="blank">Blank display</option><option value="automatic">Return to Auto</option><option value="brightness_cycle">Cycle brightness</option></select></label><label>Contact<select data-gpio-field="contact_type"><option value="normally_open">Normally open</option><option value="normally_closed">Normally closed / fail-safe</option></select></label><label class="gpio-emergency-behaviour">Emergency behaviour<select data-gpio-field="emergency_behaviour"><option value="latch">Latch until cleared</option><option value="while_active">Only while input active</option></select></label><label>Debounce (ms)<input type="number" data-gpio-field="debounce_ms" min="20" max="2000" step="10"></label><button class="btn secondary gpio-test" data-gpio-test="A">Test action</button></div>
+            <div class="gpio-input-row" data-gpio-input="B"><div class="gpio-identity"><strong>Input B</strong><small>CN3 · GPIO13 · Pin 33</small><span class="gpio-state" data-gpio-state="B">Disabled</span></div><label>Enabled<input type="checkbox" data-gpio-field="enabled"></label><label>Action<select data-gpio-field="action"><option value="none">No action</option><option value="emergency">Activate Emergency</option><option value="end_emergency">End Emergency</option><option value="next_message">Next message</option><option value="previous_message">Previous message</option><option value="blank">Blank display</option><option value="automatic">Return to Auto</option><option value="brightness_cycle">Cycle brightness</option></select></label><label>Contact<select data-gpio-field="contact_type"><option value="normally_open">Normally open</option><option value="normally_closed">Normally closed / fail-safe</option></select></label><label class="gpio-emergency-behaviour">Emergency behaviour<select data-gpio-field="emergency_behaviour"><option value="latch">Latch until cleared</option><option value="while_active">Only while input active</option></select></label><label>Debounce (ms)<input type="number" data-gpio-field="debounce_ms" min="20" max="2000" step="10"></label><button class="btn secondary gpio-test" data-gpio-test="B">Test action</button></div>
+            <div class="gpio-input-row" data-gpio-input="C"><div class="gpio-identity"><strong>Input C</strong><small>CN4 · GPIO26 · Pin 37</small><span class="gpio-state" data-gpio-state="C">Disabled</span></div><label>Enabled<input type="checkbox" data-gpio-field="enabled"></label><label>Action<select data-gpio-field="action"><option value="none">No action</option><option value="emergency">Activate Emergency</option><option value="end_emergency">End Emergency</option><option value="next_message">Next message</option><option value="previous_message">Previous message</option><option value="blank">Blank display</option><option value="automatic">Return to Auto</option><option value="brightness_cycle">Cycle brightness</option></select></label><label>Contact<select data-gpio-field="contact_type"><option value="normally_open">Normally open</option><option value="normally_closed">Normally closed / fail-safe</option></select></label><label class="gpio-emergency-behaviour">Emergency behaviour<select data-gpio-field="emergency_behaviour"><option value="latch">Latch until cleared</option><option value="while_active">Only while input active</option></select></label><label>Debounce (ms)<input type="number" data-gpio-field="debounce_ms" min="20" max="2000" step="10"></label><button class="btn secondary gpio-test" data-gpio-test="C">Test action</button></div>
+          </div>
+          <div class="toolbar"><button class="btn primary" id="saveGpioControls">Save physical controls</button><span class="muted" id="gpioBackendStatus">GPIO monitor not checked yet.</span></div>
+          <div class="callout warn"><strong>Emergency recommendation:</strong> use a normally-open momentary button with <em>Latch until cleared</em>. One press activates the configured Emergency message; releasing the button cannot accidentally cancel it. For a fail-safe wired loop, choose Normally closed.</div>
+        </article>
+
+        <article class="card full-span diagnostics-card">
+          <div class="card-head">
+            <div><h2>System diagnostics &amp; recovery</h2><p>Live health of the Pi, renderer, FPP and network. Automatic recovery is deliberately limited to safe service/renderer restarts.</p></div>
+            <div class="toolbar compact"><span class="health-badge" id="diagOverall">Checking…</span><button class="btn secondary" id="refreshDiagnostics">Refresh</button></div>
+          </div>
+          <div id="diagChecks" class="diagnostic-checks"></div>
+          <div class="diagnostic-metrics">
+            <div><span>CPU</span><strong id="diagCpu">—</strong><small id="diagLoad">Load —</small></div>
+            <div><span>Temperature</span><strong id="diagTemp">—</strong><small>Pi CPU</small></div>
+            <div><span>Memory</span><strong id="diagMemory">—</strong><small id="diagProcessMemory">App —</small></div>
+            <div><span>Storage</span><strong id="diagDisk">—</strong><small id="diagDiskUsed">—</small></div>
+            <div><span>Uptime</span><strong id="diagUptime">—</strong><small id="diagIps">IP —</small></div>
+            <div><span>Renderer</span><strong id="diagRenderer">—</strong><small id="diagRendererDetail">—</small></div>
+            <div><span>FPPD / DDP</span><strong id="diagFppd">—</strong><small id="diagDdp">—</small></div>
+            <div><span>Internet / widgets</span><strong id="diagInternet">—</strong><small id="diagWidgets">—</small></div>
+          </div>
+
+          <details class="diagnostic-recovery" open>
+            <summary>Automatic recovery</summary>
+            <div class="form-grid cols-3">
+              <label class="checkline"><input type="checkbox" id="autoRecoveryEnabled"> Automatic recovery enabled</label>
+              <label class="checkline"><input type="checkbox" id="autoRecoverRenderer"> Recover stalled LED renderer</label>
+              <label class="checkline"><input type="checkbox" id="autoRecoverFppd"> Restart FPPD if it stops</label>
+            </div>
+            <div class="form-grid cols-2">
+              <label>Renderer stall threshold (s)<input type="number" id="rendererStallSeconds" min="3" max="60" step="1"></label>
+              <label>Recovery cooldown (s)<input type="number" id="recoveryCooldownSeconds" min="15" max="3600" step="5"></label>
+            </div>
+            <div class="toolbar">
+              <button class="btn primary" id="saveRecoverySettings">Save recovery settings</button>
+              <button class="btn secondary" id="restartRenderer">Restart renderer now</button>
+              <button class="btn secondary" id="restartFppd">Restart FPPD now</button>
+            </div>
+            <div class="callout compact-callout"><strong>Safe recovery policy:</strong> Pi Matrix Signage will restart its renderer if frame output stalls and can restart <code>fppd.service</code> if FPPD is actually inactive. The systemd service also restarts Pi Matrix Signage if the application process exits unexpectedly. It will never reboot or power off the Pi automatically.</div>
+          </details>
+
+          <details class="diagnostic-history">
+            <summary>Recovery history</summary>
+            <div class="toolbar compact history-toolbar"><span class="muted" id="diagCollected">Not checked yet</span><button class="btn danger ghost" id="clearRecoveryHistory">Clear history</button></div>
+            <div class="recovery-history" id="recoveryHistory"><p class="muted">No recovery actions recorded.</p></div>
+          </details>
+        </article>
+
+        <article class="card full-span danger-zone">
+          <div class="card-head"><div><h2>Raspberry Pi power</h2><p>Safely halt the Pi before removing power.</p></div><button class="btn danger" id="shutdownPi">Shut down Pi…</button></div>
+          <div class="callout warn"><strong>Safe shutdown:</strong> the display and web interface will go offline. Wait until the Pi activity LED has stopped before removing power. Only users with Display setup permission can request a shutdown.</div>
+        </article>
+
+        <article class="card full-span">
+          <div class="card-head"><div><h2>FPP setup helper</h2><p>Use these values in Falcon Player after setting the same physical panel layout there.</p></div><button class="btn secondary" id="refreshFpp">Refresh</button></div>
+          <div id="fppSetup" class="fpp-setup"></div>
+          <div class="callout"><strong>Important:</strong> the Hanson rPI-MFC is the hardware interface. FPP drives the timing-critical HUB75 signals; Pi Matrix Signage sends the finished RGB frame to FPP.</div>
+        </article>
+      </div>
+    </section>
+
+    <section class="page permission-page" id="page-backup" data-permission="backup">
+      <div class="grid backup-grid">
+        <article class="card full-span">
+          <div class="card-head">
+            <div><h2>Backup &amp; restore</h2><p>Create a complete portable backup of Pi Matrix Signage and the FPP configuration that drives the panels.</p></div>
+            <button class="btn primary" id="createBackup">Create backup</button>
+          </div>
+          <div class="backup-includes">
+            <div><strong>Pi Matrix Signage</strong><span>Messages, scenes, users, permissions, playlists, schedules, components and all settings.</span></div>
+            <div><strong>Media</strong><span>Uploaded images, fonts, source videos and processed LED video frames.</span></div>
+            <div><strong>FPP configuration</strong><span>FPP's own full configuration backup, including LED panel/channel output settings and sensitive configuration.</span></div>
+            <div><strong>Recovery snapshot</strong><span>A raw FPP config snapshot is included as a diagnostic fallback; normal restore uses FPP's supported restore format.</span></div>
+          </div>
+          <div class="callout warn compact-callout"><strong>Keep backup files secure.</strong> A complete backup can contain usernames/password hashes and sensitive FPP settings such as Wi-Fi or email credentials.</div>
+        </article>
+
+        <article class="card full-span portable-config-card">
+          <div class="card-head"><div><h2>Portable configuration</h2><p>Move the complete Pi Matrix Signage creative configuration between signs without copying user accounts or FPP.</p></div><div class="toolbar compact"><button class="btn secondary" id="exportConfiguration">Export configuration</button><label class="btn secondary file-btn compact-file-btn">Import configuration<input type="file" id="importConfigurationFile" accept=".zip,application/zip"></label></div></div>
+          <div class="portable-config-includes"><span>Messages &amp; assets</span><span>Components</span><span>Playlists</span><span>Schedules &amp; rules</span><span>Brightness profiles</span><span>Display settings</span></div>
+          <div class="callout compact-callout warn"><strong>Import replaces the current creative configuration.</strong> User accounts/passwords and FPP configuration are deliberately left untouched. Use Backup &amp; restore for full disaster recovery.</div>
+        </article>
+
+        <article class="card full-span">
+          <div class="card-head"><div><h2>Backup status</h2><p>Backup and restore jobs continue on the Pi even if this browser is closed.</p></div><button class="btn secondary" id="refreshBackups">Refresh</button></div>
+          <div class="backup-status-grid">
+            <div><span>State</span><strong id="backupState">Ready</strong></div>
+            <div><span>Operation</span><strong id="backupOperation">—</strong></div>
+            <div><span>File</span><strong id="backupStatusFile">—</strong></div>
+            <div><span>Safety backup</span><strong id="backupSafety">—</strong></div>
+          </div>
+          <div class="upgrade-progress hidden" id="backupProgress"><div id="backupProgressBar"></div></div>
+          <div class="callout compact-callout" id="backupMessage">Ready to create or restore a backup.</div>
+        </article>
+
+        <article class="card full-span">
+          <div class="card-head"><div><h2>Saved backups</h2><p>Backups remain on the Pi until you delete them. Download copies somewhere safe.</p></div></div>
+          <div id="backupList" class="backup-list"><p class="muted">Loading backups…</p></div>
+        </article>
+
+        <article class="card full-span">
+          <div class="card-head"><div><h2>Restore from file</h2><p>Upload a backup ZIP previously downloaded from this system or another Pi Matrix Signage unit.</p></div></div>
+          <div class="form-grid cols-2 backup-restore-options">
+            <label class="checkline"><input type="checkbox" id="backupKeepNetwork" checked> Keep this Pi's current FPP network settings <small>Recommended so the Pi remains reachable after restore.</small></label>
+            <label class="checkline"><input type="checkbox" id="backupKeepMode" checked> Keep this Pi's current FPP Player/Remote mode <small>Other FPP settings are restored normally.</small></label>
+          </div>
+          <label class="upgrade-dropzone" id="backupDropZone">
+            <input type="file" id="backupRestoreFile" accept=".zip,application/zip">
+            <span class="upgrade-drop-icon">↺</span>
+            <strong>Drop backup ZIP here</strong>
+            <span>or click to choose a backup</span>
+            <small>An automatic safety backup is created before any restore begins.</small>
+          </label>
+          <div id="backupUploadProgress" class="upload-progress hidden">
+            <div class="upload-progress-head"><strong id="backupUploadStage">Uploading</strong><span id="backupUploadPercent">0%</span></div>
+            <div class="upload-progress-track"><div id="backupUploadBar"></div></div>
+            <small id="backupUploadDetail"></small>
+          </div>
+          <div class="callout warn compact-callout"><strong>Restore replaces the current Pi Matrix Signage database and media.</strong> FPP configuration is restored using FPP's supported backup/restore mechanism. The signage service and FPPD restart during restore, and you may need to sign in again afterwards.</div>
+        </article>
+      </div>
+    </section>
+
+    <section class="page" id="page-upgrade">
+      <div class="grid upgrade-grid">
+        <article class="card full-span">
+          <div class="card-head">
+            <div><h2>Software upgrade</h2><p>Drop a Pi Matrix Signage release ZIP here. It is validated, backed up, installed and the service restarts automatically.</p></div>
+            <div class="version-badge">Installed <strong id="upgradeCurrentVersion">v{{ app_version }}</strong></div>
+          </div>
+          <div class="callout compact-callout"><strong>Protected area:</strong> only signed-in users with Upgrade permission can install software releases.</div>
+          <div id="upgradeHelperNotice" class="callout warn hidden"><strong>Upgrade helper not installed:</strong> install this release once with <code>sudo ./install.sh</code>. Future normal releases can then be installed from this tab.</div>
+          <label class="upgrade-dropzone" id="upgradeDropZone">
+            <input type="file" id="upgradeFile" accept=".zip,application/zip">
+            <span class="upgrade-drop-icon">⇧</span>
+            <strong>Drop release ZIP here</strong>
+            <span>or click to choose a file</span>
+            <small>Installation starts automatically after validation. Do not power off the Pi during an upgrade.</small>
+          </label>
+          <div id="upgradeSelected" class="upgrade-selected muted">No release selected.</div>
+        </article>
+
+        <article class="card full-span">
+          <div class="card-head"><div><h2>Upgrade status</h2><p>The page may disconnect briefly while the signage service restarts.</p></div><button class="btn secondary" id="refreshUpgradeStatus">Refresh</button></div>
+          <div class="upgrade-status-grid">
+            <div><span>State</span><strong id="upgradeState">Ready</strong></div>
+            <div><span>From</span><strong id="upgradeFrom">—</strong></div>
+            <div><span>To</span><strong id="upgradeTo">—</strong></div>
+            <div><span>Rollback backup</span><strong id="upgradeBackup">—</strong></div>
+          </div>
+          <div class="upgrade-progress hidden" id="upgradeProgress"><div id="upgradeProgressBar"></div></div>
+          <div class="callout compact-callout" id="upgradeMessage">Drop a newer Pi Matrix Signage ZIP above when you are ready to upgrade.</div>
+          <p class="hint" id="upgradeCompleted"></p>
+        </article>
+      </div>
+    </section>
+
+    <section class="page permission-page" id="page-users" data-permission="users">
+      <div class="split-layout users-layout">
+        <aside class="card list-card users-list-card">
+          <div class="card-head"><div><h2>Users</h2><p>Named accounts and access rights.</p></div><button class="btn primary" id="newUser">+ New</button></div>
+          <div id="userList" class="item-list"></div>
+        </aside>
+        <article class="card editor-card users-editor-card">
+          <div class="card-head"><div><h2 id="userEditorTitle">User account</h2><p>Dashboard is available to every active user. Other areas are granted individually.</p></div><div class="toolbar compact"><button class="btn primary" id="saveUser">Save user</button><button class="btn danger ghost" id="deleteUser">Delete</button></div></div>
+          <input type="hidden" id="userId">
+          <div class="form-grid cols-2">
+            <label>Username<input id="userUsername" maxlength="64" autocomplete="off" placeholder="e.g. lisa"></label>
+            <label>Display name<input id="userDisplayName" maxlength="100" placeholder="e.g. Lisa"></label>
+          </div>
+          <label class="checkline"><input type="checkbox" id="userActive" checked> Account enabled</label>
+          <fieldset class="permission-fieldset"><legend>Tab permissions</legend>
+            <div class="permission-grid">
+              <label class="permission-card always"><input type="checkbox" checked disabled><span><strong>Dashboard</strong><small>Always available</small></span></label>
+              <label class="permission-card"><input type="checkbox" id="permMessages"><span><strong>Messages</strong><small>Create and edit content</small></span></label>
+              <label class="permission-card"><input type="checkbox" id="permPlaylists"><span><strong>Playlists</strong><small>Create and run playlists</small></span></label>
+              <label class="permission-card"><input type="checkbox" id="permSchedules"><span><strong>Schedules</strong><small>Manage timed content</small></span></label>
+              <label class="permission-card"><input type="checkbox" id="permDisplaySetup"><span><strong>Display setup</strong><small>Panel output and Pi shutdown</small></span></label>
+              <label class="permission-card"><input type="checkbox" id="permUpgrade"><span><strong>Upgrade</strong><small>Install application updates</small></span></label>
+              <label class="permission-card"><input type="checkbox" id="permBackup"><span><strong>Backup &amp; restore</strong><small>Create, download and restore full backups</small></span></label>
+              <label class="permission-card"><input type="checkbox" id="permUsers"><span><strong>Users</strong><small>Manage accounts and rights</small></span></label>
+            </div>
+          </fieldset>
+          <fieldset><legend>Password</legend>
+            <div class="form-grid cols-2">
+              <label>New password <span class="hint" id="userPasswordHint">required for a new user</span><input type="password" id="userPassword" autocomplete="new-password" minlength="8" placeholder="At least 8 characters"></label>
+              <label class="checkline user-force-change"><input type="checkbox" id="userMustChange" checked> Require password change at next login</label>
+            </div>
+            <p class="hint">Leave New password blank when editing an existing account to keep its current password.</p>
+          </fieldset>
+          <div class="callout warn hidden" id="currentUserRightsNotice"><strong>This is your account.</strong> Changes to your own rights take effect immediately after saving.</div>
+        </article>
+      </div>
+    </section>
+
+  </main>
+
+  <div class="shortcut-modal hidden" id="shortcutModal" role="dialog" aria-modal="true" aria-labelledby="shortcutTitle">
+    <div class="shortcut-dialog">
+      <div class="card-head"><div><h2 id="shortcutTitle">Designer keyboard shortcuts</h2><p>Shortcuts are ignored while typing into a field.</p></div><button class="btn secondary" id="closeShortcuts">Close</button></div>
+      <div class="shortcut-grid">
+        <kbd>Ctrl/Cmd + S</kbd><span>Save message</span><kbd>Ctrl/Cmd + C</kbd><span>Copy selected layers</span><kbd>Ctrl/Cmd + V</kbd><span>Paste layers</span>
+        <kbd>Ctrl/Cmd + D</kbd><span>Duplicate selected layers</span><kbd>Ctrl/Cmd + A</kbd><span>Select all layers</span><kbd>Ctrl/Cmd + G</kbd><span>Group selection</span>
+        <kbd>Ctrl/Cmd + Shift + G</kbd><span>Ungroup selection</span><kbd>Delete / Backspace</kbd><span>Delete selection</span><kbd>Arrow keys</kbd><span>Nudge 1 LED pixel</span>
+        <kbd>Shift + Arrow</kbd><span>Nudge 5 LED pixels</span><kbd>[ / ]</kbd><span>Send backward / bring forward</span><kbd>Space</kbd><span>Play/pause animated preview</span>
+        <kbd>Esc</kbd><span>Clear selection</span><kbd>Ctrl/Cmd + Z</kbd><span>Undo</span><kbd>Ctrl/Cmd + Shift + Z</kbd><span>Redo</span><kbd>?</kbd><span>Show this help</span>
+      </div>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+  <script src="/static/app.js?v={{ app_version }}"></script>
+</body>
+</html>

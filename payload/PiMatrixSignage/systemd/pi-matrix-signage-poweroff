@@ -1,0 +1,4 @@
+#!/bin/sh
+# Root-owned helper invoked through a very narrow sudoers rule by the signage UI.
+# No user-controlled arguments are accepted.
+exec /sbin/shutdown -h now
