@@ -43,9 +43,12 @@ def test_plugin_info_uses_published_repository():
 
 
 def test_plugin_update_is_the_customer_facing_application_update_path():
-    upgrade = (ROOT / 'scripts' / 'fpp_upgrade.sh').read_text(encoding='utf-8')
+    # FPP's documented upgrade flow falls back to scripts/fpp_install.sh when
+    # fpp_upgrade.sh is absent.  Deliberately do not ship fpp_upgrade.sh: a file
+    # newly uploaded through GitHub can lose its executable bit, which makes
+    # FPP's direct sudo execution fail before our script can run.
+    assert not (ROOT / 'scripts' / 'fpp_upgrade.sh').exists()
     html = (ROOT / 'payload' / 'PiMatrixSignage' / 'templates' / 'index.html').read_text(encoding='utf-8')
-    assert 'fpp_install.sh' in upgrade
     assert 'data-tab="upgrade"' not in html
     assert 'Content Setup → Plugin Manager' in html
 
@@ -87,10 +90,6 @@ def test_install_does_not_require_payload_executable_bit():
     sh=(ROOT/'scripts'/'fpp_install.sh').read_text(encoding='utf-8')
     assert '! -x "$PAYLOAD/install.sh"' not in sh
     assert 'bash "$PAYLOAD/install.sh"' in sh
-
-def test_upgrade_invokes_installer_through_bash():
-    sh=(ROOT/'scripts'/'fpp_upgrade.sh').read_text(encoding='utf-8')
-    assert 'bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fpp_install.sh"' in sh
 
 def test_plugin_manager_sees_install_errors_while_logging_them():
     install=(ROOT/'scripts'/'fpp_install.sh').read_text(encoding='utf-8')

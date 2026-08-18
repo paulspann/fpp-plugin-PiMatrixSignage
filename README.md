@@ -62,3 +62,7 @@ This test bootstrap contains Pi Matrix Signage v0.6.8. The next commercial-harde
 - Fixes FPP uninstall on builds where sourcing `/opt/fpp/scripts/common` under `set -u` aborts with `LD_LIBRARY_PATH: unbound variable`.
 - Plugin install/uninstall scripts are now self-contained and no longer source FPP `scripts/common`.
 - Uninstall explicitly stops/disables the Pi Matrix service, removes the replaceable application and privileged helpers, preserves `/home/fpp/media/pi-matrix-signage-data`, and verifies that no Pi Matrix process/application directory remains before reporting success.
+## v0.1.8 upgrade compatibility
+
+FPP Plugin Manager updates intentionally do **not** ship `scripts/fpp_upgrade.sh`. Current FPP falls back to rerunning `scripts/fpp_install.sh` when that file is absent. This avoids a Git executable-mode failure where FPP tried to execute a newly uploaded `fpp_upgrade.sh` directly and `sudo` returned `command not found`. The normal install script is idempotent and already performs the application update, service restart, and exact running-version health check.
+
