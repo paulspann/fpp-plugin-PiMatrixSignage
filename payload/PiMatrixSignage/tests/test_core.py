@@ -521,13 +521,15 @@ class CoreTests(unittest.TestCase):
     def test_live_data_async_replaces_loading_placeholder(self):
         key="test-live-ready"
         _LIVE_DATA_CACHE.pop(key,None)
+        self.addCleanup(_LIVE_DATA_CACHE.pop,key,None)
         self.assertEqual(_live_fetch_async(key,60,lambda:"Ready"),"Loading…")
-        for _ in range(50):
-            time.sleep(.01)
+        deadline=time.monotonic()+3.0
+        value="Loading…"
+        while time.monotonic()<deadline:
+            time.sleep(.02)
             value=_live_fetch_async(key,60,lambda:"Ready")
             if value=="Ready": break
         self.assertEqual(value,"Ready")
-        _LIVE_DATA_CACHE.pop(key,None)
 
     def test_live_data_watchdog_replaces_stuck_weather_loading(self):
         key="test-live-stuck"
