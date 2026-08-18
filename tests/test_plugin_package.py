@@ -91,6 +91,22 @@ def test_install_does_not_require_payload_executable_bit():
     assert '! -x "$PAYLOAD/install.sh"' not in sh
     assert 'bash "$PAYLOAD/install.sh"' in sh
 
+
+def test_release_pipeline_runs_tests_and_builds_validated_zip():
+    workflow = (ROOT / '.github' / 'workflows' / 'verify-and-package.yml').read_text(encoding='utf-8')
+    builder = (ROOT / 'scripts' / 'build_release.sh').read_text(encoding='utf-8')
+    ignore = (ROOT / '.gitignore').read_text(encoding='utf-8')
+
+    assert 'python -m pytest -q' in workflow
+    assert 'node --check payload/PiMatrixSignage/static/app.js' in workflow
+    assert 'scripts/build_release.sh' in workflow
+    assert 'actions/upload-artifact@v4' in workflow
+    assert 'unzip -tq "$TEMP_ZIP"' in builder
+    assert 'zipinfo -l "$TEMP_ZIP"' in builder
+    assert "__pycache__/" in ignore
+    assert "*.py[cod]" in ignore
+    assert "dist/" in ignore
+
 def test_plugin_manager_sees_install_errors_while_logging_them():
     install=(ROOT/'scripts'/'fpp_install.sh').read_text(encoding='utf-8')
     uninstall=(ROOT/'scripts'/'fpp_uninstall.sh').read_text(encoding='utf-8')
