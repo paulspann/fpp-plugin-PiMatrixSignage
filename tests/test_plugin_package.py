@@ -23,10 +23,12 @@ def test_plugin_installer_is_idempotent_and_uses_bundled_payload():
     assert 'sudo' not in script
 
 
-def test_fpp_menu_has_single_content_entry():
+def test_fpp_menu_opens_pimatrix_directly():
     menu = (ROOT / 'menu.inc').read_text(encoding='utf-8')
-    assert menu.count("'type' => 'content'") == 1
-    assert "'text' => 'Pi Matrix Signage'" in menu
+    assert "$menu === 'content'" in menu
+    assert "':8090/'" in menu
+    assert 'plugin.php' not in menu
+    assert "Pi Matrix Signage" in menu
 
 
 def test_payload_is_v066_or_later():

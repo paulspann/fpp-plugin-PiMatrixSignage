@@ -1,21 +1,23 @@
 <?php
-$menuEntries = array(
-    array(
-        'text' => 'Pi Matrix Signage',
-        'type' => 'content',
-        'page' => 'content.php',
-        'wrap' => 1
-    )
-);
+// Pi Matrix Signage runs as its own local web service on port 8090.  Do not
+// send this menu entry through FPP's page wrapper: navigating directly
+// avoids the wrapper's "Unknown / Please don't access the page directly" page.
+$host = (string)($_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'] ?? 'fpp.local');
 
-foreach ($menuEntries as $entry) {
-    if ($entry['type'] != $menu) continue;
-    $nopage = '';
-    if (isset($entry['wrap']) && ($entry['wrap'] == 0)) $nopage = '&nopage=1';
-    printf("<li><a href='plugin.php?_menu=%s&page=%s%s'>%s</a></li>\n",
-        htmlspecialchars($plugin, ENT_QUOTES),
-        htmlspecialchars($entry['page'], ENT_QUOTES),
-        $nopage,
-        htmlspecialchars($entry['text'], ENT_QUOTES));
+// Strip an existing HTTP port while retaining bracketed IPv6 hosts.
+if (preg_match('/^\[([^\]]+)\](?::\d+)?$/', $host, $m)) {
+    $host = '[' . $m[1] . ']';
+} elseif (substr_count($host, ':') === 1) {
+    $host = preg_replace('/:\d+$/', '', $host);
+}
+
+$piMatrixUrl = 'http://' . $host . ':8090/';
+
+if ($menu === 'content') {
+    printf(
+        "<li><a href='%s'>%s</a></li>\n",
+        htmlspecialchars($piMatrixUrl, ENT_QUOTES),
+        htmlspecialchars('Pi Matrix Signage', ENT_QUOTES)
+    );
 }
 ?>

@@ -1,6 +1,6 @@
-# Pi Matrix Signage FPP Plugin
+# Pi Matrix Signage FPP Plugin v0.1.3
 
-FPP 10+ bootstrap/integration plugin for Pi Matrix Signage on Raspberry Pi.
+10+ bootstrap/integration plugin for Pi Matrix Signage on Raspberry Pi.
 
 ## What it does
 
@@ -28,3 +28,16 @@ For beta testing, open FPP's Plugin Manager, paste that raw `pluginInfo.json` UR
 ## Current bootstrap payload
 
 This test bootstrap contains Pi Matrix Signage v0.6.6. The next commercial-hardening stage should move the application payload out of the public bootstrap repository and retrieve a signed, licence-authorised release package from the ISSL/WHMCS licensing service.
+
+
+## v0.1.2
+
+- Lowers FPP Plugin Manager resource hints to 512 MB RAM / 1 CPU core so nominal 1 GB Raspberry Pi systems are not incorrectly flagged as insufficient.
+- The installer still performs its real Pi Matrix Signage health check after installation.
+
+
+## v0.1.3
+
+- The FPP **Content Setup → Pi Matrix Signage** menu item now opens the Pi Matrix Signage web service directly on port 8090 instead of routing through FPP `plugin.php`.
+- This avoids FPP's “Unknown / Please don't access the page directly” wrapper error.
+- The existing FPP status/management page remains in the plugin package for diagnostics, but it is no longer used as the primary menu destination.
