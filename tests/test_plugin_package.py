@@ -62,3 +62,22 @@ def test_plugin_verifies_running_application_version_after_update():
 def test_payload_installer_restarts_active_service():
     script = (ROOT / 'payload' / 'PiMatrixSignage' / 'install.sh').read_text(encoding='utf-8')
     assert 'systemctl restart "$SERVICE"' in script
+
+
+def test_plugin_scripts_do_not_source_fpp_common_under_nounset():
+    for name in ('fpp_install.sh', 'fpp_uninstall.sh'):
+        script = (ROOT / 'scripts' / name).read_text(encoding='utf-8')
+        assert 'scripts/common' not in '\n'.join(
+            line for line in script.splitlines() if not line.lstrip().startswith('#')
+        )
+        assert 'MEDIADIR="${MEDIADIR:-/home/fpp/media}"' in script
+
+
+def test_uninstall_is_self_contained_and_verifies_removal():
+    script = (ROOT / 'scripts' / 'fpp_uninstall.sh').read_text(encoding='utf-8')
+    assert 'systemctl disable --now "$SERVICE"' in script
+    assert 'rm -rf "$APP_DIR"' in script
+    assert "pgrep -f '/home/fpp/media/pi-matrix-signage/app.py'" in script
+    assert 'systemctl is-active --quiet "$SERVICE"' in script
+    assert 'Saved messages, schedules, media and licence data remain' in script
+    assert '"$APP_DIR/uninstall.sh"' not in script

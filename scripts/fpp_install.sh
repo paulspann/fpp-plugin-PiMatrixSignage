@@ -1,11 +1,10 @@
 #!/bin/bash
 set -euo pipefail
 
-FPPDIR="${FPPDIR:-/opt/fpp}"
-if [[ -f "$FPPDIR/scripts/common" ]]; then
-  # FPP-provided paths/helpers (MEDIADIR, settings, logging location).
-  . "$FPPDIR/scripts/common"
-fi
+# Keep the plugin scripts self-contained.  Sourcing FPP's scripts/common under
+# `set -u` is unsafe on some FPP builds because common may reference optional
+# environment variables (for example LD_LIBRARY_PATH) before defining them.
+MEDIADIR="${MEDIADIR:-/home/fpp/media}"
 
 PLUGIN_NAME="fpp-plugin-PiMatrixSignage"
 PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
