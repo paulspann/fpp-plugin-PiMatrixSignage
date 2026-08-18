@@ -522,14 +522,17 @@ class CoreTests(unittest.TestCase):
         key="test-live-ready"
         _LIVE_DATA_CACHE.pop(key,None)
         self.addCleanup(_LIVE_DATA_CACHE.pop,key,None)
-        self.assertEqual(_live_fetch_async(key,60,lambda:"Ready"),"Loading…")
-        deadline=time.monotonic()+3.0
-        value="Loading…"
-        while time.monotonic()<deadline:
-            time.sleep(.02)
-            value=_live_fetch_async(key,60,lambda:"Ready")
-            if value=="Ready": break
-        self.assertEqual(value,"Ready")
+        workers=[]
+
+        class DeferredThread:
+            def __init__(self,target,**_kwargs): workers.append(target)
+            def start(self): pass
+
+        with patch("renderer.threading.Thread",DeferredThread):
+            self.assertEqual(_live_fetch_async(key,60,lambda:"Ready"),"Loading…")
+        self.assertEqual(len(workers),1)
+        workers[0]()
+        self.assertEqual(_live_fetch_async(key,60,lambda:"Ready"),"Ready")
 
     def test_live_data_watchdog_replaces_stuck_weather_loading(self):
         key="test-live-stuck"
