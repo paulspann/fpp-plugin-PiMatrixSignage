@@ -81,3 +81,19 @@ def test_uninstall_is_self_contained_and_verifies_removal():
     assert 'systemctl is-active --quiet "$SERVICE"' in script
     assert 'Saved messages, schedules, media and licence data remain' in script
     assert '"$APP_DIR/uninstall.sh"' not in script
+
+
+def test_install_does_not_require_payload_executable_bit():
+    sh=(ROOT/'scripts'/'fpp_install.sh').read_text(encoding='utf-8')
+    assert '! -x "$PAYLOAD/install.sh"' not in sh
+    assert 'bash "$PAYLOAD/install.sh"' in sh
+
+def test_upgrade_invokes_installer_through_bash():
+    sh=(ROOT/'scripts'/'fpp_upgrade.sh').read_text(encoding='utf-8')
+    assert 'bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fpp_install.sh"' in sh
+
+def test_plugin_manager_sees_install_errors_while_logging_them():
+    install=(ROOT/'scripts'/'fpp_install.sh').read_text(encoding='utf-8')
+    uninstall=(ROOT/'scripts'/'fpp_uninstall.sh').read_text(encoding='utf-8')
+    assert 'tee -a "$LOG_FILE"' in install
+    assert 'tee -a "$LOG_FILE"' in uninstall

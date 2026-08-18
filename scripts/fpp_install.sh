@@ -16,12 +16,12 @@ LOG_FILE="$LOG_DIR/plugin-${PLUGIN_NAME}.log"
 mkdir -p "$LOG_DIR"
 touch "$LOG_FILE"
 chown fpp:fpp "$LOG_FILE" 2>/dev/null || true
-exec >>"$LOG_FILE" 2>&1
+exec > >(tee -a "$LOG_FILE") 2>&1
 
 echo "[$(date -Is)] Pi Matrix Signage plugin install started"
 
-if [[ ! -f "$PAYLOAD/VERSION" || ! -x "$PAYLOAD/install.sh" ]]; then
-  echo "Plugin payload is incomplete"
+if [[ ! -f "$PAYLOAD/VERSION" || ! -f "$PAYLOAD/install.sh" ]]; then
+  echo "ERROR: Plugin payload is incomplete (missing VERSION or install.sh)"
   exit 1
 fi
 
@@ -45,7 +45,7 @@ fi
 
 expected_version="$installed_version"
 if [[ "$should_install" == "1" ]]; then
-  PIMATRIX_SKIP_DEPENDENCY_INSTALL=1 "$PAYLOAD/install.sh"
+  PIMATRIX_SKIP_DEPENDENCY_INSTALL=1 bash "$PAYLOAD/install.sh"
   expected_version="$payload_version"
 fi
 

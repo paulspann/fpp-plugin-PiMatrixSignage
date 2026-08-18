@@ -1,4 +1,4 @@
-# Pi Matrix Signage FPP Plugin v0.1.6
+# Pi Matrix Signage FPP Plugin v0.1.7
 
 10+ bootstrap/integration plugin for Pi Matrix Signage on Raspberry Pi.
 
@@ -57,7 +57,7 @@ This test bootstrap contains Pi Matrix Signage v0.6.8. The next commercial-harde
 - Fixes Plugin Manager updates that copied new files but left the old Python process running.
 - Verifies `/health` reports the expected application version before an install/update is considered successful.
 
-## v0.1.6
+## v0.1.7
 
 - Fixes FPP uninstall on builds where sourcing `/opt/fpp/scripts/common` under `set -u` aborts with `LD_LIBRARY_PATH: unbound variable`.
 - Plugin install/uninstall scripts are now self-contained and no longer source FPP `scripts/common`.

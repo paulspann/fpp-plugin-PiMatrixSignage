@@ -14,7 +14,7 @@ LOG_FILE="$LOG_DIR/plugin-${PLUGIN_NAME}.log"
 
 mkdir -p "$LOG_DIR"
 touch "$LOG_FILE"
-exec >>"$LOG_FILE" 2>&1
+exec > >(tee -a "$LOG_FILE") 2>&1
 
 echo "[$(date -Is)] Pi Matrix Signage plugin uninstall started"
 
