@@ -1,0 +1,44 @@
+name: Verify and package
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: payload/PiMatrixSignage/requirements.txt
+
+      - name: Install test dependencies
+        run: python -m pip install pytest -r payload/PiMatrixSignage/requirements.txt
+
+      - name: Run complete test suite
+        run: python -m pytest -q
+
+      - name: Check browser JavaScript syntax
+        run: node --check payload/PiMatrixSignage/static/app.js
+
+      - name: Build and validate release ZIP
+        run: scripts/build_release.sh
+
+      - name: Upload release ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: PiMatrixSignage-release
+          path: dist/PiMatrixSignage-v*.zip
+          if-no-files-found: error
