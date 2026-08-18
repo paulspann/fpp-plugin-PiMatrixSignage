@@ -1,4 +1,11 @@
-# Pi Matrix Signage v0.6.12
+# Pi Matrix Signage v0.6.13
+
+
+## v0.6.13 – licence refresh after software updates
+
+- Re-authenticates an installed WHMCS licence shortly after the application restarts on a new software version.
+- Sends the newly installed application version through the existing signed licence-check request and records the version successfully reported.
+- Retries later if WHMCS is temporarily unavailable without blocking installation, startup or the existing offline grace entitlement.
 
 
 ## v0.6.12 – optional live weather shader
