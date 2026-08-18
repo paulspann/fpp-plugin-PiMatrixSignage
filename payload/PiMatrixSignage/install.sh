@@ -32,11 +32,10 @@ fi
 mkdir -p "$DEST" "$PERSIST/data" "$PERSIST/uploads/images" "$PERSIST/uploads/fonts" "$PERSIST/uploads/videos" "$PERSIST/uploads/video-src" "$PERSIST/uploads/shaders" /home/fpp/media/logs
 
 # Commercial licensing is configured outside the replaceable application folder.
-# Existing installs keep their current values during upgrades. v0.6.2 ships in
-# development mode until the native WHMCS addon has been installed and tested.
+# Existing keys, signed entitlements, endpoints and device data remain persistent.
 if [[ ! -f "$PERSIST/license.env" ]]; then
   cat > "$PERSIST/license.env" <<'EOF'
-PIMATRIX_LICENSE_MODE=development
+PIMATRIX_LICENSE_MODE=whmcs
 PIMATRIX_LICENSE_PREFIX=PMS-
 PIMATRIX_LICENSE_CHECK_HOURS=168
 PIMATRIX_LICENSE_GRACE_DAYS=30
@@ -46,6 +45,9 @@ PIMATRIX_LICENSE_PUBLIC_KEY_URL=https://www.issl.co.uk/support/modules/addons/pi
 # PIMATRIX_LICENSE_PUBLIC_KEY=/home/fpp/media/pi-matrix-signage-data/data/license-public.pem
 EOF
   chmod 0640 "$PERSIST/license.env"
+elif grep -q '^PIMATRIX_LICENSE_MODE=development[[:space:]]*$' "$PERSIST/license.env"; then
+  echo "==> Enabling live WHMCS licence enforcement"
+  sed -i 's/^PIMATRIX_LICENSE_MODE=development[[:space:]]*$/PIMATRIX_LICENSE_MODE=whmcs/' "$PERSIST/license.env"
 fi
 
 # Copy application code while keeping persistent database/uploads outside the code folder.
