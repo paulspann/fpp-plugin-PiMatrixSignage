@@ -1,4 +1,11 @@
-# Pi Matrix Signage v0.6.15
+# Pi Matrix Signage v0.6.16
+
+
+## v0.6.16 – built-in Help manual
+
+- Adds a comprehensive searchable operating manual at `/help` covering setup, licensing, content, Designer, shaders, live weather, playlists, schedules, emergency operation, backups, users, permissions, remote control, maintenance and troubleshooting.
+- Adds a top-bar **Help** link that opens the manual in a new browser tab.
+- Automatically changes the Help link fragment as users navigate so it opens at the section matching the current application page.
 
 
 ## v0.6.15 – live WHMCS licence enforcement

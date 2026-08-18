@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10131a">
+  <title>Help · Pi Matrix Signage</title>
+  <link rel="stylesheet" href="/static/app.css?v={{ app_version }}">
+  <link rel="stylesheet" href="/static/help.css?v={{ app_version }}">
+</head>
+<body class="help-body">
+  <header class="help-topbar">
+    <div><h1>Pi Matrix Signage Help</h1><p>Complete operating manual · v{{ app_version }}</p></div>
+    <label class="help-search">Search this manual<input id="helpSearch" type="search" placeholder="Try ‘shader’, ‘schedule’ or ‘backup’"></label>
+    <a class="btn secondary help-back" href="/">Back to Pi Matrix Signage</a>
+  </header>
+  <div class="help-shell">
+    <nav class="help-nav" aria-label="Manual sections">
+      <strong>Contents</strong>
+      <a href="#getting-started">Getting started</a>
+      <a href="#dashboard">Dashboard</a>
+      <a href="#messages">Messages &amp; Designer</a>
+      <a href="#playlists">Playlists</a>
+      <a href="#schedules">Schedules &amp; emergency</a>
+      <a href="#setup">Display setup &amp; licence</a>
+      <a href="#shaders">Shaders &amp; live weather</a>
+      <a href="#backup">Backup &amp; restore</a>
+      <a href="#users">Users &amp; permissions</a>
+      <a href="#remote">Remote control</a>
+      <a href="#maintenance">Updates &amp; maintenance</a>
+      <a href="#troubleshooting">Troubleshooting</a>
+      <a href="#reference">Quick reference</a>
+    </nav>
+
+    <main class="help-content" id="manual">
+      <div class="help-no-results" id="helpNoResults"><strong>No matching section.</strong> Try a shorter search term.</div>
+
+      <section id="getting-started">
+        <h2>Getting started</h2>
+        <p class="help-lead">Pi Matrix Signage designs, schedules and sends pixel-perfect content to an LED matrix output configured in Falcon Player (FPP). The web application manages content; FPP and the rPI-MFC hardware manage the physical panel signal.</p>
+        <h3>How the system fits together</h3>
+        <table class="help-table"><thead><tr><th>Part</th><th>Purpose</th></tr></thead><tbody>
+          <tr><td>Pi Matrix Signage</td><td>Creates messages, renders scenes, chooses scheduled content and sends the completed pixel canvas.</td></tr>
+          <tr><td>Falcon Player</td><td>Hosts the plugin and configures the LED panel output.</td></tr>
+          <tr><td>Hanson rPI-MFC</td><td>Provides the Raspberry Pi interface to the connected P5/P10 panels.</td></tr>
+          <tr><td>WHMCS licensing</td><td>Binds a commercial licence to the controller Device ID and supplies a signed offline entitlement.</td></tr>
+        </tbody></table>
+        <h3>First-time checklist</h3>
+        <ol class="help-steps">
+          <li>Configure the LED panel arrangement, scan rate, wiring order and orientation in FPP.</li>
+          <li>Sign in to Pi Matrix Signage and replace the initial password when prompted.</li>
+          <li>Open the cogwheel, choose <strong>Display setup</strong>, and match the logical canvas to the FPP panel layout.</li>
+          <li>Activate the software licence using the licence key supplied for this controller.</li>
+          <li>Use Dashboard panel-test patterns to verify dimensions, colour order and orientation.</li>
+          <li>Create a message, show it manually, then add it to a playlist or schedule.</li>
+        </ol>
+        <div class="help-note"><strong>Autosave:</strong> form changes are previewed immediately, but content is not permanent until you use the relevant Save button.</div>
+      </section>
+
+      <section id="dashboard">
+        <h2>Dashboard</h2>
+        <p>The Dashboard shows what the renderer is doing and provides safe, temporary control of the sign.</p>
+        <h3>Live display</h3>
+        <ul><li><strong>Live preview</strong> mirrors the current LED canvas in the browser. Turning it off does not stop the physical panels.</li><li><strong>Exact pixels</strong> shows the raw canvas; P5 LEDs simulates panel dots; Smooth enlarges the image without the LED mask.</li><li><strong>Source</strong> identifies whether content comes from a schedule, playlist, manual override, conditional rule or emergency.</li><li><strong>Return to schedule</strong> clears a temporary override and immediately restores automatic selection.</li></ul>
+        <h3>Show something now</h3>
+        <p>Select a saved message and an optional duration. A duration of “Until I clear it” holds the override until Return to schedule is used. Timed overrides expire automatically.</p>
+        <h3>Emergency mode</h3>
+        <p>Emergency mode has the highest priority. It overrides manual content, conditions, schedules and the default message until explicitly ended. Configure the emergency message under Schedules before relying on this control.</p>
+        <h3>Panel tests</h3>
+        <p>Grid and checker patterns reveal panel order or rotation errors. Solid red, green, blue and white patterns help identify colour-order, brightness and dead-pixel problems.</p>
+      </section>
+
+      <section id="messages">
+        <h2>Messages and Designer</h2>
+        <p class="help-lead">A message is a saved scene. It can contain text, images, video, shaders, live widgets, icons and shapes arranged on one logical LED canvas.</p>
+        <h3>Message library</h3>
+        <p>Create, search, duplicate, import, export or delete messages from the library. <strong>Show now</strong> saves the current edit and places it on the display as a manual override.</p>
+        <h3>Quick editor and Designer</h3>
+        <p>The Quick editor is suited to a single text message with an optional image. Designer exposes the full scene and layer system. Switching to Designer converts compatible Quick content into scene layers.</p>
+        <h3>Layers</h3>
+        <table class="help-table"><thead><tr><th>Layer</th><th>Use</th></tr></thead><tbody>
+          <tr><td>Text</td><td>Static, scrolling, auto-marquee or typewriter text with pixel fonts, smooth fonts, gradients, outlines and glow.</td></tr>
+          <tr><td>Image</td><td>Uploaded still or animated graphics with contain/cover fitting.</td></tr>
+          <tr><td>Video</td><td>Uploaded video converted into frames suitable for the LED canvas.</td></tr>
+          <tr><td>Shader</td><td>GPU-generated animated content using built-in or uploaded fragment shaders.</td></tr>
+          <tr><td>Widget</td><td>Clock, date, countdown, weather, JSON/API value or RSS headline.</td></tr>
+          <tr><td>Icon</td><td>Built-in signage symbols with optional animation.</td></tr>
+          <tr><td>Shape</td><td>Rectangles, ellipses and visual panels behind other content.</td></tr>
+        </tbody></table>
+        <h3>Selection, positioning and order</h3>
+        <ul><li>Select a layer in the list or preview. Use Ctrl/Cmd-click for multiple selection.</li><li>Drag to move; use the resize handle or numeric X/Y/W/H controls for exact geometry.</li><li>Layer order determines which item appears in front. Use Up and Down to change stacking.</li><li>Group layers to move or duplicate them as one composition.</li><li>Zones clip assigned layers to a defined region of the canvas.</li></ul>
+        <h3>Timing and transitions</h3>
+        <p>Each scene has a duration and optional entrance/exit transition. Individual layers can have delays, entrance effects, exit timing and effect speed. The timeline previews when every layer appears.</p>
+        <h3>Templates, components and history</h3>
+        <p>Templates create a complete starting layout. Components store selected layers for reuse. Every meaningful save creates version history; restoring an older version also preserves the current version so the operation is reversible.</p>
+        <h3>Import and export</h3>
+        <p>Portable message packages include the message definition and referenced media. Importing does not require the original controller to have the same upload paths.</p>
+      </section>
+
+      <section id="playlists">
+        <h2>Playlists</h2>
+        <p>A playlist plays saved messages in order. Each item can use its message duration or a playlist-specific duration.</p>
+        <ol class="help-steps"><li>Create or select a playlist.</li><li>Add messages from the available-content list.</li><li>Drag or use ordering controls to establish playback order.</li><li>Set item durations and transition behaviour as required.</li><li>Save, then use Show now to test the complete loop.</li></ol>
+        <p>Deleting a playlist does not delete its messages. Editing a message changes its appearance everywhere that message is used.</p>
+      </section>
+
+      <section id="schedules">
+        <h2>Schedules, conditions and emergency priority</h2>
+        <h3>Normal schedules</h3>
+        <p>A schedule selects a message or playlist for chosen days and times. Overnight periods may cross midnight. When multiple entries match, priority and specificity determine the active target.</p>
+        <h3>Default content</h3>
+        <p>The default message is shown when there is no emergency, manual override, matching conditional rule or matching timed schedule. Without a default, the canvas may be blank.</p>
+        <h3>Conditional rules</h3>
+        <p>Rules can react to live temperature, feels-like temperature, wind, gusts, humidity, weather category or a JSON/API value. “Must remain true for” prevents brief spikes from triggering content. “Minimum hold” prevents flicker near a threshold.</p>
+        <h3>Brightness schedules</h3>
+        <p>Brightness rules change output intensity by time. A temporary Dashboard brightness override takes precedence until automatic control is restored.</p>
+        <h3>Emergency configuration</h3>
+        <p>Select one saved emergency message. It can be activated from the Dashboard, Remote page, API or configured GPIO input. Latching mode remains active until an authorised user clears it.</p>
+        <div class="help-warning"><strong>Test emergency operation:</strong> verify the chosen message, physical button wiring and clear procedure before using it operationally.</div>
+      </section>
+
+      <section id="setup">
+        <h2>Display setup and software licence</h2>
+        <h3>Licence</h3>
+        <p>Live WHMCS licensing binds the licence key to the displayed Device ID. A successful online check stores a signed entitlement containing a normal verification window and a longer offline grace period.</p>
+        <ul><li><strong>Activate / update licence</strong> installs or refreshes a key.</li><li><strong>Check now</strong> requests a fresh signed entitlement.</li><li><strong>Clear local licence</strong> removes the local key and entitlement; it does not reissue the licence in WHMCS.</li><li>Use WHMCS Reissue before transferring a licence to replacement hardware.</li></ul>
+        <p>After a software update, the application automatically re-authenticates and reports the new installed version. A temporary network failure does not discard a still-valid signed entitlement.</p>
+        <h3>Panel layout</h3>
+        <p>Enter the width and height of one panel, the number of panels across/down, scan rate and whole-display rotation. This defines the logical canvas used by Designer.</p>
+        <div class="help-note"><strong>FPP remains authoritative for hardware wiring:</strong> panel chain order, individual panel orientation and electrical mapping belong in FPP’s LED Panels configuration.</div>
+        <h3>Output and brightness</h3>
+        <p>Configure the DDP target and port expected by the FPP output. Brightness limits the rendered output globally. Use Diagnostics and panel tests after any hardware-layout change.</p>
+        <h3>GPIO controls</h3>
+        <p>GPIO inputs can activate emergency mode or other configured actions. Choose normally open/closed wiring to match the physical circuit and use debounce/latch settings to prevent accidental repeats.</p>
+        <h3>Diagnostics</h3>
+        <p>Diagnostics reports renderer state, dimensions, output target, recent errors and supporting service information. Copy this information when requesting support.</p>
+      </section>
+
+      <section id="shaders">
+        <h2>Shaders and live weather</h2>
+        <p>Shaders can fill the scene background or occupy a normal layer. Built-in controls are generated from each shader’s metadata.</p>
+        <h3>Performance controls</h3>
+        <ul><li><strong>Render rate</strong> limits frames per second.</li><li><strong>Time speed</strong> slows, freezes, accelerates or reverses shader time.</li><li><strong>Performance</strong> can render at native, half or quarter resolution. Auto starts at the best practical quality and falls back if needed.</li></ul>
+        <h3>Sky Weather</h3>
+        <p>Manual mode provides clear, partly cloudy, overcast, rain, snow and storm scenes with day, sunset and night phases. Cloud/weather speed is independent of the sun or moon. The celestial body can be positioned, kept stationary or moved at its own speed.</p>
+        <h3>Optional live weather</h3>
+        <p>Enable <strong>Use live weather</strong>, then enter latitude, longitude and refresh interval. Open-Meteo controls condition, day/night, cloud cover, wind and precipitation. Saved manual values remain the fallback if live data is unavailable.</p>
+        <h3>Uploaded shaders</h3>
+        <p>ISF-style fragment shaders may use <code>TIME</code>, <code>RENDERSIZE</code> and supported input metadata. Rendering occurs in an isolated helper process so a broken or heavy shader cannot block the main LED loop.</p>
+      </section>
+
+      <section id="backup">
+        <h2>Backup and restore</h2>
+        <p>Backups protect the application database, settings, users, licence data and uploaded assets. Create one before major layout changes or hardware maintenance.</p>
+        <h3>Create and download</h3>
+        <ol class="help-steps"><li>Open the cogwheel and choose Backup &amp; restore.</li><li>Create a new backup and wait for completion.</li><li>Download the ZIP and store a copy away from the controller.</li></ol>
+        <h3>Restore</h3>
+        <p>Upload or select a backup, inspect its version and contents, choose the restore options, then confirm. A safety backup is created before replacement where supported. The service may restart.</p>
+        <div class="help-warning"><strong>Do not interrupt a restore.</strong> Keep power connected and wait for the interface or service to return before retrying.</div>
+        <h3>Portable content versus full backup</h3>
+        <p>Message, component and playlist exports are for moving selected content. A full backup is for disaster recovery and controller migration.</p>
+      </section>
+
+      <section id="users">
+        <h2>Users and permissions</h2>
+        <p>Every operator should have an individual account. Permissions hide inaccessible pages and reject unauthorised server requests.</p>
+        <table class="help-table"><thead><tr><th>Permission</th><th>Allows</th></tr></thead><tbody>
+          <tr><td>Dashboard</td><td>View status and use permitted immediate controls.</td></tr><tr><td>Messages</td><td>Create and edit message content.</td></tr><tr><td>Playlists</td><td>Create and order playlists.</td></tr><tr><td>Schedules</td><td>Manage schedules, conditions, brightness and emergency configuration.</td></tr><tr><td>Display setup</td><td>Change licence, layout, output, GPIO and diagnostics settings.</td></tr><tr><td>Backup</td><td>Create, download, upload and restore backups.</td></tr><tr><td>Users</td><td>Create accounts and assign permissions.</td></tr>
+        </tbody></table>
+        <p>The cogwheel only appears if the current user can access at least one of Display setup, Backup &amp; restore or Users. Password changes and Sign out remain available in the top bar.</p>
+      </section>
+
+      <section id="remote">
+        <h2>Remote control</h2>
+        <p>The Remote page is a compact operational view for phones and tablets. It can select messages, return to schedule, blank the display, control brightness and operate emergency mode according to the signed-in user’s permissions.</p>
+        <p>Remote actions affect the same renderer as the main Dashboard; there is no separate playback state.</p>
+      </section>
+
+      <section id="maintenance">
+        <h2>Updates and maintenance</h2>
+        <p>Application updates are delivered through the Pi Matrix Signage plugin in FPP. The installer preserves the persistent database, uploads and licensing data, replaces application code, restarts the service and verifies that the health endpoint reports the expected version.</p>
+        <p>The underlying upgrade helper retains health-check, safety-backup and rollback support. After restart, licensing reports the new application version automatically.</p>
+        <h3>Recommended maintenance routine</h3>
+        <ol class="help-steps"><li>Create and download a full backup.</li><li>Apply the plugin update in FPP.</li><li>Wait for the plugin’s successful version health check.</li><li>Open Pi Matrix Signage and confirm licence status, live output and one representative scheduled message.</li></ol>
+      </section>
+
+      <section id="troubleshooting">
+        <h2>Troubleshooting</h2>
+        <table class="help-table"><thead><tr><th>Symptom</th><th>Checks</th></tr></thead><tbody>
+          <tr><td>Web page cannot connect</td><td>Confirm the Pi is reachable, the service is running, and port 8090 is accessible.</td></tr>
+          <tr><td>Browser preview works but panels are blank</td><td>Check licence status, FPP LED output, DDP host/port, panel power and output target diagnostics.</td></tr>
+          <tr><td>Wrong size, order or rotation</td><td>Use Grid/Checker. Match logical dimensions in Display setup; correct chain order and per-panel rotation in FPP.</td></tr>
+          <tr><td>Wrong colours</td><td>Use red/green/blue tests and correct the panel colour order in FPP.</td></tr>
+          <tr><td>Content does not appear</td><td>Check enabled state, layer timing, playlist membership, schedule window, rule priority and active manual/emergency overrides.</td></tr>
+          <tr><td>Shader is slow</td><td>Lower render rate or choose Auto, half or quarter performance resolution.</td></tr>
+          <tr><td>Live weather does not change</td><td>Check latitude/longitude, internet/DNS access and refresh interval. Manual values should remain visible during an outage.</td></tr>
+          <tr><td>Licence required</td><td>Confirm the key, Device ID, internet access and WHMCS status. Use Check now; reissue the licence before changing hardware.</td></tr>
+          <tr><td>Update copied files but version is old</td><td>Review the FPP plugin log and service diagnostics. A successful installer explicitly restarts the service and verifies the running version.</td></tr>
+        </tbody></table>
+      </section>
+
+      <section id="reference">
+        <h2>Quick reference</h2>
+        <h3>Playback priority, highest first</h3>
+        <ol><li>Emergency mode</li><li>Manual Show now / remote override</li><li>Matching conditional rule</li><li>Matching timed schedule</li><li>Default message</li><li>Blank output</li></ol>
+        <h3>Safe operating habits</h3>
+        <ul><li>Save after editing and test new content with Show now before scheduling it.</li><li>Keep a downloaded backup away from the Raspberry Pi.</li><li>Use named user accounts and only the permissions each operator needs.</li><li>Test emergency controls and panel patterns periodically.</li><li>Use the Help link from any main page to reopen this manual at the matching section.</li></ul>
+      </section>
+
+      <div class="help-footer">Pi Matrix Signage v{{ app_version }} · built-in operating manual</div>
+    </main>
+  </div>
+  <script>
+  (()=>{const input=document.getElementById('helpSearch'),sections=[...document.querySelectorAll('#manual section')],empty=document.getElementById('helpNoResults');input.addEventListener('input',()=>{const q=input.value.trim().toLowerCase();let shown=0;sections.forEach(s=>{const match=!q||s.textContent.toLowerCase().includes(q);s.classList.toggle('search-hidden',!match);if(match)shown++;});empty.style.display=shown?'none':'block';});if(location.hash){setTimeout(()=>document.querySelector(location.hash)?.scrollIntoView(),0);}})();
+  </script>
+</body>
+</html>

@@ -159,11 +159,13 @@
 
   // Navigation
   function can(permission){return permission==='dashboard'||!!state.auth?.user?.permissions?.[permission];}
+  function syncHelpLink(page='dashboard'){const link=$('helpLink');if(link)link.href=`/help#${encodeURIComponent(page||'dashboard')}`;}
   function showDashboard(){
     $$('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab==='dashboard'));
     $$('.page').forEach(x=>x.classList.toggle('active',x.id==='page-dashboard'));
     $('settingsMenuToggle').classList.remove('menu-active');
     setSettingsMenu(false);
+    syncHelpLink('dashboard');
     scheduleLivePreview(0);
   }
   function applyPermissions(){
@@ -193,6 +195,7 @@
     if (btn.dataset.tab === 'users') loadUsers();
     if (btn.dataset.tab === 'messages') { showMessageLibrary(); renderMessageList(); }
     if (btn.dataset.tab === 'dashboard') scheduleLivePreview(0);
+    syncHelpLink(btn.dataset.tab);
     $('settingsMenuToggle').classList.toggle('menu-active',btn.classList.contains('settings-menu-item'));
     setSettingsMenu(false);
   }));
