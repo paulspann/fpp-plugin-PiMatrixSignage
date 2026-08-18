@@ -15,13 +15,16 @@ def test_sky_weather_builtin_is_packaged_with_expected_controls():
     assert sky["name"] == "Sky Weather"
     controls = {x["name"]: x for x in sky["inputs"]}
     for name in ("Weather", "SkyPhase", "Speed", "WindDirection", "CloudCover",
-                 "PrecipIntensity", "SunSize", "HorizonGlow", "SkyTop", "SkyBottom",
+                 "PrecipIntensity", "SunSize", "SunMoonPosition", "SunMoonHeight",
+                 "SunMoonMovement", "SunMoonSpeed", "HorizonGlow", "SkyTop", "SkyBottom",
                  "CloudColor", "RainColor", "SnowColor"):
         assert name in controls
     assert controls["Weather"]["values"] == [0, 1, 2, 3, 4, 5]
     assert controls["Weather"]["labels"] == ["Clear", "Partly cloudy", "Overcast", "Rain", "Snow", "Storm"]
     assert controls["SkyPhase"]["labels"] == ["Day", "Sunset", "Night"]
     assert controls["WindDirection"]["labels"] == ["Left to right", "Right to left"]
+    assert controls["SunMoonMovement"]["labels"] == ["Stationary", "Left to right", "Right to left"]
+    assert controls["SunMoonMovement"]["default"] == 0
 
 
 def test_sky_weather_shader_prepares_for_desktop_and_gles():
@@ -34,6 +37,10 @@ def test_sky_weather_shader_prepares_for_desktop_and_gles():
     assert "uniform int SkyPhase;" in desktop
     assert "uniform int WindDirection;" in desktop
     assert "uniform float PrecipIntensity;" in desktop
+    assert "uniform float SunMoonPosition;" in desktop
+    assert "uniform float SunMoonHeight;" in desktop
+    assert "uniform int SunMoonMovement;" in desktop
+    assert "uniform float SunMoonSpeed;" in desktop
     assert "uniform vec4 CloudColor;" in desktop
     assert "gl_FragColor" in desktop
     assert "precision highp float;" in gles
@@ -45,6 +52,6 @@ def test_sky_weather_shader_contains_all_weather_render_paths():
         assert marker in source
 
 
-def test_release_version_is_v0610_or_later():
+def test_release_version_is_v0611_or_later():
     version = tuple(int(x) for x in (ROOT / "VERSION").read_text(encoding="utf-8").strip().split(".")[:3])
-    assert version >= (0, 6, 10)
+    assert version >= (0, 6, 11)

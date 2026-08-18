@@ -6,11 +6,15 @@
   "INPUTS":[
     {"NAME":"Weather","LABEL":"Weather","TYPE":"long","DEFAULT":1,"VALUES":[0,1,2,3,4,5],"LABELS":["Clear","Partly cloudy","Overcast","Rain","Snow","Storm"]},
     {"NAME":"SkyPhase","LABEL":"Sky phase","TYPE":"long","DEFAULT":0,"VALUES":[0,1,2],"LABELS":["Day","Sunset","Night"]},
-    {"NAME":"Speed","LABEL":"Movement speed","TYPE":"float","DEFAULT":1.0,"MIN":0.05,"MAX":4.0},
+    {"NAME":"Speed","LABEL":"Cloud / weather speed","TYPE":"float","DEFAULT":1.0,"MIN":0.05,"MAX":4.0},
     {"NAME":"WindDirection","LABEL":"Wind direction","TYPE":"long","DEFAULT":0,"VALUES":[0,1],"LABELS":["Left to right","Right to left"]},
     {"NAME":"CloudCover","LABEL":"Cloud cover","TYPE":"float","DEFAULT":0.55,"MIN":0.0,"MAX":1.0},
     {"NAME":"PrecipIntensity","LABEL":"Rain / snow intensity","TYPE":"float","DEFAULT":0.65,"MIN":0.0,"MAX":1.0},
     {"NAME":"SunSize","LABEL":"Sun / moon size","TYPE":"float","DEFAULT":0.12,"MIN":0.04,"MAX":0.28},
+    {"NAME":"SunMoonPosition","LABEL":"Sun / moon position","TYPE":"float","DEFAULT":0.72,"MIN":0.0,"MAX":1.0},
+    {"NAME":"SunMoonHeight","LABEL":"Sun / moon height","TYPE":"float","DEFAULT":0.72,"MIN":0.05,"MAX":0.95},
+    {"NAME":"SunMoonMovement","LABEL":"Sun / moon movement","TYPE":"long","DEFAULT":0,"VALUES":[0,1,2],"LABELS":["Stationary","Left to right","Right to left"]},
+    {"NAME":"SunMoonSpeed","LABEL":"Sun / moon speed","TYPE":"float","DEFAULT":0.15,"MIN":0.01,"MAX":1.0},
     {"NAME":"HorizonGlow","LABEL":"Horizon glow","TYPE":"float","DEFAULT":0.35,"MIN":0.0,"MAX":1.0},
     {"NAME":"SkyTop","LABEL":"Sky top","TYPE":"color","DEFAULT":[0.08,0.35,0.72,1.0]},
     {"NAME":"SkyBottom","LABEL":"Sky horizon","TYPE":"color","DEFAULT":[0.45,0.78,1.0,1.0]},
@@ -57,9 +61,13 @@ void main(){
     col=mix(col,vec3(0.78,0.88,1.0),stars*(1.0-p.y)*0.8);
   }
 
-  float orbit=mod(t*0.018,1.28)-0.14;
-  float bodyX=(dir>0.0)?orbit:(1.0-orbit);
-  vec2 bodyPos=vec2(bodyX,SkyPhase==1?0.48:0.27);
+  float bodyX=clamp(SunMoonPosition,0.0,1.0);
+  if(SunMoonMovement!=0){
+    float celestialDir=(SunMoonMovement==1)?1.0:-1.0;
+    bodyX=mod(bodyX+celestialDir*TIME*max(SunMoonSpeed,0.001)*0.018+1.14,1.28)-0.14;
+  }
+  float bodyY=1.0-clamp(SunMoonHeight,0.05,0.95);
+  vec2 bodyPos=vec2(bodyX,bodyY);
   float body=softCircle(p,bodyPos,clamp(SunSize,0.02,0.35));
   float glow=softCircle(p,bodyPos,clamp(SunSize,0.02,0.35)*1.75);
   vec3 bodyColor=(SkyPhase==2)?vec3(0.76,0.86,1.0):((SkyPhase==1)?vec3(1.0,0.34,0.06):vec3(1.0,0.86,0.22));
