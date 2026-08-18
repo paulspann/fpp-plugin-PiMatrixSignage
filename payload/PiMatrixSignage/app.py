@@ -767,6 +767,14 @@ def remote_control():
     return response
 
 
+@app.get("/help")
+def help_manual():
+    response = app.make_response(render_template("help.html", app_version=APP_VERSION))
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    return response
+
+
 @app.get("/health")
 def health():
     response = jsonify({"ok": True, "version": APP_VERSION, "status": engine.status()})
