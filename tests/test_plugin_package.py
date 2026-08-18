@@ -42,7 +42,7 @@ def test_plugin_info_uses_published_repository():
     assert info['versions'][0]['branch'] == 'main'
 
 
-def test_plugin_update_is_the_customer_facing_application_update_path():
+def test_plugin_update_path_remains_packaged_without_customer_update_ui():
     # FPP's documented upgrade flow falls back to scripts/fpp_install.sh when
     # fpp_upgrade.sh is absent.  Deliberately do not ship fpp_upgrade.sh: a file
     # newly uploaded through GitHub can lose its executable bit, which makes
@@ -50,7 +50,8 @@ def test_plugin_update_is_the_customer_facing_application_update_path():
     assert not (ROOT / 'scripts' / 'fpp_upgrade.sh').exists()
     html = (ROOT / 'payload' / 'PiMatrixSignage' / 'templates' / 'index.html').read_text(encoding='utf-8')
     assert 'data-tab="upgrade"' not in html
-    assert 'Content Setup → Plugin Manager' in html
+    assert '<h2>Software updates</h2>' not in html
+    assert (ROOT / 'scripts' / 'fpp_install.sh').is_file()
 
 
 def test_plugin_verifies_running_application_version_after_update():

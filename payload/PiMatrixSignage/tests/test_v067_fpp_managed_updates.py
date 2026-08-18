@@ -12,11 +12,12 @@ def test_upgrade_tab_and_permission_card_are_not_customer_facing():
     assert "labels.push('Upgrade')" not in js
 
 
-def test_display_setup_explains_fpp_plugin_update_path():
+def test_display_setup_does_not_show_software_update_block():
     html = (ROOT / 'templates' / 'index.html').read_text(encoding='utf-8')
-    assert '<h2>Software updates</h2>' in html
-    assert 'Content Setup → Plugin Manager' in html
-    assert 'Pi Matrix Signage</strong> and choose <strong>Update</strong>' in html
+    assert '<h2>Software updates</h2>' not in html
+    assert 'Updates are managed by Falcon Player' not in html
+    assert 'Update from FPP:' not in html
+    assert 'class="version-badge"' not in html
 
 
 def test_legacy_upgrade_engine_remains_available_underneath():
