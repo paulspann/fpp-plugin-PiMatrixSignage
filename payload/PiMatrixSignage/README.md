@@ -1,4 +1,11 @@
-# Pi Matrix Signage v0.6.7
+# Pi Matrix Signage v0.6.8
+
+
+## v0.6.8 – reliable FPP Plugin Manager restart
+
+- Fixes FPP Plugin Manager updates leaving the previous Pi Matrix Signage Python process running after new application files were installed.
+- The installer now explicitly restarts an already-active `pi-matrix-signage.service`; `systemctl enable --now` alone does not restart an active service.
+- This makes the newly installed version take effect immediately without SSH or rebooting the FPP device.
 
 
 ## v0.6.7 – FPP-managed updates

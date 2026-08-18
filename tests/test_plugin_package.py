@@ -31,9 +31,9 @@ def test_fpp_menu_opens_pimatrix_directly():
     assert "Pi Matrix Signage" in menu
 
 
-def test_payload_is_v067_or_later():
+def test_payload_is_v068_or_later():
     version = tuple(int(x) for x in (ROOT / 'payload' / 'PiMatrixSignage' / 'VERSION').read_text().strip().split('.')[:3])
-    assert version >= (0, 6, 7)
+    assert version >= (0, 6, 8)
 
 
 def test_plugin_info_uses_published_repository():
@@ -48,3 +48,17 @@ def test_plugin_update_is_the_customer_facing_application_update_path():
     assert 'fpp_install.sh' in upgrade
     assert 'data-tab="upgrade"' not in html
     assert 'Content Setup → Plugin Manager' in html
+
+
+def test_plugin_verifies_running_application_version_after_update():
+    script = (ROOT / 'scripts' / 'fpp_install.sh').read_text(encoding='utf-8')
+    assert 'expected_version="$payload_version"' in script
+    assert 'running_version=' in script
+    assert 'Reported running version:' in script
+    assert 'Disk version:' in script
+    assert 'json.load(sys.stdin).get("version", "")' in script
+
+
+def test_payload_installer_restarts_active_service():
+    script = (ROOT / 'payload' / 'PiMatrixSignage' / 'install.sh').read_text(encoding='utf-8')
+    assert 'systemctl restart "$SERVICE"' in script

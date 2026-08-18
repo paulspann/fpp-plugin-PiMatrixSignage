@@ -72,7 +72,16 @@ if command -v visudo >/dev/null 2>&1; then
   visudo -cf "$SUDOERS_FILE" >/dev/null
 fi
 systemctl daemon-reload
-systemctl enable --now "$SERVICE"
+# `enable --now` starts an inactive service but does not restart an already
+# running one. During FPP Plugin Manager updates the old Python process would
+# therefore keep serving the previous release from memory even after the files
+# had been replaced. Always restart when already active so the new VERSION/code
+# is actually loaded.
+if systemctl is-active --quiet "$SERVICE"; then
+  systemctl restart "$SERVICE"
+else
+  systemctl enable --now "$SERVICE"
+fi
 
 sleep 1
 if systemctl is-active --quiet "$SERVICE"; then

@@ -44,8 +44,10 @@ if [[ -n "$installed_version" ]]; then
   fi
 fi
 
+expected_version="$installed_version"
 if [[ "$should_install" == "1" ]]; then
   PIMATRIX_SKIP_DEPENDENCY_INSTALL=1 "$PAYLOAD/install.sh"
+  expected_version="$payload_version"
 fi
 
 if ! systemctl is-active --quiet pi-matrix-signage.service; then
@@ -54,20 +56,32 @@ if ! systemctl is-active --quiet pi-matrix-signage.service; then
   exit 1
 fi
 
-# Confirm the HTTP health endpoint becomes available.
+# Confirm the HTTP health endpoint becomes available *and* that the running
+# process loaded the version we just installed. A merely healthy old process
+# must not make a Plugin Manager update look successful.
 ok=0
-for _ in $(seq 1 20); do
-  if curl -fsS --max-time 2 http://127.0.0.1:8090/health >/dev/null 2>&1; then
-    ok=1
-    break
+running_version=""
+for _ in $(seq 1 25); do
+  health_json="$(curl -fsS --max-time 2 http://127.0.0.1:8090/health 2>/dev/null || true)"
+  if [[ -n "$health_json" ]]; then
+    running_version="$(printf '%s' "$health_json" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version", ""))' 2>/dev/null || true)"
+    if [[ -n "$running_version" && "$running_version" == "$expected_version" ]]; then
+      ok=1
+      break
+    fi
   fi
   sleep 1
 done
 if [[ "$ok" != "1" ]]; then
-  echo "Pi Matrix Signage did not pass the post-install health check"
+  echo "Pi Matrix Signage did not pass the post-install version health check"
+  echo "Expected running version: ${expected_version:-unknown}"
+  echo "Reported running version: ${running_version:-none}"
+  echo "Disk version: $(tr -d '[:space:]' < "$APP_DIR/VERSION" 2>/dev/null || echo missing)"
+  systemctl show -p FragmentPath -p ExecStart -p WorkingDirectory pi-matrix-signage.service || true
   journalctl -u pi-matrix-signage.service -n 60 --no-pager || true
   exit 1
 fi
 
+echo "Running application version verified: $running_version"
 echo "[$(date -Is)] Pi Matrix Signage plugin install completed successfully"
 exit 0

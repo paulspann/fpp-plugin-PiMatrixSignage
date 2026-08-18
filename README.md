@@ -1,3 +1,5 @@
+# Pi Matrix Signage FPP Plugin v0.1.5
+
 # Pi Matrix Signage FPP Plugin v0.1.4
 
 10+ bootstrap/integration plugin for Pi Matrix Signage on Raspberry Pi.
@@ -49,3 +51,10 @@ This test bootstrap contains Pi Matrix Signage v0.6.7. The next commercial-harde
 - Makes **FPP Plugin Manager** the normal customer-facing update path; the Pi Matrix application no longer exposes its own Upgrade tab.
 - Plugin Manager **Update** continues to run the idempotent installer, preserve persistent Pi Matrix data, start the service and verify the application health endpoint.
 - The proven Pi Matrix privileged updater/rollback engine remains packaged inside the application for recovery and maintenance, but customers no longer upload release ZIP files manually.
+
+
+## v0.1.5
+
+- Bundles Pi Matrix Signage v0.6.8.
+- Fixes Plugin Manager updates that copied new files but left the old Python process running.
+- Verifies `/health` reports the expected application version before an install/update is considered successful.
