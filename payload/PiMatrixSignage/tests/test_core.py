@@ -528,7 +528,7 @@ class CoreTests(unittest.TestCase):
             def __init__(self,target,**_kwargs): workers.append(target)
             def start(self): pass
 
-        with patch("renderer.threading.Thread",DeferredThread):
+        with patch("renderer.threading.Thread",DeferredThread), patch("renderer.time.monotonic",return_value=1.0):
             self.assertEqual(_live_fetch_async(key,60,lambda:"Ready"),"Loading…")
         self.assertEqual(len(workers),1)
         workers[0]()

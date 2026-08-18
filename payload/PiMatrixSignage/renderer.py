@@ -286,7 +286,10 @@ def _live_fetch_async(key: str, ttl: float, fetcher, placeholder: str = "Loading
                 entry["value"] = error_value
             LOG.warning("Live data refresh timed out for %s after %.1fs", key, timeout_s)
 
-        stale = (now_m - float(entry.get("fetched") or 0.0)) >= max(5.0, float(ttl or 60.0))
+        fetched_at = float(entry.get("fetched") or 0.0)
+        # A new entry has never been fetched and must refresh immediately,
+        # including during the first cache-TTL seconds after a system boot.
+        stale = fetched_at <= 0.0 or (now_m - fetched_at) >= max(5.0, float(ttl or 60.0))
         if stale and not entry.get("fetching"):
             generation = int(entry.get("generation") or 0) + 1
             entry.update(fetching=True, started=now_m, generation=generation)
