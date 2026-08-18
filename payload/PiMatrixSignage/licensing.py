@@ -126,9 +126,9 @@ class LicenseManager:
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.app_version = str(app_version)
-        self.mode = str(os.environ.get("PIMATRIX_LICENSE_MODE", "development") or "development").strip().lower()
+        self.mode = str(os.environ.get("PIMATRIX_LICENSE_MODE", "whmcs") or "whmcs").strip().lower()
         if self.mode not in {"development", "whmcs"}:
-            self.mode = "development"
+            self.mode = "whmcs"
         self.endpoint = str(os.environ.get("PIMATRIX_LICENSE_ENDPOINT", "https://www.issl.co.uk/support/modules/addons/pimatrixlicensing/api.php") or "").strip()
         self.public_key_url = str(os.environ.get("PIMATRIX_LICENSE_PUBLIC_KEY_URL", "https://www.issl.co.uk/support/modules/addons/pimatrixlicensing/public-key.php") or "").strip()
         self.public_key_path = Path(os.environ.get("PIMATRIX_LICENSE_PUBLIC_KEY", str(self.data_dir / "license-public.pem")))

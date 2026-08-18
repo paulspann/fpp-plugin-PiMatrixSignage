@@ -1,4 +1,11 @@
-# Pi Matrix Signage v0.6.14
+# Pi Matrix Signage v0.6.15
+
+
+## v0.6.15 – live WHMCS licence enforcement
+
+- Changes new installations from development licensing to live WHMCS enforcement by default.
+- Migrates an existing default `PIMATRIX_LICENSE_MODE=development` setting to `whmcs` during upgrade while preserving its licence key, signed entitlement, endpoint and device identity.
+- Keeps development mode available only as an explicit diagnostic override.
 
 
 ## v0.6.14 – streamlined Display setup

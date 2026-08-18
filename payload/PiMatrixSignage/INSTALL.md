@@ -33,7 +33,7 @@ The installer creates/retains:
 A new installation defaults to:
 
 ```text
-PIMATRIX_LICENSE_MODE=development
+PIMATRIX_LICENSE_MODE=whmcs
 PIMATRIX_LICENSE_PREFIX=PMS-
 PIMATRIX_LICENSE_CHECK_HOURS=168
 PIMATRIX_LICENSE_GRACE_DAYS=30
