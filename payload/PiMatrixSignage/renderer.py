@@ -579,6 +579,42 @@ def _transform_text(text: str, mode: str) -> str:
     return text
 
 
+def _live_weather_shader_params(config: dict, params: dict) -> dict:
+    """Overlay Sky Weather uniforms with cached Open-Meteo conditions."""
+    out = dict(params or {})
+    if not bool(config.get("shader_live_weather")):
+        return out
+    weather_config = {
+        "weather_lat": config.get("shader_weather_lat", 53.55),
+        "weather_lon": config.get("shader_weather_lon", -2.52),
+        "weather_temp_unit": "c",
+        "weather_wind_unit": "mph",
+        "refresh_seconds": config.get("shader_weather_refresh", 600),
+    }
+    data = _weather_current(weather_config)
+    if data.get("status") != "ok":
+        return out
+    category = str(data.get("category") or "cloudy")
+    weather_mode = {
+        "clear": 0, "partly-cloudy": 1, "cloudy": 2, "fog": 2,
+        "drizzle": 3, "rain": 3, "showers": 3, "snow": 4, "snow-showers": 4,
+        "thunder": 5,
+    }.get(category, 2)
+    wind = max(0.0, float(data.get("wind") or 0.0))
+    wind_degrees = float(data.get("wind_direction") or 0.0) % 360.0
+    cloud = max(0.0, min(100.0, float(data.get("cloud") or 0.0))) / 100.0
+    precip = max(0.0, float(data.get("precip") or 0.0))
+    out.update({
+        "Weather": weather_mode,
+        "SkyPhase": 0 if bool(data.get("is_day", True)) else 2,
+        "CloudCover": cloud,
+        "Speed": max(0.05, min(4.0, 0.05 + wind / 8.0)),
+        "WindDirection": 0 if 180.0 <= wind_degrees < 360.0 else 1,
+        "PrecipIntensity": max(0.0, min(1.0, precip / 5.0)) if weather_mode < 3 else max(0.25, min(1.0, precip / 5.0)),
+    })
+    return out
+
+
 def _random_reveal_text(layer: dict, text: str, elapsed: float) -> str:
     """Reveal characters in-place in a stable random order over effect_period seconds."""
     delay = max(0.0, float(layer.get("delay", 0) or 0))
@@ -2178,6 +2214,8 @@ def _render_scene_shader(layer: dict, w: int, h: int, elapsed: float, upload_fon
     if not asset_id:
         return Image.new("RGBA", (max(1,w), max(1,h)), (0,0,0,0))
     params = layer.get("shader_params") if isinstance(layer.get("shader_params"), dict) else {}
+    if asset_id == "builtin:Sky-Weather.fs":
+        params = _live_weather_shader_params(layer, params)
     fps = max(1.0, min(30.0, float(layer.get("shader_fps", 15) or 15)))
     _time_scale = layer.get("shader_time_scale", 1.0)
     time_scale = float(1.0 if _time_scale is None else _time_scale)
@@ -2201,6 +2239,8 @@ def _render_scene_background_shader(bg: dict, w: int, h: int, elapsed: float, up
     if not asset_id:
         return Image.new("RGBA", (max(1, w), max(1, h)), (0, 0, 0, 0))
     params = bg.get("shader_params") if isinstance(bg.get("shader_params"), dict) else {}
+    if asset_id == "builtin:Sky-Weather.fs":
+        params = _live_weather_shader_params(bg, params)
     fps = max(1.0, min(30.0, float(bg.get("shader_fps", 15) or 15)))
     raw_scale = bg.get("shader_time_scale", 1.0)
     time_scale = float(1.0 if raw_scale is None else raw_scale)

@@ -1,4 +1,12 @@
-# Pi Matrix Signage v0.6.11
+# Pi Matrix Signage v0.6.12
+
+
+## v0.6.12 – optional live weather shader
+
+- Adds an optional **Use live weather** mode to the built-in Sky Weather shader for both scene backgrounds and shader layers.
+- Uses the existing Open-Meteo integration to select clear, cloudy, rain, snow or storm visuals and day/night phase automatically.
+- Maps live cloud cover, wind direction, wind speed and precipitation intensity to the shader while retaining saved manual controls as an offline fallback.
+- Keeps manual Sky Weather operation unchanged when live weather is disabled.
 
 
 ## v0.6.11 – independent sun and moon positioning
