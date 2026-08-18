@@ -15,6 +15,13 @@
     </div>
     <div class="topbar-actions">
       <div class="status-pill" id="statusPill"><span class="dot"></span><span>Starting…</span></div>
+      <div class="user-strip">
+        <span class="user-avatar" id="currentUserInitial">U</span>
+        <span class="user-name" id="currentUserName">User</span>
+        <a class="topbar-link" href="/remote">Remote</a>
+        <a class="topbar-link" href="/change-password">Password</a>
+        <button class="topbar-link button-link" id="logoutButton" type="button">Sign out</button>
+      </div>
       <div class="settings-menu hidden" id="settingsMenu">
         <button class="settings-menu-toggle" id="settingsMenuToggle" type="button" aria-label="Open settings menu" aria-haspopup="true" aria-expanded="false" aria-controls="settingsMenuPanel"><span aria-hidden="true">⚙</span></button>
         <div class="settings-menu-panel hidden" id="settingsMenuPanel" role="menu">
@@ -22,13 +29,6 @@
           <button class="tab settings-menu-item permission-gated" data-tab="backup" data-permission="backup" type="button" role="menuitem">Backup &amp; restore</button>
           <button class="tab settings-menu-item permission-gated" data-tab="users" data-permission="users" type="button" role="menuitem">Users</button>
         </div>
-      </div>
-      <div class="user-strip">
-        <span class="user-avatar" id="currentUserInitial">U</span>
-        <span class="user-name" id="currentUserName">User</span>
-        <a class="topbar-link" href="/remote">Remote</a>
-        <a class="topbar-link" href="/change-password">Password</a>
-        <button class="topbar-link button-link" id="logoutButton" type="button">Sign out</button>
       </div>
     </div>
   </header>

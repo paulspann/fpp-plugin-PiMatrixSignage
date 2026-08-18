@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_settings_destinations_are_in_cogwheel_menu_not_main_navigation():
     html = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
     main_nav = html.split('<nav class="tabs"', 1)[1].split("</nav>", 1)[0]
-    settings_menu = html.split('id="settingsMenu"', 1)[1].split('<div class="user-strip">', 1)[0]
+    settings_menu = html.split('id="settingsMenu"', 1)[1].split("</header>", 1)[0]
 
     for tab in ("setup", "backup", "users"):
         assert f'data-tab="{tab}"' not in main_nav
@@ -15,6 +15,7 @@ def test_settings_destinations_are_in_cogwheel_menu_not_main_navigation():
 
     assert 'id="settingsMenuToggle"' in settings_menu
     assert 'aria-haspopup="true"' in settings_menu
+    assert html.index('id="logoutButton"') < html.index('id="settingsMenu"')
 
 
 def test_settings_menu_keeps_existing_permission_gates():
