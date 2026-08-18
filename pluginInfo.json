@@ -8,8 +8,8 @@
   "bugURL": "https://github.com/paulspann/fpp-plugin-PiMatrixSignage/issues",
   "documentation": "https://github.com/paulspann/fpp-plugin-PiMatrixSignage/blob/main/README.md",
   "allowUpdates": 1,
-  "minMemoryMB": 1024,
-  "minCpuCores": 2,
+  "minMemoryMB": 512,
+  "minCpuCores": 1,
   "versions": [
     {
       "minFPPVersion": "10.0",
