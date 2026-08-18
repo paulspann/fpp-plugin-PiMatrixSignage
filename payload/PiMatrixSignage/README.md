@@ -1,4 +1,11 @@
-# Pi Matrix Signage v0.6.10
+# Pi Matrix Signage v0.6.11
+
+
+## v0.6.11 – independent sun and moon positioning
+
+- Keeps cloud and weather animation speed independent from the sun or moon.
+- Adds horizontal position and height controls for the sun or moon.
+- Makes the celestial body stationary by default, with optional left-to-right or right-to-left movement and a separate speed control.
 
 
 ## v0.6.10 – animated sky and weather shader

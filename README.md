@@ -27,7 +27,7 @@ For beta testing, open FPP's Plugin Manager, paste that raw `pluginInfo.json` UR
 
 ## Current bootstrap payload
 
-This test bootstrap contains Pi Matrix Signage v0.6.10. The next commercial-hardening stage should move the application payload out of the public bootstrap repository and retrieve a signed, licence-authorised release package from the ISSL/WHMCS licensing service.
+This test bootstrap contains Pi Matrix Signage v0.6.11. The next commercial-hardening stage should move the application payload out of the public bootstrap repository and retrieve a signed, licence-authorised release package from the ISSL/WHMCS licensing service.
 
 
 ## v0.1.2
@@ -53,7 +53,7 @@ This test bootstrap contains Pi Matrix Signage v0.6.10. The next commercial-hard
 
 ## v0.1.5
 
-- Bundles Pi Matrix Signage v0.6.10.
+- Bundles Pi Matrix Signage v0.6.11.
 - Fixes Plugin Manager updates that copied new files but left the old Python process running.
 - Verifies `/health` reports the expected application version before an install/update is considered successful.
 
