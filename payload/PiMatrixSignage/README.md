@@ -1,4 +1,11 @@
-# Pi Matrix Signage v0.6.8
+# Pi Matrix Signage v0.6.9
+
+
+## v0.6.9 – settings menu
+
+- Moves **Display setup**, **Backup & restore**, and **Users** out of the main navigation into a cogwheel menu at the top right.
+- Preserves each destination's existing user permission and visibility rules.
+- Hides the cogwheel when the signed-in user has access to none of its destinations.
 
 
 ## v0.6.8 – reliable FPP Plugin Manager restart

@@ -15,6 +15,14 @@
     </div>
     <div class="topbar-actions">
       <div class="status-pill" id="statusPill"><span class="dot"></span><span>Starting…</span></div>
+      <div class="settings-menu hidden" id="settingsMenu">
+        <button class="settings-menu-toggle" id="settingsMenuToggle" type="button" aria-label="Open settings menu" aria-haspopup="true" aria-expanded="false" aria-controls="settingsMenuPanel"><span aria-hidden="true">⚙</span></button>
+        <div class="settings-menu-panel hidden" id="settingsMenuPanel" role="menu">
+          <button class="tab settings-menu-item permission-gated" data-tab="setup" data-permission="display_setup" type="button" role="menuitem">Display setup</button>
+          <button class="tab settings-menu-item permission-gated" data-tab="backup" data-permission="backup" type="button" role="menuitem">Backup &amp; restore</button>
+          <button class="tab settings-menu-item permission-gated" data-tab="users" data-permission="users" type="button" role="menuitem">Users</button>
+        </div>
+      </div>
       <div class="user-strip">
         <span class="user-avatar" id="currentUserInitial">U</span>
         <span class="user-name" id="currentUserName">User</span>
@@ -30,9 +38,6 @@
     <button class="tab permission-gated" data-tab="messages" data-permission="messages">Messages</button>
     <button class="tab permission-gated" data-tab="playlists" data-permission="playlists">Playlists</button>
     <button class="tab permission-gated" data-tab="schedules" data-permission="schedules">Schedules</button>
-    <button class="tab permission-gated" data-tab="setup" data-permission="display_setup">Display setup</button>
-    <button class="tab permission-gated" data-tab="backup" data-permission="backup">Backup &amp; restore</button>
-    <button class="tab permission-gated" data-tab="users" data-permission="users">Users</button>
   </nav>
 
   <div class="license-banner hidden" id="licenseBanner"><strong id="licenseBannerTitle">Licence required</strong><span id="licenseBannerText">Activate Pi Matrix Signage under Display setup.</span><button class="btn secondary compact-license-button" id="openLicenseSetup" type="button">Open licence</button></div>

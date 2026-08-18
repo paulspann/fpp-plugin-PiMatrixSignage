@@ -162,15 +162,27 @@
   function showDashboard(){
     $$('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab==='dashboard'));
     $$('.page').forEach(x=>x.classList.toggle('active',x.id==='page-dashboard'));
+    $('settingsMenuToggle').classList.remove('menu-active');
+    setSettingsMenu(false);
     scheduleLivePreview(0);
   }
   function applyPermissions(){
     const user=state.auth?.user;if(!user)return;
     $$('[data-permission]').forEach(el=>{const allowed=can(el.dataset.permission);el.classList.toggle('allowed',allowed);el.classList.toggle('permission-denied',!allowed);});
     $('currentUserName').textContent=user.display_name||user.username;$('currentUserInitial').textContent=(user.display_name||user.username||'U').trim().charAt(0).toUpperCase();
-    const active=document.querySelector('.tab.active');if(active?.dataset.permission&&!can(active.dataset.permission))showDashboard();
+    const settingsItems=$$('.settings-menu-item');
+    $('settingsMenu').classList.toggle('hidden',!settingsItems.some(el=>can(el.dataset.permission)));
+    const active=document.querySelector('[data-tab].active');if(active?.dataset.permission&&!can(active.dataset.permission))showDashboard();
   }
   async function refreshAuth(){state.auth=await api('/api/auth/me');applyPermissions();return state.auth;}
+
+  function setSettingsMenu(open){
+    $('settingsMenuPanel').classList.toggle('hidden',!open);
+    $('settingsMenuToggle').setAttribute('aria-expanded',open?'true':'false');
+  }
+  $('settingsMenuToggle').addEventListener('click',ev=>{ev.stopPropagation();setSettingsMenu($('settingsMenuPanel').classList.contains('hidden'));});
+  document.addEventListener('click',ev=>{if(!$('settingsMenu').contains(ev.target))setSettingsMenu(false);});
+  document.addEventListener('keydown',ev=>{if(ev.key==='Escape')setSettingsMenu(false);});
 
   $$('.tab').forEach(btn => btn.addEventListener('click', () => {
     $$('.tab').forEach(x=>x.classList.remove('active')); btn.classList.add('active');
@@ -181,6 +193,8 @@
     if (btn.dataset.tab === 'users') loadUsers();
     if (btn.dataset.tab === 'messages') { showMessageLibrary(); renderMessageList(); }
     if (btn.dataset.tab === 'dashboard') scheduleLivePreview(0);
+    $('settingsMenuToggle').classList.toggle('menu-active',btn.classList.contains('settings-menu-item'));
+    setSettingsMenu(false);
   }));
 
   async function loadAll() {
@@ -877,7 +891,7 @@
   async function activateLicence(){const key=String($('licenceKey')?.value||'').trim();if(!key){toast('Enter a licence key',true);return;}try{state.license=await api('/api/license/activate',{method:'POST',body:{license_key:key}});$('licenceKey').value='';renderLicence();toast('Licence activated');}catch(e){await loadLicence();toast(e.message,true);}}
   async function checkLicence(){try{state.license=await api('/api/license/check',{method:'POST',body:{}});renderLicence();toast('Licence checked');}catch(e){await loadLicence();toast(e.message,true);}}
   async function clearLocalLicence(){if(!confirm('Clear the licence key and signed entitlement stored on this Pi?\n\nThis does not reissue the licence in WHMCS.'))return;try{state.license=await api('/api/license/deactivate-local',{method:'POST',body:{}});renderLicence();toast('Local licence cleared');}catch(e){toast(e.message,true);}}
-  function openLicenceSetup(){const tab=document.querySelector('.tab[data-tab="setup"]');if(tab){tab.click();setTimeout(()=>$('licenceCard')?.scrollIntoView({behavior:'smooth',block:'start'}),60);}}
+  function openLicenceSetup(){const tab=document.querySelector('[data-tab="setup"]');if(tab){tab.click();setTimeout(()=>$('licenceCard')?.scrollIntoView({behavior:'smooth',block:'start'}),60);}}
 
   // Settings
   function populateSettings(){const s=state.settings;if(!s)return;$('panelWidth').value=s.panel_width;$('panelHeight').value=s.panel_height;$('panelScan').value=s.panel_scan||'1/16';$('panelsAcross').value=s.panels_across;$('panelsDown').value=s.panels_down;$('displayRotation').value=s.display_rotation;$('brightness').value=s.brightness;$('brightnessValue').textContent=`${s.brightness}%`;$('frameRate').value=s.frame_rate;$('colorOrder').value=s.color_order;$('timezone').value=s.timezone;$('ddpHost').value=s.ddp_host;$('ddpPort').value=s.ddp_port;$('ddpOffset').value=s.ddp_offset;$('defaultMessage').value=s.default_message_id||'';updateLayoutSummary();}
