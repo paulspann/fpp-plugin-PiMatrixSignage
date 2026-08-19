@@ -1,4 +1,11 @@
-# Pi Matrix Signage v0.6.22
+# Pi Matrix Signage v0.6.23
+
+
+## v0.6.23 – reliable black colour selection
+
+- Stops the colour picker's internal native input from being enhanced as a second nested colour field, which caused the popover to jump and then disappear.
+- Adds Black and White to the preset palette for immediate selection.
+- Applies a preset on the first click and closes the popover without changing the inspector layout.
 
 
 ## v0.6.22 – duplicate-free Cloud Text
