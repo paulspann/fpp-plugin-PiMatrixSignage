@@ -137,6 +137,10 @@
         <h4>Colorlight 5A-75B / 5A-75E</h4>
         <ol><li>Program the receiver's driver IC, scan rate and cabinet mapping with Colorlight LEDVISION/LEDSetting and save it to the receiver.</li><li>Connect the receiver directly to a dedicated Pi Ethernet interface, normally <code>eth1</code>. Do not share that interface with the normal LAN.</li><li>In FPP Channel Outputs, enable <strong>ColorLight 5A-75</strong>, choose the same interface and enter the canvas/channel values shown by the FPP setup helper.</li><li>Run the Grid, Checker and colour tests. If brightness is unreliable, check receiver firmware and its saved configuration.</li></ol>
         <div class="help-warning"><strong>Receiver setup is separate:</strong> Pi Matrix Signage stores the chosen model and builds the correct FPP checklist, but it does not replace Colorlight's receiver-card programming tool.</div>
+        <h4>Commissioning wizard</h4>
+        <p>The wizard detects Ethernet interfaces and labels the normal-LAN/default-route interface so it is not accidentally selected for Colorlight. Its FPP test checks that FPPD is active and a saved ColorLight 5A-75 output references the chosen interface. Run and visually confirm Grid, Checker, red, green, blue and full-white before marking the sign commissioned. Hardware changes clear the previous pass.</p>
+        <h4>Hardware profiles</h4>
+        <p>Save a named profile after a sign is working. Profiles include the panel description and dimensions, scan, output hardware, receiver and interface, layout, rotation, colour order and brightness limit. Applying a profile replaces those hardware settings and requires commissioning again.</p>
         <h3>GPIO controls</h3>
         <p>The dedicated A/B/C inputs are provided by the Hanson rPI-MFC and are hidden in Colorlight mode. Choose normally open/closed wiring to match the physical circuit and use debounce/latch settings to prevent accidental repeats.</p>
         <h3>Diagnostics</h3>
@@ -166,6 +170,8 @@
         <div class="help-warning"><strong>Do not interrupt a restore.</strong> Keep power connected and wait for the interface or service to return before retrying.</div>
         <h3>Portable content versus full backup</h3>
         <p>Message, component and playlist exports are for moving selected content. A full backup is for disaster recovery and controller migration.</p>
+        <h3>System support package</h3>
+        <p>Create this smaller ZIP when requesting technical help. It contains application and FPP versions, diagnostics, recent warnings/errors, the selected hardware profile, commissioning state, network-interface information, safe licence status and sanitised FPP output configuration. The licence key, passwords and recognised secret fields are excluded. The current display preview is optional; review the ZIP before sharing it.</p>
       </section>
 
       <section id="users">

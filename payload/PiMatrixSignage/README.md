@@ -1,5 +1,11 @@
-# Pi Matrix Signage v0.6.25
+# Pi Matrix Signage v0.6.26
 
+
+## v0.6.26 – commissioning, profiles and support packages
+
+- Adds a guided Colorlight commissioning wizard with interface detection, normal-LAN warnings, FPP configuration checks and physical test-pattern sign-off.
+- Adds reusable named hardware profiles covering panel model, dimensions, scan, output hardware, receiver, interface, layout, rotation, colour order and brightness limit.
+- Adds a one-click sanitised support ZIP with app/FPP versions, diagnostics, recent errors, hardware/commissioning details, safe licence status and an optional display preview.
 
 ## v0.6.25 – hardware-neutral branding
 
