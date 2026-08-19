@@ -1,5 +1,12 @@
-# Pi Matrix Signage v0.6.23
+# Pi Matrix Signage v0.6.24
 
+
+## v0.6.24 – optional Colorlight output
+
+- Adds a saved Hanson rPI-MFC / Colorlight output choice in Display Setup.
+- Supports Colorlight 5A-75B and 5A-75E receiver profiles with a dedicated network-interface setting.
+- Builds hardware-specific FPP setup instructions and checks whether the selected interface is present.
+- Adds common Colorlight scan rates while preserving rPI-MFC validation and GPIO behaviour.
 
 ## v0.6.23 – reliable black colour selection
 

@@ -37,12 +37,12 @@
 
       <section id="getting-started">
         <h2>Getting started</h2>
-        <p class="help-lead">Pi Matrix Signage designs, schedules and sends pixel-perfect content to an LED matrix output configured in Falcon Player (FPP). The web application manages content; FPP and the rPI-MFC hardware manage the physical panel signal.</p>
+        <p class="help-lead">Pi Matrix Signage designs, schedules and sends pixel-perfect content to an LED matrix output configured in Falcon Player (FPP). The web application manages content; FPP and the selected rPI-MFC or Colorlight hardware manage the physical panel signal.</p>
         <h3>How the system fits together</h3>
         <table class="help-table"><thead><tr><th>Part</th><th>Purpose</th></tr></thead><tbody>
           <tr><td>Pi Matrix Signage</td><td>Creates messages, renders scenes, chooses scheduled content and sends the completed pixel canvas.</td></tr>
           <tr><td>Falcon Player</td><td>Hosts the plugin and configures the LED panel output.</td></tr>
-          <tr><td>Hanson rPI-MFC</td><td>Provides the Raspberry Pi interface to the connected P5/P10 panels.</td></tr>
+          <tr><td>Panel output</td><td>Use a Hanson rPI-MFC for direct HUB75 output, or a Colorlight 5A-75B/5A-75E receiver connected to a dedicated Ethernet interface.</td></tr>
           <tr><td>WHMCS licensing</td><td>Binds a commercial licence to the controller Device ID and supplies a signed offline entitlement.</td></tr>
         </tbody></table>
         <h3>First-time checklist</h3>
@@ -133,9 +133,12 @@
         <p>Enter the width and height of one panel, the number of panels across/down, scan rate and whole-display rotation. This defines the logical canvas used by Designer.</p>
         <div class="help-note"><strong>FPP remains authoritative for hardware wiring:</strong> panel chain order, individual panel orientation and electrical mapping belong in FPP’s LED Panels configuration.</div>
         <h3>Output and brightness</h3>
-        <p>Configure the DDP target and port expected by the FPP output. Brightness limits the rendered output globally. Use Diagnostics and panel tests after any hardware-layout change.</p>
+        <p>Choose Hanson rPI-MFC or Colorlight receiver card. The app always sends DDP to FPP; FPP then drives the selected hardware. Brightness limits the rendered output globally.</p>
+        <h4>Colorlight 5A-75B / 5A-75E</h4>
+        <ol><li>Program the receiver's driver IC, scan rate and cabinet mapping with Colorlight LEDVISION/LEDSetting and save it to the receiver.</li><li>Connect the receiver directly to a dedicated Pi Ethernet interface, normally <code>eth1</code>. Do not share that interface with the normal LAN.</li><li>In FPP Channel Outputs, enable <strong>ColorLight 5A-75</strong>, choose the same interface and enter the canvas/channel values shown by the FPP setup helper.</li><li>Run the Grid, Checker and colour tests. If brightness is unreliable, check receiver firmware and its saved configuration.</li></ol>
+        <div class="help-warning"><strong>Receiver setup is separate:</strong> Pi Matrix Signage stores the chosen model and builds the correct FPP checklist, but it does not replace Colorlight's receiver-card programming tool.</div>
         <h3>GPIO controls</h3>
-        <p>GPIO inputs can activate emergency mode or other configured actions. Choose normally open/closed wiring to match the physical circuit and use debounce/latch settings to prevent accidental repeats.</p>
+        <p>The dedicated A/B/C inputs are provided by the Hanson rPI-MFC and are hidden in Colorlight mode. Choose normally open/closed wiring to match the physical circuit and use debounce/latch settings to prevent accidental repeats.</p>
         <h3>Diagnostics</h3>
         <p>Diagnostics reports renderer state, dimensions, output target, recent errors and supporting service information. Copy this information when requesting support.</p>
       </section>

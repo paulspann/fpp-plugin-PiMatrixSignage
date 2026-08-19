@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from typing import Any, Iterable
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 DEFAULT_SETTINGS = {
     "panel_width": 64,
@@ -16,6 +16,9 @@ DEFAULT_SETTINGS = {
     "panels_across": 1,
     "panels_down": 1,
     "panel_scan": "1/16",
+    "panel_output_type": "rpi_mfc",
+    "colorlight_receiver_model": "5a-75b",
+    "colorlight_interface": "eth1",
     "display_rotation": 0,
     "brightness": 60,
     "frame_rate": 25,
@@ -907,4 +910,3 @@ class Database:
     def clear_recovery_events(self) -> None:
         with self.conn() as con:
             con.execute("DELETE FROM recovery_events")
-
