@@ -1,4 +1,21 @@
-# Pi Matrix Signage v0.6.27
+# Pi Matrix Signage v0.6.29
+
+
+
+## v0.6.29 – dedicated System diagnostics page
+
+- Moves **System diagnostics & recovery** out of Display Setup into its own cog-wheel menu page.
+- Keeps the existing **Display setup** permission for diagnostics, so existing user access is unchanged.
+- Live diagnostic polling now runs only while the dedicated diagnostics page is open.
+- Updates the built-in Help manual to document the new location and safe recovery controls.
+
+## v0.6.28 – transfer reset, commissioning certificate and Pillow cleanup
+
+- Adds a guarded **Factory reset / transfer ownership** workflow requiring the current password, exact typed confirmation and Backup + Users + Display Setup permissions.
+- Factory reset erases Pi Matrix messages, users, media, hardware profiles, backups/rollback copies and local WHMCS licence state while leaving the application/FPP installation intact; FPP site/output state is reset and Wi-Fi/network credentials can be erased for ownership transfer.
+- Adds a root-owned, narrowly scoped reset helper installed through the existing FPP plugin flow; network reset reboots the Pi so FPP can return to its first-use networking behaviour.
+- Persists the individual commissioning checks and includes a human-readable `commissioning-certificate.txt` in every support ZIP with software versions, Device ID, panel/output details, commissioning date/operator and test results.
+- Removes the Pillow 12.3 `Image.getdata()` deprecation warnings from the test suite using `get_flattened_data()` with an older-Pillow compatibility fallback.
 
 
 ## v0.6.27 – built-in hardware profile starters

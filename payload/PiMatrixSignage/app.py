@@ -58,6 +58,7 @@ PORTABLE_MAX_FILES = 12000
 PORTABLE_MAX_UNCOMPRESSED = 4 * 1024 * 1024 * 1024
 UPGRADE_HELPER = Path("/usr/local/sbin/pi-matrix-signage-upgrade")
 POWER_HELPER = Path("/usr/local/sbin/pi-matrix-signage-poweroff")
+RESET_HELPER = Path("/usr/local/sbin/pi-matrix-signage-reset")
 FPP_CONFIG_DIR = Path(os.environ.get("PIMATRIX_FPP_CONFIG_DIR", "/home/fpp/media/config"))
 
 HARDWARE_PROFILE_KEYS = (
@@ -138,6 +139,7 @@ UPGRADE_REQUIRED = {
     "PiMatrixSignage/templates/remote.html",
     "PiMatrixSignage/static/app.js",
     "PiMatrixSignage/static/app.css",
+    "PiMatrixSignage/systemd/pi-matrix-signage-reset",
 }
 UPGRADE_MAX_FILES = 2500
 UPGRADE_MAX_UNCOMPRESSED = 300 * 1024 * 1024
@@ -889,7 +891,7 @@ def put_settings():
         if key in data:
             clean[key] = bool(data[key])
     if any(key in clean and clean[key] != current.get(key) for key in HARDWARE_PROFILE_KEYS):
-        clean.update({"colorlight_commissioned": False, "colorlight_commissioned_at": "", "colorlight_commissioned_by": ""})
+        clean.update({"colorlight_commissioned": False, "colorlight_commissioned_at": "", "colorlight_commissioned_by": "", "colorlight_commissioning_tests": {}})
     db.update_settings(clean)
     engine.reload_settings()
     return get_settings()
@@ -998,8 +1000,25 @@ def colorlight_commission_api():
     if missing:
         return jsonify({"error": "Complete every commissioning test before marking the installation passed", "missing": missing}), 400
     now = datetime.now().astimezone().isoformat(timespec="seconds")
-    db.update_settings({"colorlight_commissioned": True, "colorlight_commissioned_at": now, "colorlight_commissioned_by": str(g.current_user.get("username") or "")})
-    return jsonify({"ok": True, "commissioned_at": now, "commissioned_by": g.current_user.get("username")})
+    test_results = {
+        "fpp": {
+            "passed": bool(test.get("ok")),
+            "message": str(test.get("message") or ""),
+            "interface": str(test.get("interface") or ""),
+            "interface_present": bool(test.get("interface_present")),
+            "interface_is_default": bool(test.get("interface_is_default")),
+            "colorlight_output_found": bool(test.get("colorlight_output_found")),
+        },
+        "grid": True, "checker": True, "red": True, "green": True,
+        "blue": True, "white": True,
+    }
+    db.update_settings({
+        "colorlight_commissioned": True,
+        "colorlight_commissioned_at": now,
+        "colorlight_commissioned_by": str(g.current_user.get("username") or ""),
+        "colorlight_commissioning_tests": test_results,
+    })
+    return jsonify({"ok": True, "commissioned_at": now, "commissioned_by": g.current_user.get("username"), "tests": test_results})
 
 
 @app.get("/api/hardware-profiles")
@@ -1025,7 +1044,7 @@ def hardware_profile_apply_api(profile_id: int):
     if not profile:
         return jsonify({"error": "Hardware profile not found"}), 404
     db.update_settings({key: value for key, value in profile["config"].items() if key in HARDWARE_PROFILE_KEYS})
-    db.update_settings({"colorlight_commissioned": False, "colorlight_commissioned_at": "", "colorlight_commissioned_by": ""})
+    db.update_settings({"colorlight_commissioned": False, "colorlight_commissioned_at": "", "colorlight_commissioned_by": "", "colorlight_commissioning_tests": {}})
     engine.reload_settings()
     return get_settings()
 
@@ -2189,21 +2208,110 @@ def _redact_support_text(value: str) -> str:
     return text
 
 
+def _current_hardware_profile_name(settings: dict) -> str:
+    current = {key: settings.get(key) for key in HARDWARE_PROFILE_KEYS}
+    for profile in (*BUILTIN_HARDWARE_PROFILES, *db.list_hardware_profiles()):
+        config = profile.get("config") or {}
+        if all(current.get(key) == config.get(key) for key in HARDWARE_PROFILE_KEYS):
+            return str(profile.get("name") or "Custom")
+    return "Custom / current display settings"
+
+
+def _commissioning_certificate(settings: dict, licence: dict, fpp_version: str, colorlight_test: dict) -> str:
+    width = int(settings.get("panel_width") or 0)
+    height = int(settings.get("panel_height") or 0)
+    across = int(settings.get("panels_across") or 0)
+    down = int(settings.get("panels_down") or 0)
+    output_type = str(settings.get("panel_output_type") or "")
+    output_label = "Colorlight receiver card" if output_type == "colorlight" else "Hanson rPI-MFC"
+    tests = settings.get("colorlight_commissioning_tests") or {}
+    lines = [
+        "PI MATRIX SIGNAGE - COMMISSIONING CERTIFICATE",
+        "=" * 45,
+        f"Generated: {datetime.now().astimezone().isoformat(timespec='seconds')}",
+        f"Controller hostname: {socket.gethostname()}",
+        f"Device ID: {licence.get('device_id') or 'unknown'}",
+        "",
+        "SOFTWARE",
+        f"Pi Matrix Signage: {APP_VERSION}",
+        f"Falcon Player (FPP): {fpp_version}",
+        "",
+        "DISPLAY HARDWARE",
+        f"Hardware profile: {_current_hardware_profile_name(settings)}",
+        f"Output type: {output_label}",
+        f"Panel model: {settings.get('panel_model') or 'unspecified'}",
+        f"Panel dimensions: {width} x {height} pixels",
+        f"Panel scan rate: {settings.get('panel_scan') or 'unspecified'}",
+        f"Panel layout: {across} across x {down} down",
+        f"Total canvas: {width * across} x {height * down} pixels",
+        f"Rotation: {settings.get('display_rotation', 0)} degrees",
+        f"Colour order: {settings.get('color_order') or 'unspecified'}",
+        f"Brightness limit: {settings.get('brightness', 0)}%",
+    ]
+    if output_type == "colorlight":
+        lines.extend([
+            f"Receiver: {str(settings.get('colorlight_receiver_model') or '').upper() or 'unspecified'}",
+            f"Dedicated interface: {settings.get('colorlight_interface') or 'unspecified'}",
+        ])
+    lines.extend([
+        "",
+        "COMMISSIONING",
+        f"Status: {'PASSED' if settings.get('colorlight_commissioned') else 'NOT COMMISSIONED'}",
+        f"Passed at: {settings.get('colorlight_commissioned_at') or 'not recorded'}",
+        f"Passed by: {settings.get('colorlight_commissioned_by') or 'not recorded'}",
+        "",
+        "TEST RESULTS",
+    ])
+    labels = (("fpp", "FPP output/configuration"), ("grid", "Grid pattern"), ("checker", "Checker pattern"),
+              ("red", "Red pattern"), ("green", "Green pattern"), ("blue", "Blue pattern"), ("white", "White pattern"))
+    legacy_commissioned = bool(settings.get("colorlight_commissioned")) and not tests
+    for key, label in labels:
+        value = tests.get(key)
+        if isinstance(value, dict):
+            passed = bool(value.get("passed"))
+            detail = str(value.get("message") or "").strip()
+        else:
+            passed = bool(value)
+            detail = ""
+        if value is None and legacy_commissioned:
+            status = "PASS (legacy commissioning record)"
+        else:
+            status = "PASS" if passed else ("NOT RECORDED" if value is None else "FAIL")
+        lines.append(f"{label}: {status}" + (f" - {detail}" if detail else ""))
+    if output_type == "colorlight":
+        lines.append(f"Current FPP configuration check: {'PASS' if colorlight_test.get('ok') else 'FAIL'} - {colorlight_test.get('message') or 'No detail'}")
+    lines.extend([
+        "",
+        "This certificate records the controller configuration and stored commissioning result at the time the support package was generated.",
+        "Changing or applying hardware settings clears the commissioning state and requires the installation to be re-tested.",
+        "",
+    ])
+    return "\n".join(lines)
+
+
 @app.get("/api/support-package")
 @permission_required("backup")
 def support_package_api():
     include_preview = str(request.args.get("include_preview") or "0").lower() in ("1", "true", "yes")
     settings = db.get_settings()
     licence = license_manager.info()
+    fpp_version = _fpp_version()
+    colorlight_test = _fpp_colorlight_configuration(settings)
     report = {
         "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         "app_version": APP_VERSION,
-        "fpp_version": _fpp_version(),
+        "fpp_version": fpp_version,
         "hostname": socket.gethostname(),
+        "hardware_profile_name": _current_hardware_profile_name(settings),
         "hardware_profile": {key: settings.get(key) for key in HARDWARE_PROFILE_KEYS},
-        "commissioning": {"passed": bool(settings.get("colorlight_commissioned")), "passed_at": settings.get("colorlight_commissioned_at") or "", "passed_by": settings.get("colorlight_commissioned_by") or ""},
+        "commissioning": {
+            "passed": bool(settings.get("colorlight_commissioned")),
+            "passed_at": settings.get("colorlight_commissioned_at") or "",
+            "passed_by": settings.get("colorlight_commissioned_by") or "",
+            "tests": settings.get("colorlight_commissioning_tests") or {},
+        },
         "network_interfaces": _network_interfaces(),
-        "colorlight_test": _fpp_colorlight_configuration(settings),
+        "colorlight_test": colorlight_test,
         "diagnostics": diagnostics.snapshot(),
         "licence": {key: licence.get(key) for key in ("mode", "licensed", "status", "message", "device_id", "verified_until", "grace_until", "app_version") if key in licence},
     }
@@ -2216,6 +2324,7 @@ def support_package_api():
     memory = io.BytesIO()
     with zipfile.ZipFile(memory, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("support-report.json", json.dumps(_sanitise_support_value(report), indent=2, sort_keys=True))
+        zf.writestr("commissioning-certificate.txt", _commissioning_certificate(settings, licence, fpp_version, colorlight_test))
         zf.writestr("fpp-output-sanitised.json", json.dumps(_sanitised_fpp_outputs(), indent=2, sort_keys=True))
         zf.writestr("recent-warnings-errors.log", "\n".join(log_lines) + ("\n" if log_lines else ""))
         zf.writestr("README.txt", "Pi Matrix Signage support package. Passwords, licence keys and known secret fields have been removed. Review before sharing.\n")
@@ -2224,6 +2333,37 @@ def support_package_api():
     memory.seek(0)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     return send_file(memory, mimetype="application/zip", as_attachment=True, download_name=f"PiMatrixSignage-support-{stamp}-v{APP_VERSION}.zip")
+
+
+@app.post("/api/factory-reset")
+@permission_required("backup")
+def factory_reset_api():
+    user = db.get_user(int(g.current_user["id"])) or {}
+    if not (bool(user.get("can_backup")) and bool(user.get("can_users")) and bool(user.get("can_display_setup"))):
+        return jsonify({"error": "Factory reset requires Backup, Users and Display setup permissions."}), 403
+    data = request.get_json(silent=True) or {}
+    if not _verify_password(str(user.get("password_hash") or ""), str(data.get("password") or "")):
+        return jsonify({"error": "Current password is incorrect."}), 403
+    if str(data.get("confirmation") or "").strip() != "RESET THIS CONTROLLER":
+        return jsonify({"error": "Type RESET THIS CONTROLLER exactly to confirm."}), 400
+    if data.get("acknowledged") is not True:
+        return jsonify({"error": "Confirm that you understand this permanently erases the controller data."}), 400
+    if _backup_busy():
+        return jsonify({"error": "Wait for the current backup or restore operation to finish before resetting."}), 409
+    if not RESET_HELPER.is_file():
+        return jsonify({"error": "The privileged factory-reset helper is not installed yet. Install this release first."}), 503
+    clear_network = bool(data.get("clear_network", True))
+    result = subprocess.run(["sudo", "-n", str(RESET_HELPER), "1" if clear_network else "0"], text=True, capture_output=True, timeout=12)
+    if result.returncode != 0:
+        return jsonify({"error": (result.stderr or result.stdout or "Unable to start factory reset").strip()}), 500
+    username = str(user.get("username") or "")
+    LOG.warning("Factory reset requested by %s; clear_network=%s", username, clear_network)
+    session.clear()
+    return jsonify({
+        "ok": True,
+        "clear_network": clear_network,
+        "message": "Factory reset started. The controller will erase Pi Matrix Signage data, users, media, local licence state and FPP site configuration." + (" Network/Wi-Fi will also be erased and the Pi will reboot." if clear_network else " The current network configuration will be retained."),
+    }), 202
 
 
 @app.get("/api/backups")

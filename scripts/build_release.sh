@@ -16,7 +16,7 @@ mkdir -p "$(dirname "$OUTPUT")"
   find . \
     -path './.git' -prune -o \
     -path './dist' -prune -o \
-    -path './.pytest_cache' -prune -o \
+    -path '*/.pytest_cache' -prune -o \
     -path '*/__pycache__' -prune -o \
     -name '*.pyc' -prune -o \
     -name '.DS_Store' -prune -o \
@@ -32,7 +32,8 @@ for executable in \
   scripts/fpp_uninstall.sh \
   payload/PiMatrixSignage/install.sh \
   payload/PiMatrixSignage/uninstall.sh \
-  payload/PiMatrixSignage/start-local.sh; do
+  payload/PiMatrixSignage/start-local.sh \
+  payload/PiMatrixSignage/systemd/pi-matrix-signage-reset; do
   zipinfo -l "$TEMP_ZIP" | grep -E "^-rwx[^ ]* .* ${executable}$" > /dev/null || {
     echo "Release validation failed: $executable is not executable in the ZIP" >&2
     exit 1

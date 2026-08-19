@@ -25,5 +25,6 @@ def test_builtin_profiles_are_labelled_and_not_deletable():
     assert "verify scan rate, driver mapping and colour order" in js
 
 
-def test_release_version_is_v0627():
-    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.6.27"
+def test_release_version_is_v0627_or_later():
+    version = tuple(int(part) for part in (ROOT / "VERSION").read_text(encoding="utf-8").strip().split("."))
+    assert version >= (0, 6, 27)

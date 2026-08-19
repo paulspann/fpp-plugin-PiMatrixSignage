@@ -1,0 +1,206 @@
+#!/usr/bin/python3
+"""Privileged factory reset / ownership-transfer helper for Pi Matrix Signage.
+
+The web app invokes this root-owned helper through sudo.  The public entry point
+only schedules a transient systemd worker, so stopping the signage service does
+not kill the reset process.  No user-controlled filesystem paths are accepted.
+"""
+from __future__ import annotations
+
+import fcntl
+import json
+import os
+import shutil
+import subprocess
+import sys
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+SERVICE = "pi-matrix-signage.service"
+HELPER = Path("/usr/local/sbin/pi-matrix-signage-reset")
+PERSIST = Path("/home/fpp/media/pi-matrix-signage-data")
+FPP_MEDIA = Path("/home/fpp/media")
+STATUS = PERSIST / "factory-reset-status.json"
+CONNMAN_DIR = Path("/var/lib/connman")
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def write_status(**updates) -> None:
+    PERSIST.mkdir(parents=True, exist_ok=True)
+    data = {}
+    try:
+        data = json.loads(STATUS.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    data.update(updates)
+    tmp = STATUS.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
+    os.replace(tmp, STATUS)
+    try:
+        shutil.chown(STATUS, user="fpp", group="fpp")
+    except Exception:
+        pass
+
+
+def _chown_fpp(path: Path) -> None:
+    try:
+        shutil.chown(path, user="fpp", group="fpp")
+    except Exception:
+        pass
+
+
+def _clear_directory(path: Path) -> None:
+    if not path.exists():
+        return
+    for child in path.iterdir():
+        try:
+            if child.is_dir() and not child.is_symlink():
+                shutil.rmtree(child)
+            else:
+                child.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def _read_fpp_mode(settings_file: Path) -> str:
+    try:
+        for line in settings_file.read_text(encoding="utf-8", errors="replace").splitlines():
+            if line.startswith("fppMode="):
+                return line.split("=", 1)[1].strip()
+    except Exception:
+        pass
+    return "player"
+
+
+def reset_fpp_site(clear_network: bool) -> None:
+    """Remove FPP site/output configuration while keeping the FPP installation.
+
+    FPP mode is retained so a Player remains a Player.  With clear_network=True,
+    FPP's saved interface/Wi-Fi configuration and generated ConnMan profile are
+    removed as well; the reboot lets FPP recreate its normal first-use network.
+    """
+    settings_file = FPP_MEDIA / "settings"
+    mode = _read_fpp_mode(settings_file)
+
+    config = FPP_MEDIA / "config"
+    if config.exists():
+        preserved: dict[str, bytes] = {}
+        if not clear_network:
+            for item in config.iterdir():
+                if item.is_file() and (item.name.startswith("interface.") or item.name.startswith("leases.") or item.name == "dns"):
+                    try:
+                        preserved[item.name] = item.read_bytes()
+                    except Exception:
+                        pass
+        _clear_directory(config)
+        for name, value in preserved.items():
+            (config / name).write_bytes(value)
+            _chown_fpp(config / name)
+    else:
+        config.mkdir(parents=True, exist_ok=True)
+    _chown_fpp(config)
+
+    # Clear FPP site automation/output state but not the FPP software/plugin tree.
+    for name in ("schedule", "universes", "pixelnetDMX", "timezone"):
+        try:
+            (FPP_MEDIA / name).unlink()
+        except FileNotFoundError:
+            pass
+    for name in ("playlists", "scripts", "events", "channelmemorymaps"):
+        target = FPP_MEDIA / name
+        if target.exists():
+            shutil.rmtree(target, ignore_errors=True)
+        target.mkdir(parents=True, exist_ok=True)
+        _chown_fpp(target)
+
+    # Reset FPP site preferences/identity to defaults while retaining operating mode.
+    settings_file.write_text(f"fppMode={mode}\n", encoding="utf-8")
+    _chown_fpp(settings_file)
+
+    if clear_network:
+        # FPP 9.x can generate this ConnMan profile from interface.wlan0. Remove
+        # only FPP-owned generated profiles rather than touching arbitrary OS data.
+        connman = CONNMAN_DIR
+        if connman.is_dir():
+            for pattern in ("fpp*.config", "FPP*.config"):
+                for item in connman.glob(pattern):
+                    try:
+                        item.unlink()
+                    except OSError:
+                        pass
+
+
+def reset_application_state() -> None:
+    """Remove all customer-created Pi Matrix state, including local licence data."""
+    # These locations can contain database copies, media, credentials, session
+    # material, licence state and rollback databases.  Keep license.env because
+    # it contains the product's server configuration, not the customer's key.
+    for name in ("data", "uploads", "backups", "upgrade"):
+        shutil.rmtree(PERSIST / name, ignore_errors=True)
+    for name in ("data", "uploads", "backups", "upgrade"):
+        target = PERSIST / name
+        target.mkdir(parents=True, exist_ok=True)
+        _chown_fpp(target)
+    for sub in ("images", "fonts", "videos", "video-src", "shaders"):
+        target = PERSIST / "uploads" / sub
+        target.mkdir(parents=True, exist_ok=True)
+        _chown_fpp(target)
+
+
+def worker(clear_network: bool) -> int:
+    lock_handle = open("/run/pi-matrix-signage-factory-reset.lock", "w")
+    try:
+        fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        write_status(state="failed", message="Another factory reset is already running", completed_at=now_iso())
+        return 1
+    try:
+        write_status(state="resetting", message="Stopping Pi Matrix Signage and erasing customer data", started_at=now_iso(), completed_at=None, clear_network=clear_network)
+        subprocess.run(["systemctl", "stop", SERVICE], check=False, timeout=20)
+        reset_application_state()
+        write_status(state="resetting_fpp", message="Resetting FPP site configuration" + (" and network/Wi-Fi" if clear_network else ""), clear_network=clear_network)
+        reset_fpp_site(clear_network)
+        subprocess.run(["systemctl", "restart", "fppd.service"], check=False, timeout=25)
+        subprocess.run(["systemctl", "start", SERVICE], check=False, timeout=20)
+        write_status(state="success", message="Factory reset completed. Initial Pi Matrix login is admin / pimatrix and a password change is required.", completed_at=now_iso(), clear_network=clear_network)
+        if clear_network:
+            # Apply the cleared FPP network state cleanly.  The UI already warns
+            # that the current browser connection will be lost.
+            subprocess.run(["systemd-run", "--on-active=3s", "--collect", "/usr/bin/systemctl", "reboot"], check=False, timeout=10)
+        return 0
+    except Exception as exc:
+        try:
+            subprocess.run(["systemctl", "start", SERVICE], check=False, timeout=20)
+        except Exception:
+            pass
+        write_status(state="failed", message=str(exc), completed_at=now_iso(), clear_network=clear_network)
+        return 1
+
+
+def schedule(clear_network: bool) -> int:
+    if os.geteuid() != 0:
+        return 1
+    unit = f"pi-matrix-signage-factory-reset-{time.time_ns()}-{os.getpid()}"
+    result = subprocess.run(
+        ["systemd-run", f"--unit={unit}", "--collect", "--property=Type=oneshot", str(HELPER), "--worker", "1" if clear_network else "0"],
+        text=True, capture_output=True,
+    )
+    if result.returncode != 0:
+        print(result.stderr or result.stdout, file=sys.stderr)
+    return result.returncode
+
+
+if __name__ == "__main__":
+    if os.geteuid() != 0:
+        print("Pi Matrix Signage reset helper must run as root", file=sys.stderr)
+        raise SystemExit(1)
+    if len(sys.argv) == 2 and sys.argv[1] in {"0", "1"}:
+        raise SystemExit(schedule(sys.argv[1] == "1"))
+    if len(sys.argv) == 3 and sys.argv[1] == "--worker" and sys.argv[2] in {"0", "1"}:
+        raise SystemExit(worker(sys.argv[2] == "1"))
+    print("Invalid arguments", file=sys.stderr)
+    raise SystemExit(2)

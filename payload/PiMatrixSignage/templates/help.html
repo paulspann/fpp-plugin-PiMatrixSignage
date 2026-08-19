@@ -23,6 +23,7 @@
       <a href="#playlists">Playlists</a>
       <a href="#schedules">Schedules &amp; emergency</a>
       <a href="#setup">Display setup &amp; licence</a>
+      <a href="#diagnostics">System diagnostics &amp; recovery</a>
       <a href="#shaders">Shaders &amp; live weather</a>
       <a href="#backup">Backup &amp; restore</a>
       <a href="#users">Users &amp; permissions</a>
@@ -143,8 +144,18 @@
         <p>Four built-in starter profiles cover common Hanson P5 and Colorlight P5/P10 arrangements. They are starting points, not electrical specifications: verify scan rate, driver mapping and colour order against the actual panel. Built-in profiles cannot be deleted. Apply the closest template, make corrections, then save a named site-specific profile after the sign is working. Profiles include the panel description and dimensions, scan, output hardware, receiver and interface, layout, rotation, colour order and brightness limit. Applying any profile requires commissioning again.</p>
         <h3>GPIO controls</h3>
         <p>The dedicated A/B/C inputs are provided by the Hanson rPI-MFC and are hidden in Colorlight mode. Choose normally open/closed wiring to match the physical circuit and use debounce/latch settings to prevent accidental repeats.</p>
-        <h3>Diagnostics</h3>
-        <p>Diagnostics reports renderer state, dimensions, output target, recent errors and supporting service information. Copy this information when requesting support.</p>
+      </section>
+
+      <section id="diagnostics">
+        <h2>System diagnostics and recovery</h2>
+        <p class="help-lead">Open the cogwheel and choose <strong>System diagnostics</strong> to see live controller health and the safe automatic-recovery controls.</p>
+        <h3>Live health</h3>
+        <p>The page reports Pi CPU load and temperature, memory and storage, uptime and IP addresses, renderer frame rate and dropped frames, FPPD/DDP state, internet availability and live-widget fetch health.</p>
+        <h3>Automatic recovery</h3>
+        <p>Automatic recovery can restart a stalled LED renderer and restart FPPD when the service is genuinely inactive. Threshold and cooldown settings prevent repeated recovery loops. Pi Matrix Signage never automatically reboots or powers off the Raspberry Pi.</p>
+        <h3>Manual recovery and history</h3>
+        <p>Use <strong>Restart renderer now</strong> or <strong>Restart FPPD now</strong> when diagnosing a live fault. Recovery history records automatic and manual actions and can be cleared when no longer needed.</p>
+        <div class="help-note"><strong>Access:</strong> System diagnostics uses the Display setup permission, so moving the page does not change any existing user's rights.</div>
       </section>
 
       <section id="shaders">
@@ -178,9 +189,9 @@
         <h2>Users and permissions</h2>
         <p>Every operator should have an individual account. Permissions hide inaccessible pages and reject unauthorised server requests.</p>
         <table class="help-table"><thead><tr><th>Permission</th><th>Allows</th></tr></thead><tbody>
-          <tr><td>Dashboard</td><td>View status and use permitted immediate controls.</td></tr><tr><td>Messages</td><td>Create and edit message content.</td></tr><tr><td>Playlists</td><td>Create and order playlists.</td></tr><tr><td>Schedules</td><td>Manage schedules, conditions, brightness and emergency configuration.</td></tr><tr><td>Display setup</td><td>Change licence, layout, output, GPIO and diagnostics settings.</td></tr><tr><td>Backup</td><td>Create, download, upload and restore backups.</td></tr><tr><td>Users</td><td>Create accounts and assign permissions.</td></tr>
+          <tr><td>Dashboard</td><td>View status and use permitted immediate controls.</td></tr><tr><td>Messages</td><td>Create and edit message content.</td></tr><tr><td>Playlists</td><td>Create and order playlists.</td></tr><tr><td>Schedules</td><td>Manage schedules, conditions, brightness and emergency configuration.</td></tr><tr><td>Display setup</td><td>Change licence, layout, output and GPIO settings. This permission also grants the separate System diagnostics page.</td></tr><tr><td>Backup</td><td>Create, download, upload and restore backups.</td></tr><tr><td>Users</td><td>Create accounts and assign permissions.</td></tr>
         </tbody></table>
-        <p>The cogwheel only appears if the current user can access at least one of Display setup, Backup &amp; restore or Users. Password changes and Sign out remain available in the top bar.</p>
+        <p>The cogwheel only appears if the current user can access at least one of Display setup/System diagnostics, Backup &amp; restore or Users. Password changes and Sign out remain available in the top bar.</p>
       </section>
 
       <section id="remote">

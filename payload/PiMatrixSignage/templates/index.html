@@ -27,6 +27,7 @@
         <button class="settings-menu-toggle" id="settingsMenuToggle" type="button" aria-label="Open settings menu" aria-haspopup="true" aria-expanded="false" aria-controls="settingsMenuPanel"><span aria-hidden="true">⚙</span></button>
         <div class="settings-menu-panel hidden" id="settingsMenuPanel" role="menu">
           <button class="tab settings-menu-item permission-gated" data-tab="setup" data-permission="display_setup" type="button" role="menuitem">Display setup</button>
+          <button class="tab settings-menu-item permission-gated" data-tab="diagnostics" data-permission="display_setup" type="button" role="menuitem">System diagnostics</button>
           <button class="tab settings-menu-item permission-gated" data-tab="backup" data-permission="backup" type="button" role="menuitem">Backup &amp; restore</button>
           <button class="tab settings-menu-item permission-gated" data-tab="users" data-permission="users" type="button" role="menuitem">Users</button>
         </div>
@@ -758,6 +759,22 @@
           <div class="callout warn"><strong>Emergency recommendation:</strong> use a normally-open momentary button with <em>Latch until cleared</em>. One press activates the configured Emergency message; releasing the button cannot accidentally cancel it. For a fail-safe wired loop, choose Normally closed.</div>
         </article>
 
+
+        <article class="card full-span danger-zone">
+          <div class="card-head"><div><h2>Raspberry Pi power</h2><p>Safely halt the Pi before removing power.</p></div><button class="btn danger" id="shutdownPi">Shut down Pi…</button></div>
+          <div class="callout warn"><strong>Safe shutdown:</strong> the display and web interface will go offline. Wait until the Pi activity LED has stopped before removing power. Only users with Display setup permission can request a shutdown.</div>
+        </article>
+
+        <article class="card full-span">
+          <div class="card-head"><div><h2>FPP setup helper</h2><p>Use these hardware-specific values in Falcon Player after saving Display Setup.</p></div><button class="btn secondary" id="refreshFpp">Refresh</button></div>
+          <div id="fppSetup" class="fpp-setup"></div>
+          <div class="callout"><strong>Important:</strong> FPP owns the physical output and timing. Pi Matrix Signage sends the finished RGB frame to FPP, which drives either the Hanson board or the Colorlight receiver.</div>
+        </article>
+      </div>
+    </section>
+
+    <section class="page permission-page" id="page-diagnostics" data-permission="display_setup">
+      <div class="grid diagnostics-grid">
         <article class="card full-span diagnostics-card">
           <div class="card-head">
             <div><h2>System diagnostics &amp; recovery</h2><p>Live health of the Pi, renderer, FPP and network. Automatic recovery is deliberately limited to safe service/renderer restarts.</p></div>
@@ -801,16 +818,6 @@
           </details>
         </article>
 
-        <article class="card full-span danger-zone">
-          <div class="card-head"><div><h2>Raspberry Pi power</h2><p>Safely halt the Pi before removing power.</p></div><button class="btn danger" id="shutdownPi">Shut down Pi…</button></div>
-          <div class="callout warn"><strong>Safe shutdown:</strong> the display and web interface will go offline. Wait until the Pi activity LED has stopped before removing power. Only users with Display setup permission can request a shutdown.</div>
-        </article>
-
-        <article class="card full-span">
-          <div class="card-head"><div><h2>FPP setup helper</h2><p>Use these hardware-specific values in Falcon Player after saving Display Setup.</p></div><button class="btn secondary" id="refreshFpp">Refresh</button></div>
-          <div id="fppSetup" class="fpp-setup"></div>
-          <div class="callout"><strong>Important:</strong> FPP owns the physical output and timing. Pi Matrix Signage sends the finished RGB frame to FPP, which drives either the Hanson board or the Colorlight receiver.</div>
-        </article>
       </div>
     </section>
 
@@ -839,8 +846,21 @@
         <article class="card full-span">
           <div class="card-head"><div><h2>System support package</h2><p>Download a privacy-safe diagnostic ZIP for support without including passwords or the licence key.</p></div><button class="btn primary" id="createSupportPackage" type="button">Create support package</button></div>
           <label class="checkline"><input type="checkbox" id="supportIncludePreview"> Include the current display preview/test-pattern image</label>
-          <div class="backup-includes"><div><strong>Versions and health</strong><span>Application, FPP service state, diagnostics and recent warnings/errors.</span></div><div><strong>Hardware</strong><span>Selected profile, network interfaces, commissioning result and Colorlight test.</span></div><div><strong>Sanitised FPP output</strong><span>Channel-output configuration with known passwords, keys, tokens and secrets removed.</span></div><div><strong>Licence status</strong><span>Status and verification dates only; the licence key is excluded.</span></div></div>
+          <div class="backup-includes"><div><strong>Commissioning certificate</strong><span>Human-readable hardware, software, Device ID, commissioning date and recorded panel-test results.</span></div><div><strong>Versions and health</strong><span>Application, FPP service state, diagnostics and recent warnings/errors.</span></div><div><strong>Hardware</strong><span>Selected profile, network interfaces, commissioning result and Colorlight test.</span></div><div><strong>Sanitised FPP output</strong><span>Channel-output configuration with known passwords, keys, tokens and secrets removed.</span></div><div><strong>Licence status</strong><span>Status and verification dates only; the licence key is excluded.</span></div></div>
           <div class="callout compact-callout warn"><strong>Review before sharing:</strong> automatic redaction removes known secret fields, but the package can still identify the controller, network interface names and IP addresses.</div>
+        </article>
+
+        <article class="card full-span">
+          <div class="card-head"><div><h2>Factory reset / transfer ownership</h2><p>Permanently erase customer data and return this controller to a clean Pi Matrix Signage setup without reinstalling FPP or the application.</p></div></div>
+          <div class="callout warn"><strong>Destructive action:</strong> this erases messages, playlists, schedules, users, uploaded media, saved hardware profiles, local licence key/entitlement, backups/rollback copies and FPP site/output configuration. It cannot be undone. Download any backup you need first.</div>
+          <div class="form-grid cols-2">
+            <label>Current password<input type="password" id="factoryResetPassword" autocomplete="current-password" placeholder="Required"></label>
+            <label>Type RESET THIS CONTROLLER<input id="factoryResetConfirmation" autocomplete="off" spellcheck="false" placeholder="RESET THIS CONTROLLER"></label>
+          </div>
+          <label class="checkline"><input type="checkbox" id="factoryResetClearNetwork" checked> Erase FPP network/Wi-Fi settings too (recommended when transferring ownership; this connection will be lost and the Pi will reboot)</label>
+          <label class="checkline"><input type="checkbox" id="factoryResetAcknowledge"> I understand this permanently erases the controller data and I have downloaded any backup I need.</label>
+          <div class="toolbar"><button class="btn danger" id="factoryResetController" type="button">Factory reset controller…</button></div>
+          <div class="callout compact-callout"><strong>Licence transfer:</strong> the local licence key and signed entitlement are erased. WHMCS remains authoritative, so use WHMCS Reissue/transfer before activating that licence on replacement hardware.</div>
         </article>
 
         <article class="card full-span">

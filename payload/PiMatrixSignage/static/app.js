@@ -191,7 +191,8 @@
   $$('.tab').forEach(btn => btn.addEventListener('click', () => {
     $$('.tab').forEach(x=>x.classList.remove('active')); btn.classList.add('active');
     $$('.page').forEach(x=>x.classList.remove('active')); $(`page-${btn.dataset.tab}`).classList.add('active');
-    if (btn.dataset.tab === 'setup') { loadFppSetup(); loadDiagnostics(true); loadLicence(); loadHardwareProfiles(); detectColorlightInterfaces(true); }
+    if (btn.dataset.tab === 'setup') { loadFppSetup(); loadLicence(); loadHardwareProfiles(); detectColorlightInterfaces(true); }
+    if (btn.dataset.tab === 'diagnostics') loadDiagnostics(true);
     if (btn.dataset.tab === 'upgrade') loadUpgradeStatus();
     if (btn.dataset.tab === 'backup') loadBackups(true);
     if (btn.dataset.tab === 'users') loadUsers();
@@ -931,6 +932,17 @@
   async function applyHardwareProfile(id){if(!confirm('Apply this hardware profile? Current display hardware settings will be replaced and commissioning will be cleared.'))return;try{state.settings=await api(`/api/hardware-profiles/${id}/apply`,{method:'POST',body:{}});populateSettings();await Promise.all([loadFppSetup(),detectColorlightInterfaces(true)]);toast('Hardware profile applied');}catch(e){toast(e.message,true);}}
   async function deleteHardwareProfile(id){if(!confirm('Delete this hardware profile?'))return;try{await api(`/api/hardware-profiles/${id}`,{method:'DELETE'});await loadHardwareProfiles();toast('Hardware profile deleted');}catch(e){toast(e.message,true);}}
   function createSupportPackage(){const preview=$('supportIncludePreview').checked?'1':'0';location.href=`/api/support-package?include_preview=${preview}`;toast('Creating support package…');}
+  async function factoryResetController(){
+    const password=$('factoryResetPassword').value,confirmation=$('factoryResetConfirmation').value.trim(),acknowledged=$('factoryResetAcknowledge').checked,clearNetwork=$('factoryResetClearNetwork').checked;
+    if(!password){toast('Enter your current password',true);return;}
+    if(confirmation!=='RESET THIS CONTROLLER'){toast('Type RESET THIS CONTROLLER exactly',true);return;}
+    if(!acknowledged){toast('Confirm that you understand the reset is permanent',true);return;}
+    const networkText=clearNetwork?'FPP network/Wi-Fi settings will also be erased, this browser connection will be lost, and the Pi will reboot.':'The current FPP network configuration will be retained.';
+    if(!confirm(`Factory reset this controller?\n\n${networkText}\n\nAll Pi Matrix Signage customer data, users, media, local licence data, backups and FPP site/output configuration will be permanently erased.`))return;
+    const button=$('factoryResetController');button.disabled=true;button.textContent='Starting factory reset…';
+    try{const r=await api('/api/factory-reset',{method:'POST',body:{password,confirmation,acknowledged:true,clear_network:clearNetwork}});alert(`${r.message}\n\nWhen the reset completes, Pi Matrix Signage starts with admin / pimatrix and requires an immediate password change.`);if(!clearNetwork)setTimeout(()=>{location.href='/login';},2500);}
+    catch(e){button.disabled=false;button.textContent='Factory reset controller…';toast(e.message,true);}
+  }
 
   // GPIO / physical controls
   function gpioRow(id){return document.querySelector(`[data-gpio-input="${id}"]`);}
@@ -948,6 +960,7 @@
     let s=Math.max(0,Math.floor(Number(seconds)||0)),d=Math.floor(s/86400);s%=86400;const h=Math.floor(s/3600),m=Math.floor((s%3600)/60);return d?`${d}d ${h}h ${m}m`:`${h}h ${m}m`;
   }
   function setupTabVisible(){return document.querySelector('.tab.active')?.dataset.tab==='setup';}
+  function diagnosticsTabVisible(){return document.querySelector('.tab.active')?.dataset.tab==='diagnostics';}
   function renderDiagnostics(d,syncControls=false){
     if(!d||d.error){$('diagOverall').textContent=d?.error||'Diagnostics unavailable';$('diagOverall').className='health-badge error';return;}
     state.lastDiagnostics=d;const overall=d.overall||'warn';$('diagOverall').textContent=overall==='ok'?'All systems healthy':overall==='error'?'Attention required':'Warnings';$('diagOverall').className=`health-badge ${overall}`;
@@ -967,7 +980,7 @@
     const events=recovery.events||[];$('recoveryHistory').innerHTML=events.length?events.map(e=>`<div class="recovery-row"><span>${esc(String(e.created_at||'').replace('T',' '))}</span><strong>${esc(e.action||e.event_type||'Recovery')}</strong><span class="result ${esc(e.result||'')}">${esc(e.result||'')}</span><span class="details" title="${esc(e.details||'')}">${esc(e.details||'')}</span></div>`).join(''):'<div class="recovery-empty">No automatic or manual recovery actions have been needed.</div>';
   }
   async function loadDiagnostics(syncControls=false){
-    if(!can('display_setup')||state.diagnosticsBusy)return;state.diagnosticsBusy=true;try{renderDiagnostics(await api('/api/diagnostics'),syncControls);}catch(e){if(setupTabVisible())toast(e.message,true);$('diagOverall').textContent='Diagnostics unavailable';$('diagOverall').className='health-badge error';}finally{state.diagnosticsBusy=false;}
+    if(!can('display_setup')||state.diagnosticsBusy)return;state.diagnosticsBusy=true;try{renderDiagnostics(await api('/api/diagnostics'),syncControls);}catch(e){if(diagnosticsTabVisible())toast(e.message,true);$('diagOverall').textContent='Diagnostics unavailable';$('diagOverall').className='health-badge error';}finally{state.diagnosticsBusy=false;}
   }
   async function saveRecoverySettings(){
     try{const body={auto_recovery_enabled:$('autoRecoveryEnabled').checked,auto_recover_renderer:$('autoRecoverRenderer').checked,auto_recover_fppd:$('autoRecoverFppd').checked,renderer_stall_seconds:+$('rendererStallSeconds').value,recovery_cooldown_seconds:+$('recoveryCooldownSeconds').value};state.settings=await api('/api/settings',{method:'PUT',body});toast('Recovery settings saved');await loadDiagnostics(true);}catch(e){toast(e.message,true);}
@@ -1200,7 +1213,7 @@
   $('detectedColorlightInterface').addEventListener('change',updateDetectedInterfaceWarning);
     ['panelWidth','panelHeight','panelsAcross','panelsDown'].forEach(id=>$(id).addEventListener('input',updateLayoutSummary));$('brightness').addEventListener('input',()=>{$('brightnessValue').textContent=`${$('brightness').value}%`;});$('saveSettings').addEventListener('click',saveSettings);$('activateLicence').addEventListener('click',activateLicence);$('checkLicence').addEventListener('click',checkLicence);$('clearLocalLicence').addEventListener('click',clearLocalLicence);$('openLicenseSetup').addEventListener('click',openLicenceSetup);$('refreshFpp').addEventListener('click',loadFppSetup);$('saveGpioControls').addEventListener('click',saveGpioControls);$$('[data-gpio-field="action"]').forEach(x=>x.addEventListener('change',syncGpioEmergencyFields));$$('[data-gpio-test]').forEach(x=>x.addEventListener('click',()=>testGpioAction(x.dataset.gpioTest)));$('shutdownPi').addEventListener('click',shutdownPi);$('refreshDiagnostics').addEventListener('click',()=>loadDiagnostics(true));$('saveRecoverySettings').addEventListener('click',saveRecoverySettings);$('restartRenderer').addEventListener('click',()=>diagnosticsAction('restart-renderer','Restart the LED renderer now? The web interface stays online.'));$('restartFppd').addEventListener('click',()=>diagnosticsAction('restart-fppd','Restart FPPD now? The LED output may pause briefly.'));$('clearRecoveryHistory').addEventListener('click',()=>diagnosticsAction('clear-history','Clear the recovery history?'));
 
-  $('createBackup').addEventListener('click',createBackup);$('refreshBackups').addEventListener('click',()=>loadBackups());$('exportConfiguration').addEventListener('click',()=>downloadPortable('configuration'));$('importConfigurationFile').addEventListener('change',async()=>{const f=$('importConfigurationFile').files?.[0];if(f){const r=await importPortableFile(f,'configuration');if(r){await loadAll();toast('Portable configuration imported');}}$('importConfigurationFile').value='';});
+  $('createBackup').addEventListener('click',createBackup);$('refreshBackups').addEventListener('click',()=>loadBackups());$('factoryResetController').addEventListener('click',factoryResetController);$('exportConfiguration').addEventListener('click',()=>downloadPortable('configuration'));$('importConfigurationFile').addEventListener('change',async()=>{const f=$('importConfigurationFile').files?.[0];if(f){const r=await importPortableFile(f,'configuration');if(r){await loadAll();toast('Portable configuration imported');}}$('importConfigurationFile').value='';});
   const backupZone=$('backupDropZone');
   ['dragenter','dragover'].forEach(name=>backupZone.addEventListener(name,ev=>{ev.preventDefault();if(!$('backupRestoreFile').disabled)backupZone.classList.add('dragover');}));
   ['dragleave','drop'].forEach(name=>backupZone.addEventListener(name,ev=>{ev.preventDefault();backupZone.classList.remove('dragover');}));
@@ -1223,5 +1236,5 @@
   setupMessageEditorWorkspace();
   enhanceColourPickers();
   initDesignerPanelPreferences();
-  loadAll().then(()=>{refreshStatus();setInterval(refreshStatus,1600);setInterval(()=>{if(setupTabVisible())loadDiagnostics(false);},3000);setInterval(()=>{if(setupTabVisible()&&can('display_setup'))loadGpioControls(false);},900);const saved=localStorage.getItem('pimatrixLivePreview');const rate=localStorage.getItem('pimatrixLivePreviewRate');if(rate&&[...$('livePreviewRate').options].some(o=>o.value===rate))$('livePreviewRate').value=rate;const liveMode=localStorage.getItem('pimatrixPreviewMode:live')||'p5',designerMode=localStorage.getItem('pimatrixPreviewMode:designer')||'p5';if([...$('livePreviewMode').options].some(o=>o.value===liveMode))$('livePreviewMode').value=liveMode;if([...$('designerPreviewMode').options].some(o=>o.value===designerMode))$('designerPreviewMode').value=designerMode;setLivePreviewEnabled(saved!=='0');updateHistoryButtons();updateClipboardButton();refreshPreviewSimulation();});
+  loadAll().then(()=>{refreshStatus();setInterval(refreshStatus,1600);setInterval(()=>{if(diagnosticsTabVisible())loadDiagnostics(false);},3000);setInterval(()=>{if(setupTabVisible()&&can('display_setup'))loadGpioControls(false);},900);const saved=localStorage.getItem('pimatrixLivePreview');const rate=localStorage.getItem('pimatrixLivePreviewRate');if(rate&&[...$('livePreviewRate').options].some(o=>o.value===rate))$('livePreviewRate').value=rate;const liveMode=localStorage.getItem('pimatrixPreviewMode:live')||'p5',designerMode=localStorage.getItem('pimatrixPreviewMode:designer')||'p5';if([...$('livePreviewMode').options].some(o=>o.value===liveMode))$('livePreviewMode').value=liveMode;if([...$('designerPreviewMode').options].some(o=>o.value===designerMode))$('designerPreviewMode').value=designerMode;setLivePreviewEnabled(saved!=='0');updateHistoryButtons();updateClipboardButton();refreshPreviewSimulation();});
 })();

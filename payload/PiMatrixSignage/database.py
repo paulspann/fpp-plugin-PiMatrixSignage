@@ -23,6 +23,7 @@ DEFAULT_SETTINGS = {
     "colorlight_commissioned": False,
     "colorlight_commissioned_at": "",
     "colorlight_commissioned_by": "",
+    "colorlight_commissioning_tests": {},
     "display_rotation": 0,
     "brightness": 60,
     "frame_rate": 25,

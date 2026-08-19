@@ -31,7 +31,7 @@ if pgrep -f '/home/fpp/media/pi-matrix-signage/app.py' >/dev/null 2>&1; then
 fi
 
 rm -f "/etc/systemd/system/$SERVICE"
-rm -f /usr/local/sbin/pi-matrix-signage-upgrade /usr/local/sbin/pi-matrix-signage-poweroff
+rm -f /usr/local/sbin/pi-matrix-signage-upgrade /usr/local/sbin/pi-matrix-signage-poweroff /usr/local/sbin/pi-matrix-signage-reset
 rm -f /etc/sudoers.d/pi-matrix-signage /etc/sudoers.d/pi-matrix-signage-upgrade
 systemctl daemon-reload
 systemctl reset-failed "$SERVICE" 2>/dev/null || true

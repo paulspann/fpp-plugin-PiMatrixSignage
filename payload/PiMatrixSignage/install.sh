@@ -8,6 +8,7 @@ SERVICE="pi-matrix-signage.service"
 UPGRADE_HELPER="/usr/local/sbin/pi-matrix-signage-upgrade"
 SUDOERS_FILE="/etc/sudoers.d/pi-matrix-signage"
 POWER_HELPER="/usr/local/sbin/pi-matrix-signage-poweroff"
+RESET_HELPER="/usr/local/sbin/pi-matrix-signage-reset"
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [[ ${EUID} -ne 0 ]]; then
@@ -67,7 +68,8 @@ install -m 0644 "$DEST/systemd/$SERVICE" "/etc/systemd/system/$SERVICE"
 # Install the narrow, root-owned updater. The web service itself still runs as fpp.
 install -o root -g root -m 0755 "$DEST/systemd/pi-matrix-signage-upgrade" "$UPGRADE_HELPER"
 install -o root -g root -m 0755 "$DEST/systemd/pi-matrix-signage-poweroff" "$POWER_HELPER"
-printf 'fpp ALL=(root) NOPASSWD: %s, %s\n' "$UPGRADE_HELPER" "$POWER_HELPER" > "$SUDOERS_FILE"
+install -o root -g root -m 0755 "$DEST/systemd/pi-matrix-signage-reset" "$RESET_HELPER"
+printf 'fpp ALL=(root) NOPASSWD: %s, %s, %s\n' "$UPGRADE_HELPER" "$POWER_HELPER" "$RESET_HELPER" > "$SUDOERS_FILE"
 chmod 0440 "$SUDOERS_FILE"
 rm -f /etc/sudoers.d/pi-matrix-signage-upgrade
 if command -v visudo >/dev/null 2>&1; then
