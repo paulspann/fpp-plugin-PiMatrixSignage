@@ -1177,7 +1177,58 @@ def _render_led_sprite(text: str, max_w: int, max_h: int, color: tuple[int, int,
     return out
 
 
-def _apply_sprite_color_effect(sprite: Image.Image, layer: dict, elapsed: float) -> Image.Image:
+def _word_colour_ranges(alpha: Image.Image, text: str) -> list[tuple[int, int, int]]:
+    """Map laid-out words to their real ink spans instead of equal-width slices."""
+    w, h = alpha.size
+    pixels = alpha.load()
+    active_rows = [any(pixels[x, y] > 0 for x in range(w)) for y in range(h)]
+    text_lines = [line for line in str(text or "").split("\n") if line.strip()]
+    ink_rows = [y for y, active in enumerate(active_rows) if active]
+    if not ink_rows:
+        return []
+    first_row, last_row = ink_rows[0], ink_rows[-1] + 1
+    vertical_gaps = []
+    gap_start = None
+    for y in range(first_row, last_row + 1):
+        blank = y == last_row or not active_rows[y]
+        if blank and gap_start is None:
+            gap_start = y
+        elif not blank and gap_start is not None:
+            vertical_gaps.append((gap_start, y)); gap_start = None
+    line_cuts = sorted(
+        ((a + b) // 2 for a, b in sorted(vertical_gaps, key=lambda gap: gap[1] - gap[0], reverse=True)[:max(0, len(text_lines) - 1)])
+    )
+    row_boundaries = [first_row, *line_cuts, last_row]
+    row_bands = list(zip(row_boundaries, row_boundaries[1:]))
+    ranges = []
+    palette_index = 0
+    for band_index, (top, bottom) in enumerate(row_bands):
+        line = text_lines[band_index] if band_index < len(text_lines) else ""
+        word_count = max(1, len(re.findall(r"\S+", line)))
+        active_cols = [any(pixels[x, y] > 0 for y in range(top, bottom)) for x in range(w)]
+        ink = [x for x, active in enumerate(active_cols) if active]
+        if not ink:
+            continue
+        first, last = ink[0], ink[-1] + 1
+        gaps = []
+        gap_start = None
+        for x in range(first, last + 1):
+            blank = x == last or not active_cols[x]
+            if blank and gap_start is None:
+                gap_start = x
+            elif not blank and gap_start is not None:
+                gaps.append((gap_start, x)); gap_start = None
+        separators = sorted(gaps, key=lambda gap: (gap[1] - gap[0], -gap[0]), reverse=True)[:max(0, word_count - 1)]
+        cuts = sorted((a + b) // 2 for a, b in separators)
+        boundaries = [first, *cuts, last]
+        for index in range(len(boundaries) - 1):
+            ranges.append((boundaries[index], boundaries[index + 1], palette_index))
+            palette_index += 1
+    return ranges
+
+
+def _apply_sprite_color_effect(sprite: Image.Image, layer: dict, elapsed: float,
+                               laid_out_text: str | None = None) -> Image.Image:
     mode = str(layer.get("color_effect") or "none").lower()
     if mode == "none":
         return sprite
@@ -1218,13 +1269,20 @@ def _apply_sprite_color_effect(sprite: Image.Image, layer: dict, elapsed: float)
                 palette.append(_hex_color(raw, "#ffffff"))
         if not palette:
             palette = [c1, c2]
-        text = str(layer.get("text") or "")
-        units = list(text.replace("\n", "")) if mode == "characters" else [x for x in re.split(r"\s+", text.strip()) if x]
-        count = max(1, len(units))
-        for x in range(w):
-            idx = min(count - 1, int(x / max(1, w) * count))
-            col = palette[idx % len(palette)]
-            for y in range(h): px[x,y] = col
+        text = str(laid_out_text if laid_out_text is not None else layer.get("text") or "")
+        if mode == "words":
+            for left, right, index in _word_colour_ranges(alpha, text):
+                col = palette[index % len(palette)]
+                for x in range(left, right):
+                    for y in range(h):
+                        px[x, y] = col
+        else:
+            units = list(text.replace("\n", ""))
+            count = max(1, len(units))
+            for x in range(w):
+                idx = min(count - 1, int(x / max(1, w) * count))
+                col = palette[idx % len(palette)]
+                for y in range(h): px[x,y] = col
     rgba = rgb.convert("RGBA")
     rgba.putalpha(alpha)
     return rgba
@@ -1480,7 +1538,7 @@ def _render_scene_text(layer: dict, box_w: int, box_h: int, sy: float, elapsed: 
             shadow_body = _render_ttf_sprite(laid_out, font, color, outline, 0, spacing, align,
                                              render_mode, pixel_scale, pixel_bold, letter_spacing)
 
-    sprite = _apply_sprite_color_effect(sprite, layer, elapsed)
+    sprite = _apply_sprite_color_effect(sprite, layer, elapsed, locals().get("laid_out", text))
     sprite = _with_glow(sprite, layer)
     tw, th = sprite.size
     tx = pad + _align_pos(inner_w, tw, align, 0)

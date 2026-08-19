@@ -1,4 +1,10 @@
-# Pi Matrix Signage v0.6.20
+# Pi Matrix Signage v0.6.21
+
+
+## v0.6.21 – accurate colour by word
+
+- Makes **Colour by word** follow the real rendered word boundaries rather than dividing the layer into equal-width colour bands.
+- Keeps every letter of a word in one palette colour regardless of differences in word length, spacing, alignment or font width.
 
 
 ## v0.6.20 – stable Cloud Text arrivals
