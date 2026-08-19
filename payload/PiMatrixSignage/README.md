@@ -1,5 +1,9 @@
-# Pi Matrix Signage v0.6.24
+# Pi Matrix Signage v0.6.25
 
+
+## v0.6.25 – hardware-neutral branding
+
+- Replaces the Hanson-only login and top-bar subtitle with hardware-neutral P5/P10 signage wording.
 
 ## v0.6.24 – optional Colorlight output
 

@@ -33,5 +33,6 @@ def test_help_explains_colorlight_receiver_programming_boundary():
     assert "does not replace Colorlight's receiver-card programming tool" in manual
 
 
-def test_release_version_is_v0624():
-    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.6.24"
+def test_release_version_is_v0624_or_later():
+    version = tuple(int(part) for part in (ROOT / "VERSION").read_text(encoding="utf-8").strip().split("."))
+    assert version >= (0, 6, 24)
