@@ -833,10 +833,25 @@ def put_settings():
             elif not (bounds[0] <= value <= bounds[1]):
                 raise ValueError(f"{key} out of range")
             clean[key] = value
+    output_type = str(data.get("panel_output_type", current.get("panel_output_type", "rpi_mfc"))).strip().lower()
+    if output_type not in ("rpi_mfc", "colorlight"):
+        raise ValueError("panel_output_type must be rpi_mfc or colorlight")
+    clean["panel_output_type"] = output_type
+    if "colorlight_receiver_model" in data:
+        receiver_model = str(data["colorlight_receiver_model"]).strip().lower()
+        if receiver_model not in ("5a-75b", "5a-75e"):
+            raise ValueError("Unsupported Colorlight receiver model")
+        clean["colorlight_receiver_model"] = receiver_model
+    if "colorlight_interface" in data:
+        interface = str(data["colorlight_interface"]).strip()
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,31}", interface):
+            raise ValueError("Invalid Colorlight network interface")
+        clean["colorlight_interface"] = interface
     if "panel_scan" in data:
         scan = str(data["panel_scan"]).strip()
-        if scan not in ("1/8", "1/16"):
-            raise ValueError("panel_scan must be 1/8 or 1/16 for the rPI-MFC")
+        supported_scans = ("1/8", "1/16") if output_type == "rpi_mfc" else ("1/4", "1/8", "1/16", "1/32", "1/64")
+        if scan not in supported_scans:
+            raise ValueError(f"panel_scan is not supported for {output_type}")
         clean["panel_scan"] = scan
     if "ddp_host" in data:
         clean["ddp_host"] = str(data["ddp_host"]).strip() or "127.0.0.1"
@@ -2171,7 +2186,37 @@ def fpp_setup_api():
     s = db.get_settings()
     w = int(s["panel_width"]) * int(s["panels_across"])
     h = int(s["panel_height"]) * int(s["panels_down"])
+    output_type = str(s.get("panel_output_type") or "rpi_mfc")
+    colorlight = output_type == "colorlight"
+    interface = str(s.get("colorlight_interface") or "eth1")
+    receiver_model = str(s.get("colorlight_receiver_model") or "5a-75b").upper()
+    interface_path = Path("/sys/class/net") / interface
+    if colorlight:
+        notes = [
+            "Leave FPP in Player or Remote mode; FPP 9.x no longer has a separate Bridge mode.",
+            "Under Channel Inputs, enable E1.31/ArtNet/DDP input. DDP does not require a universe row.",
+            f"Configure the Colorlight {receiver_model} receiver first with Colorlight LEDVISION/LEDSetting, including driver IC, scan rate and cabinet mapping, then save that configuration to the card.",
+            f"Connect the receiver directly to the dedicated {interface} Ethernet interface. Do not share this interface with the normal LAN.",
+            f"In FPP Channel Outputs, enable ColorLight 5A-75 and select {interface}.",
+            f"Set the Colorlight output canvas to {w}x{h}, with FPP start channel 1 and the channel count shown here.",
+            "The signage app continues to send DDP RGB data to FPP on localhost; FPP converts it to Colorlight Ethernet frames.",
+            "If brightness control is inconsistent, update the receiver firmware and verify the saved receiver configuration with Colorlight's setup tool.",
+        ]
+    else:
+        notes = [
+            "Leave FPP in Player or Remote mode; FPP 9.x no longer has a separate Bridge mode.",
+            "Under Channel Inputs, enable E1.31/ArtNet/DDP input. DDP does not require a universe row.",
+            "Enable the LED Panel output and choose Hat/Cap/Cape for the rPI-MFC.",
+            f"Choose the FPP single-panel definition matching {int(s['panel_width'])}x{int(s['panel_height'])} pixels and {s.get('panel_scan', '1/16')} scan.",
+            "Set the FPP panel layout and each physical panel orientation to match your wiring.",
+            "Use FPP start channel 1 and the channel count shown here.",
+            "The signage app sends DDP RGB data to FPP on localhost.",
+        ]
     return jsonify({
+        "output_type": output_type,
+        "output_label": f"Colorlight {receiver_model}" if colorlight else "Hanson rPI-MFC",
+        "network_interface": interface if colorlight else None,
+        "interface_present": interface_path.exists() if colorlight else None,
         "panels_across": int(s["panels_across"]),
         "panels_down": int(s["panels_down"]),
         "panel_size": f"{int(s['panel_width'])}x{int(s['panel_height'])}",
@@ -2180,15 +2225,7 @@ def fpp_setup_api():
         "start_channel": 1,
         "channel_count": w * h * 3,
         "ddp_port": int(s["ddp_port"]),
-        "notes": [
-            "Leave FPP in Player or Remote mode; FPP 9.x no longer has a separate Bridge mode.",
-            "Under Channel Inputs, enable E1.31/ArtNet/DDP input. DDP does not require a universe row.",
-            "Enable the LED Panel output and choose Hat/Cap/Cape for the rPI-MFC.",
-            f"Choose the FPP single-panel definition matching {int(s['panel_width'])}x{int(s['panel_height'])} pixels and {s.get('panel_scan', '1/16')} scan.",
-            "Set the FPP panel layout and each physical panel orientation to match your wiring.",
-            "Use FPP start channel 1 and the channel count shown here.",
-            "The signage app sends DDP RGB data to FPP on localhost.",
-        ],
+        "notes": notes,
     })
 
 
