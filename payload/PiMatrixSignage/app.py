@@ -66,6 +66,13 @@ HARDWARE_PROFILE_KEYS = (
     "brightness", "colorlight_receiver_model", "colorlight_interface",
 )
 
+BUILTIN_HARDWARE_PROFILES = (
+    {"id": -1, "name": "Starter · Hanson P5 64×32 · 1 panel", "builtin": True, "config": {"panel_output_type": "rpi_mfc", "panel_model": "P5 64×32 (verify scan)", "panel_width": 64, "panel_height": 32, "panel_scan": "1/16", "panels_across": 1, "panels_down": 1, "display_rotation": 0, "color_order": "RGB", "brightness": 60, "colorlight_receiver_model": "5a-75b", "colorlight_interface": "eth1"}},
+    {"id": -2, "name": "Starter · Hanson P5 64×32 · 2×2", "builtin": True, "config": {"panel_output_type": "rpi_mfc", "panel_model": "P5 64×32 (verify scan)", "panel_width": 64, "panel_height": 32, "panel_scan": "1/16", "panels_across": 2, "panels_down": 2, "display_rotation": 0, "color_order": "RGB", "brightness": 60, "colorlight_receiver_model": "5a-75b", "colorlight_interface": "eth1"}},
+    {"id": -3, "name": "Starter · Colorlight P5 64×32 · 2×2", "builtin": True, "config": {"panel_output_type": "colorlight", "panel_model": "P5 64×32 (verify scan/driver)", "panel_width": 64, "panel_height": 32, "panel_scan": "1/16", "panels_across": 2, "panels_down": 2, "display_rotation": 0, "color_order": "RGB", "brightness": 60, "colorlight_receiver_model": "5a-75b", "colorlight_interface": "eth1"}},
+    {"id": -4, "name": "Starter · Colorlight P10 32×16 · 4×2", "builtin": True, "config": {"panel_output_type": "colorlight", "panel_model": "P10 32×16 (verify scan/driver)", "panel_width": 32, "panel_height": 16, "panel_scan": "1/4", "panels_across": 4, "panels_down": 2, "display_rotation": 0, "color_order": "RGB", "brightness": 60, "colorlight_receiver_model": "5a-75e", "colorlight_interface": "eth1"}},
+)
+
 logging.basicConfig(
     filename=str(LOG_PATH),
     level=logging.INFO,
@@ -998,7 +1005,7 @@ def colorlight_commission_api():
 @app.get("/api/hardware-profiles")
 @permission_required("display_setup")
 def hardware_profiles_api():
-    return jsonify(db.list_hardware_profiles())
+    return jsonify([*BUILTIN_HARDWARE_PROFILES, *db.list_hardware_profiles()])
 
 
 @app.post("/api/hardware-profiles")
@@ -1011,10 +1018,10 @@ def hardware_profile_create_api():
     return jsonify(db.get_hardware_profile(profile_id)), 201
 
 
-@app.post("/api/hardware-profiles/<int:profile_id>/apply")
+@app.post("/api/hardware-profiles/<int(signed=True):profile_id>/apply")
 @permission_required("display_setup")
 def hardware_profile_apply_api(profile_id: int):
-    profile = db.get_hardware_profile(profile_id)
+    profile = next((item for item in BUILTIN_HARDWARE_PROFILES if int(item["id"]) == profile_id), None) if profile_id < 0 else db.get_hardware_profile(profile_id)
     if not profile:
         return jsonify({"error": "Hardware profile not found"}), 404
     db.update_settings({key: value for key, value in profile["config"].items() if key in HARDWARE_PROFILE_KEYS})
@@ -1023,9 +1030,11 @@ def hardware_profile_apply_api(profile_id: int):
     return get_settings()
 
 
-@app.delete("/api/hardware-profiles/<int:profile_id>")
+@app.delete("/api/hardware-profiles/<int(signed=True):profile_id>")
 @permission_required("display_setup")
 def hardware_profile_delete_api(profile_id: int):
+    if profile_id < 0:
+        return jsonify({"error": "Built-in starter profiles cannot be deleted"}), 400
     db.delete_hardware_profile(profile_id)
     return jsonify({"ok": True})
 

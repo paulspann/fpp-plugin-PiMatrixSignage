@@ -140,7 +140,7 @@
         <h4>Commissioning wizard</h4>
         <p>The wizard detects Ethernet interfaces and labels the normal-LAN/default-route interface so it is not accidentally selected for Colorlight. Its FPP test checks that FPPD is active and a saved ColorLight 5A-75 output references the chosen interface. Run and visually confirm Grid, Checker, red, green, blue and full-white before marking the sign commissioned. Hardware changes clear the previous pass.</p>
         <h4>Hardware profiles</h4>
-        <p>Save a named profile after a sign is working. Profiles include the panel description and dimensions, scan, output hardware, receiver and interface, layout, rotation, colour order and brightness limit. Applying a profile replaces those hardware settings and requires commissioning again.</p>
+        <p>Four built-in starter profiles cover common Hanson P5 and Colorlight P5/P10 arrangements. They are starting points, not electrical specifications: verify scan rate, driver mapping and colour order against the actual panel. Built-in profiles cannot be deleted. Apply the closest template, make corrections, then save a named site-specific profile after the sign is working. Profiles include the panel description and dimensions, scan, output hardware, receiver and interface, layout, rotation, colour order and brightness limit. Applying any profile requires commissioning again.</p>
         <h3>GPIO controls</h3>
         <p>The dedicated A/B/C inputs are provided by the Hanson rPI-MFC and are hidden in Colorlight mode. Choose normally open/closed wiring to match the physical circuit and use debounce/latch settings to prevent accidental repeats.</p>
         <h3>Diagnostics</h3>
