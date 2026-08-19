@@ -702,7 +702,8 @@ def _gradient_background(width: int, height: int, mode: str, c1: tuple[int, int,
     return _gradient_background_cached(width, height, mode, c1, c2).copy()
 
 
-def _wrap_text_pixels(text: str, font, max_width: int, draw: ImageDraw.ImageDraw, stroke: int = 0) -> str:
+def _wrap_text_pixels(text: str, font, max_width: int, draw: ImageDraw.ImageDraw, stroke: int = 0,
+                      break_long_words: bool = True) -> str:
     """Wrap text by rendered pixel width while preserving explicit newlines."""
     max_width = max(1, int(max_width))
     paragraphs = str(text or "").split("\n")
@@ -722,7 +723,10 @@ def _wrap_text_pixels(text: str, font, max_width: int, draw: ImageDraw.ImageDraw
             if line:
                 out.append(line)
                 line = ""
-            # Split a single over-wide word by characters so it never silently clips.
+            if not break_long_words:
+                line = word
+                continue
+            # Normal text layers may split a single over-wide word to avoid clipping.
             chunk = ""
             for ch in word:
                 trial_chunk = chunk + ch
@@ -737,23 +741,26 @@ def _wrap_text_pixels(text: str, font, max_width: int, draw: ImageDraw.ImageDraw
     return "\n".join(out)
 
 
-def _text_metrics(text: str, font, width: int, wrap: bool, align: str, spacing: int, stroke: int):
+def _text_metrics(text: str, font, width: int, wrap: bool, align: str, spacing: int, stroke: int,
+                  break_long_words: bool = True):
     probe = Image.new("RGBA", (4, 4), (0, 0, 0, 0))
     draw = ImageDraw.Draw(probe)
-    laid_out = _wrap_text_pixels(text, font, width, draw, stroke) if wrap else text
+    laid_out = _wrap_text_pixels(text, font, width, draw, stroke, break_long_words) if wrap else text
     raw = draw.multiline_textbbox((0, 0), laid_out or " ", font=font, spacing=spacing, align=align, stroke_width=stroke)
     box = (math.floor(raw[0]), math.floor(raw[1]), math.ceil(raw[2]), math.ceil(raw[3]))
     return laid_out, box
 
 
 def _fit_layer_font(text: str, target_w: int, target_h: int, font_value: str, upload_fonts_dir: str,
-                    wrap: bool, align: str, spacing_ratio: float, stroke: int, max_size: int = 512):
-    lo, hi, best = 4, max(5, min(max_size, max(target_h * 4, 16))), 4
+                    wrap: bool, align: str, spacing_ratio: float, stroke: int, max_size: int = 512,
+                    break_long_words: bool = True):
+    minimum = 4 if break_long_words else 1
+    lo, hi, best = minimum, max(minimum + 1, min(max_size, max(target_h * 4, 16))), minimum
     while lo <= hi:
         mid = (lo + hi) // 2
         font = _load_font(font_value, mid, upload_fonts_dir)
         spacing = max(0, int(round(mid * spacing_ratio)))
-        _, box = _text_metrics(text, font, target_w, wrap, align, spacing, stroke)
+        _, box = _text_metrics(text, font, target_w, wrap, align, spacing, stroke, break_long_words)
         if box[2] - box[0] <= target_w and box[3] - box[1] <= target_h:
             best = mid
             lo = mid + 1
@@ -979,7 +986,7 @@ def _seven_segment_pattern(ch: str) -> tuple[str, ...]:
     return tuple("".join(row) for row in grid)
 
 
-def _led_wrap(text: str, max_chars: int) -> str:
+def _led_wrap(text: str, max_chars: int, break_long_words: bool = True) -> str:
     if max_chars <= 0:
         return text
     out: list[str] = []
@@ -994,7 +1001,7 @@ def _led_wrap(text: str, max_chars: int) -> str:
                 line = trial
             else:
                 if line: out.append(line)
-                while len(word) > max_chars:
+                while break_long_words and len(word) > max_chars:
                     out.append(word[:max_chars]); word = word[max_chars:]
                 line = word
         out.append(line)
@@ -1110,7 +1117,7 @@ def _scale_pattern(pattern: tuple[str, ...], target_w: int, target_h: int) -> tu
 def _render_led_sprite(text: str, max_w: int, max_h: int, color: tuple[int, int, int],
                        outline: tuple[int, int, int], stroke: int, scale: int, auto_fit: bool,
                        wrap: bool, align: str, pixel_bold: bool, letter_spacing: int,
-                       line_gap: int, mode: str = "led5x7") -> Image.Image:
+                       line_gap: int, mode: str = "led5x7", break_long_words: bool = True) -> Image.Image:
     """Render the embedded LED font family directly onto an integer LED grid.
 
     v0.4 uses independent compact and seven-segment source alphabets rather than
@@ -1127,7 +1134,7 @@ def _render_led_sprite(text: str, max_w: int, max_h: int, color: tuple[int, int,
         cell_w=gw+(1 if bold else 0)
         per=(cell_w+char_gap)*sc
         max_chars=max(1,(max_w+char_gap*sc)//max(1,per))
-        laid=_led_wrap(text or " ",max_chars) if wrap else (text or " ")
+        laid=_led_wrap(text or " ",max_chars,break_long_words) if wrap else (text or " ")
         lines=laid.split("\n")
         widths=[]
         for line in lines:
@@ -1404,7 +1411,7 @@ def _render_scene_text(layer: dict, box_w: int, box_h: int, sy: float, elapsed: 
         "font", "font_size", "auto_fit", "wrap", "color", "outline_color", "outline_width",
         "padding", "align", "valign", "line_spacing", "shadow_color", "shadow_x", "shadow_y",
         "render_mode", "pixel_scale", "pixel_bold", "letter_spacing", "text_transform",
-        "overflow", "color_effect", "color2", "color_speed", "color_palette", "glow", "glow_color"
+        "overflow", "break_long_words", "color_effect", "color2", "color_speed", "color_palette", "glow", "glow_color"
     )}
     animated_color = str(layer.get("color_effect") or "none").lower() in ("rainbow", "cycle")
     cache_key = json.dumps([box_w, box_h, round(sy, 5), text, cache_fields, round(elapsed, 2) if animated_color else 0], sort_keys=True, default=str)
@@ -1424,6 +1431,7 @@ def _render_scene_text(layer: dict, box_w: int, box_h: int, sy: float, elapsed: 
         valign = "middle"
     overflow = str(layer.get("overflow") or "manual").lower()
     wrap = bool(layer.get("wrap", False)) or overflow == "wrap"
+    break_long_words = bool(layer.get("break_long_words", True))
     auto_fit = bool(layer.get("auto_fit", False)) or overflow == "shrink"
     if overflow in ("clip", "marquee"): wrap = False
     spacing_ratio = max(0.0, min(1.0, float(layer.get("line_spacing", 0.12) or 0.0)))
@@ -1444,7 +1452,7 @@ def _render_scene_text(layer: dict, box_w: int, box_h: int, sy: float, elapsed: 
         line_gap = max(1, int(round(1 + spacing_ratio * 4)))
         sprite = _render_led_sprite(
             text, inner_w, inner_h, color, outline, stroke, pixel_scale,
-            auto_fit, wrap, align, pixel_bold, letter_spacing, line_gap, render_mode
+            auto_fit, wrap, align, pixel_bold, letter_spacing, line_gap, render_mode, break_long_words
         )
         if needs_shadow:
             # The shadow follows the original glyph body, not the already-outlined
@@ -1452,17 +1460,17 @@ def _render_scene_text(layer: dict, box_w: int, box_h: int, sy: float, elapsed: 
             # one-pixel offset instead of visually compounding into a 2-3px halo.
             shadow_body = _render_led_sprite(
                 text, inner_w, inner_h, color, outline, 0, pixel_scale,
-                auto_fit, wrap, align, pixel_bold, letter_spacing, line_gap, render_mode
+                auto_fit, wrap, align, pixel_bold, letter_spacing, line_gap, render_mode, break_long_words
             )
     else:
         if auto_fit:
             font, font_size = _fit_layer_font(text, inner_w, inner_h, str(layer.get("font") or ""), upload_fonts_dir,
-                                              wrap, align, spacing_ratio, stroke)
+                                              wrap, align, spacing_ratio, stroke, break_long_words=break_long_words)
         else:
             font = _load_font(str(layer.get("font") or ""), font_size, upload_fonts_dir)
         spacing = max(0, int(round(font_size * spacing_ratio)))
         probe = ImageDraw.Draw(Image.new("RGBA", (4,4), (0,0,0,0)))
-        laid_out = _wrap_text_pixels(text, font, inner_w, probe, stroke) if wrap else text
+        laid_out = _wrap_text_pixels(text, font, inner_w, probe, stroke, break_long_words) if wrap else text
         sprite = _render_ttf_sprite(laid_out, font, color, outline, stroke, spacing, align,
                                     render_mode, pixel_scale, pixel_bold, letter_spacing)
         if needs_shadow:
@@ -2249,7 +2257,8 @@ def _render_cloud_text(layer: dict, box_w: int, box_h: int, sy: float, elapsed: 
         child = dict(layer)
         child.update({
             "text": phrase, "color": colour, "auto_fit": True, "wrap": True,
-            "overflow": "shrink", "align": "center", "valign": "middle", "padding": 0,
+            "overflow": "shrink", "break_long_words": False,
+            "align": "center", "valign": "middle", "padding": 0,
             "font": layer.get("cloud_font", layer.get("font", "")),
             "font_size": layer.get("cloud_font_size", layer.get("font_size", 18)),
             "render_mode": layer.get("cloud_render_mode", layer.get("render_mode", "pixel")),
