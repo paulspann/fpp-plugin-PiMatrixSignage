@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from renderer import (
-    _cloud_playback_seed, _cloud_random_position, _cloud_text_entries,
+    _cloud_playback_seed, _cloud_random_position, _cloud_text_entries, _cloud_text_sequence,
     _led_wrap, _render_cloud_text, _wrap_text_pixels,
 )
 
@@ -25,6 +25,31 @@ def opaque_text(_layer, width, height, *_args):
 def test_cloud_text_cleans_entries_and_caps_untrusted_lists():
     assert _cloud_text_entries({"cloud_text_items": " Message 1\n\nMessage 2 "}) == ["Message 1", "Message 2"]
     assert len(_cloud_text_entries({"cloud_text_items": [str(i) for i in range(250)]})) == 200
+    assert _cloud_text_entries({"cloud_text_items": "Same phrase\n same   PHRASE \nDifferent"}) == ["Same phrase", "Different"]
+
+
+def test_shuffled_rounds_never_repeat_an_entry_inside_visible_window():
+    sequence = _cloud_text_sequence(8, 79, "layer", "playback", 3)
+    assert all(len(set(sequence[index:index + 3])) == 3 for index in range(len(sequence) - 2))
+    assert all(set(sequence[index:index + 8]) == set(range(8)) for index in range(0, 80, 8))
+
+
+def test_renderer_has_no_duplicate_phrase_across_shuffled_round_boundary():
+    seen = []
+
+    def capture(layer, width, height, *_args):
+        seen.append(layer["text"])
+        return Image.new("RGBA", (width, height), (255, 255, 255, 255))
+
+    layer = {
+        "id": "cloud-round-boundary", "cloud_text_items": "One\nTwo\nThree",
+        "cloud_visible_for": 6, "cloud_interval": 1.5, "cloud_max_visible": 3,
+        "cloud_fade_in": 0.6, "cloud_fade_out": 0.8,
+    }
+    with patch("renderer._render_scene_text", side_effect=capture):
+        _render_cloud_text(layer, 96, 32, 1, 6.1, START + timedelta(seconds=6.1), "")
+    assert len(seen) == 3
+    assert len(set(seen)) == 3
 
 
 def test_cloud_text_wrapping_never_splits_a_word():
@@ -149,4 +174,4 @@ def test_cloud_text_designer_controls_and_release_version():
         assert marker in html
         assert marker in js
     version = tuple(int(x) for x in (ROOT / "VERSION").read_text(encoding="utf-8").strip().split("."))
-    assert version >= (0, 6, 17)
+    assert version >= (0, 6, 22)

@@ -2270,7 +2270,41 @@ def _render_weather_widget(layer: dict, box_w: int, box_h: int, sy: float, elaps
 def _cloud_text_entries(layer: dict) -> list[str]:
     raw = layer.get("cloud_text_items")
     values = raw if isinstance(raw, list) else str(raw or "").splitlines()
-    return [str(value).strip() for value in values if str(value).strip()][:200]
+    entries = []
+    seen = set()
+    for value in values:
+        phrase = str(value).strip()
+        key = " ".join(phrase.casefold().split())
+        if phrase and key not in seen:
+            seen.add(key)
+            entries.append(phrase)
+        if len(entries) >= 200:
+            break
+    return entries
+
+
+def _cloud_text_sequence(entry_count: int, through_occurrence: int, layer_key: str,
+                         playback_seed: str, visible_limit: int) -> list[int]:
+    """Build shuffled rounds without repeating an entry still in the visible window."""
+    if entry_count <= 0 or through_occurrence < 0:
+        return []
+    window = max(1, min(entry_count, visible_limit))
+    sequence: list[int] = []
+    round_index = 0
+    while len(sequence) <= through_occurrence:
+        candidates = list(range(entry_count))
+        seed = int.from_bytes(hashlib.sha256(
+            f"{layer_key}:{playback_seed}:{round_index}:order".encode()
+        ).digest()[:8], "big")
+        random.Random(seed).shuffle(candidates)
+        while candidates:
+            recent_count = window - 1
+            recent = set(sequence[-recent_count:]) if recent_count else set()
+            choice = next((value for value in candidates if value not in recent), candidates[0])
+            sequence.append(choice)
+            candidates.remove(choice)
+        round_index += 1
+    return sequence
 
 
 def _cloud_playback_seed(layer_key: str, elapsed: float, now: datetime) -> str:
@@ -2328,7 +2362,8 @@ def _render_cloud_text(layer: dict, box_w: int, box_h: int, sy: float, elapsed: 
         return out
     visible_for = max(0.5, float(layer.get("cloud_visible_for", 4.0) or 4.0))
     max_visible = max(1, min(12, int(layer.get("cloud_max_visible", 3) or 3)))
-    interval = max(0.1, float(layer.get("cloud_interval", 1.5) or 1.5), visible_for / max_visible)
+    unique_visible = min(max_visible, len(entries))
+    interval = max(0.1, float(layer.get("cloud_interval", 1.5) or 1.5), visible_for / unique_visible)
     fade_in = max(0.2, min(visible_for, float(layer.get("cloud_fade_in", 0.6) or 0.0)))
     fade_out = max(0.2, min(visible_for, float(layer.get("cloud_fade_out", 0.8) or 0.0)))
     if fade_in + fade_out > visible_for * 0.9:
@@ -2344,17 +2379,14 @@ def _render_cloud_text(layer: dict, box_w: int, box_h: int, sy: float, elapsed: 
     layer_key = str(layer.get("id") or "cloud-text")
     playback_epoch = _cloud_playback_seed(layer_key, max(0.0, elapsed), now)
     latest = int(math.floor(max(0.0, elapsed) / interval))
+    sequence = _cloud_text_sequence(len(entries), latest, layer_key, playback_epoch, unique_visible)
     palette = [x.strip() for x in str(layer.get("cloud_palette") or "").split(",") if x.strip()]
     active = []
-    for occurrence in range(max(0, latest - max_visible + 1), latest + 1):
+    for occurrence in range(max(0, latest - unique_visible + 1), latest + 1):
         age = elapsed - occurrence * interval
         if age < 0.0 or age >= visible_for:
             continue
-        round_index, within_round = divmod(occurrence, len(entries))
-        order = list(range(len(entries)))
-        order_seed = int.from_bytes(hashlib.sha256(f"{layer_key}:{playback_epoch}:{round_index}:order".encode()).digest()[:8], "big")
-        random.Random(order_seed).shuffle(order)
-        active.append((occurrence, age, _token_text(entries[order[within_round]], now)))
+        active.append((occurrence, age, _token_text(entries[sequence[occurrence]], now)))
     sprites = []
     for occurrence, age, phrase in active:
         seed = int.from_bytes(hashlib.sha256(f"{layer_key}:{playback_epoch}:{occurrence}:position".encode()).digest()[:8], "big")

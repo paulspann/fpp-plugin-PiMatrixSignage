@@ -1,4 +1,11 @@
-# Pi Matrix Signage v0.6.21
+# Pi Matrix Signage v0.6.22
+
+
+## v0.6.22 – duplicate-free Cloud Text
+
+- Prevents a phrase at the start of a new shuffled round from duplicating one still visible from the preceding round.
+- Removes duplicate input phrases using case-insensitive, whitespace-normalized matching while preserving the first spelling entered.
+- Automatically spaces arrivals according to the number of unique phrases when that is lower than Maximum visible.
 
 
 ## v0.6.21 – accurate colour by word
