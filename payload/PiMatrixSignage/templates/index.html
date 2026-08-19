@@ -231,6 +231,7 @@
               </div>
               <div class="toolbar"><span class="toolbar-label">Add layer</span>
                 <button class="btn secondary" id="addTextLayer">+ Text</button>
+                <button class="btn secondary" id="addCloudTextLayer">+ Cloud Text</button>
                 <button class="btn secondary" id="addImageLayer">+ Image</button>
                 <button class="btn secondary" id="addVideoLayer">+ Video</button>
                 <button class="btn secondary" id="addShaderLayer">+ Shader</button>
@@ -434,6 +435,29 @@
                     </div>
                     <div class="form-grid cols-2"><label>Shadow X offset (LED px)<input type="number" id="layerShadowX" min="-50" max="50" step="1" value="0"></label><label>Shadow Y offset (LED px)<input type="number" id="layerShadowY" min="-50" max="50" step="1" value="0"></label></div>
                     <p class="hint">For sharp matrix text, 1 outline pixel is one whole LED pixel. Shadow X/Y are offsets only; the shadow follows the glyph body and does not inherit the outline thickness.</p>
+                  </div>
+
+                  <div id="cloudTextLayerProperties" class="layer-kind-properties content-properties hidden">
+                    <h3>Cloud Text</h3>
+                    <p class="hint">Enter one phrase per line. Every phrase is used once in a shuffled round before any repeats. Visible phrases are auto-fitted inside separate randomized areas, so they remain fully inside the layer and never overlap.</p>
+                    <label>Messages — one per line<textarea id="cloudTextItems" rows="8" placeholder="Message 1&#10;Message 2&#10;Text 3"></textarea></label>
+                    <div class="form-grid cols-4">
+                      <label>Appear every (s)<input type="number" id="cloudTextInterval" min="0.1" max="120" step="0.1" value="1.5"></label>
+                      <label>Visible for (s)<input type="number" id="cloudTextVisibleFor" min="0.2" max="300" step="0.1" value="4"></label>
+                      <label>Fade in (s)<input type="number" id="cloudTextFadeIn" min="0" max="30" step="0.1" value="0.6"></label>
+                      <label>Fade out (s)<input type="number" id="cloudTextFadeOut" min="0" max="30" step="0.1" value="0.8"></label>
+                    </div>
+                    <div class="form-grid cols-4">
+                      <label>Maximum visible<input type="number" id="cloudTextMaxVisible" min="1" max="12" step="1" value="3"></label>
+                      <label>Gap (LED px)<input type="number" id="cloudTextGap" min="0" max="20" step="1" value="2"></label>
+                      <label>Font<select id="cloudTextFont"><option value="">Default font</option></select></label>
+                      <label>Text rendering<select id="cloudTextRenderMode"><option value="pixel">Pixel sharp – TTF/OTF</option><option value="led3x5">LED 3×5 compact</option><option value="led4x6">LED 4×6</option><option value="led5x7">LED 5×7</option><option value="led6x8">LED 6×8</option><option value="smooth">Smooth / anti-aliased</option></select></label>
+                    </div>
+                    <div class="form-grid cols-3">
+                      <label>Colour mode<select id="cloudTextColorMode"><option value="solid">One colour</option><option value="palette">Random from palette</option></select></label>
+                      <label>Text colour<input type="color" id="cloudTextColor" value="#ffffff"></label>
+                      <label>Random palette<input id="cloudTextPalette" value="#ffffff,#55ccff,#ffd45d,#ff78c8" placeholder="#ffffff,#55ccff,#ffd45d"></label>
+                    </div>
                   </div>
 
                   <div id="imageLayerProperties" class="layer-kind-properties content-properties hidden">

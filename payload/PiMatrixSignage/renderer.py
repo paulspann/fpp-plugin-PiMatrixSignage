@@ -11,6 +11,7 @@ import urllib.request
 import urllib.parse
 import xml.etree.ElementTree as ET
 import random
+import hashlib
 from functools import lru_cache
 from collections import deque
 import threading
@@ -1301,7 +1302,7 @@ def _layer_transition_phase(layer: dict, elapsed: float, forced_exit_elapsed: fl
     has been requested.  If this layer has an exit effect, that effect starts
     immediately and takes precedence over its normal entrance/exit timeline.
     """
-    if str(layer.get("type") or "text") not in ("text", "image", "video", "widget", "icon", "shader"):
+    if str(layer.get("type") or "text") not in ("text", "cloud-text", "image", "video", "widget", "icon", "shader"):
         return "none", 1.0, True, True
 
     if forced_exit_elapsed is not None:
@@ -1645,7 +1646,7 @@ def _render_scroll_viewport(layer: dict, content: Image.Image, box_w: int, box_h
     if local < 0:
         return viewport, False
 
-    is_text = str(layer.get("type") or "text") in ("text", "widget")
+    is_text = str(layer.get("type") or "text") in ("text", "cloud-text", "widget")
     pad = max(0, int(round(float(layer.get("padding", 0) or 0) * sy))) if is_text else 0
     left, top = pad, pad
     inner_w, inner_h = max(1, box_w - pad * 2), max(1, box_h - pad * 2)
@@ -1703,7 +1704,7 @@ def _render_bounce_viewport(layer: dict, content: Image.Image, box_w: int, box_h
     if local < 0:
         return viewport, False
 
-    is_text = str(layer.get("type") or "text") in ("text", "widget")
+    is_text = str(layer.get("type") or "text") in ("text", "cloud-text", "widget")
     pad = max(0, int(round(float(layer.get("padding", 0) or 0) * sy))) if is_text else 0
     inner_w, inner_h = max(1, box_w - pad * 2), max(1, box_h - pad * 2)
     align = str(layer.get("align") or "center") if is_text else "center"
@@ -2197,6 +2198,83 @@ def _render_weather_widget(layer: dict, box_w: int, box_h: int, sy: float, elaps
     return out
 
 
+def _cloud_text_entries(layer: dict) -> list[str]:
+    raw = layer.get("cloud_text_items")
+    values = raw if isinstance(raw, list) else str(raw or "").splitlines()
+    return [str(value).strip() for value in values if str(value).strip()][:200]
+
+
+def _render_cloud_text(layer: dict, box_w: int, box_h: int, sy: float, elapsed: float,
+                       now: datetime, upload_fonts_dir: str) -> Image.Image:
+    """Render timed, non-overlapping phrases into stable randomized cells."""
+    out = Image.new("RGBA", (max(1, box_w), max(1, box_h)), (0, 0, 0, 0))
+    entries = _cloud_text_entries(layer)
+    if not entries:
+        return out
+    visible_for = max(0.2, float(layer.get("cloud_visible_for", 4.0) or 4.0))
+    max_visible = max(1, min(12, int(layer.get("cloud_max_visible", 3) or 3)))
+    interval = max(0.1, float(layer.get("cloud_interval", 1.5) or 1.5), visible_for / max_visible)
+    fade_in = max(0.0, min(visible_for, float(layer.get("cloud_fade_in", 0.6) or 0.0)))
+    fade_out = max(0.0, min(visible_for, float(layer.get("cloud_fade_out", 0.8) or 0.0)))
+    gap = max(0, int(round(float(layer.get("cloud_gap", 2) or 0) * sy)))
+    cols = max(1, min(max_visible, int(math.ceil(math.sqrt(max_visible * box_w / max(1, box_h))))))
+    rows = max(1, int(math.ceil(max_visible / cols)))
+    cell_w, cell_h = max(1, box_w // cols), max(1, box_h // rows)
+    playback_epoch = int(round(now.timestamp() - max(0.0, elapsed)))
+    layer_key = str(layer.get("id") or "cloud-text")
+    latest = int(math.floor(max(0.0, elapsed) / interval))
+    palette = [x.strip() for x in str(layer.get("cloud_palette") or "").split(",") if x.strip()]
+    active = []
+    for occurrence in range(max(0, latest - max_visible + 1), latest + 1):
+        age = elapsed - occurrence * interval
+        if age < 0.0 or age >= visible_for:
+            continue
+        round_index, within_round = divmod(occurrence, len(entries))
+        order = list(range(len(entries)))
+        order_seed = int.from_bytes(hashlib.sha256(f"{layer_key}:{playback_epoch}:{round_index}:order".encode()).digest()[:8], "big")
+        random.Random(order_seed).shuffle(order)
+        active.append((occurrence, age, _token_text(entries[order[within_round]], now)))
+    for occurrence, age, phrase in active:
+        slot = occurrence % max_visible
+        row, col = divmod(slot, cols)
+        x0, y0 = col * cell_w, row * cell_h
+        x1 = box_w if col == cols - 1 else min(box_w, x0 + cell_w)
+        y1 = box_h if row == rows - 1 else min(box_h, y0 + cell_h)
+        available_w, available_h = max(1, x1 - x0 - gap * 2), max(1, y1 - y0 - gap * 2)
+        seed = int.from_bytes(hashlib.sha256(f"{layer_key}:{playback_epoch}:{occurrence}:position".encode()).digest()[:8], "big")
+        rng = random.Random(seed)
+        colour = str(layer.get("color") or "#ffffff")
+        if str(layer.get("cloud_color_mode") or "solid") == "palette" and palette:
+            colour = palette[rng.randrange(len(palette))]
+        child = dict(layer)
+        child.update({
+            "text": phrase, "color": colour, "auto_fit": True, "wrap": True,
+            "overflow": "shrink", "align": "center", "valign": "middle", "padding": 0,
+            "font": layer.get("cloud_font", layer.get("font", "")),
+            "font_size": layer.get("cloud_font_size", layer.get("font_size", 18)),
+            "render_mode": layer.get("cloud_render_mode", layer.get("render_mode", "pixel")),
+            "outline_width": 0, "shadow_x": 0, "shadow_y": 0, "glow": 0, "color_effect": "none",
+        })
+        tile = _render_scene_text(child, available_w, available_h, sy, elapsed, now, upload_fonts_dir)
+        bounds = tile.getchannel("A").getbbox()
+        if not bounds:
+            continue
+        sprite = tile.crop(bounds)
+        free_x, free_y = max(0, available_w - sprite.width), max(0, available_h - sprite.height)
+        px = x0 + gap + (rng.randrange(free_x + 1) if free_x else 0)
+        py = y0 + gap + (rng.randrange(free_y + 1) if free_y else 0)
+        opacity = 1.0
+        if fade_in > 0.0 and age < fade_in:
+            opacity = min(opacity, age / fade_in)
+        remaining = visible_for - age
+        if fade_out > 0.0 and remaining < fade_out:
+            opacity = min(opacity, remaining / fade_out)
+        if opacity < 1.0:
+            sprite.putalpha(sprite.getchannel("A").point(lambda value: int(value * max(0.0, opacity))))
+        out.alpha_composite(sprite, (px, py))
+    return out
+
+
 def shader_layer_status(layer_id: str, upload_fonts_dir: str) -> dict:
     """Return non-fatal shader helper errors for browser preview/live rendering."""
     client = _shader_client(upload_fonts_dir)
@@ -2256,6 +2334,8 @@ def _render_layer_content(layer: dict, ltype: str, w: int, h: int, sy: float, el
         return _render_analog_clock(layer, w, h, now)
     if ltype == "widget" and str(layer.get("widget_type") or "clock") == "weather" and str(layer.get("weather_display") or "text") != "text":
         return _render_weather_widget(layer, w, h, sy, elapsed, now, upload_fonts_dir)
+    if ltype == "cloud-text":
+        return _render_cloud_text(layer, w, h, sy, elapsed, now, upload_fonts_dir)
     if ltype in ("text", "widget"):
         if scroll_axis:
             return _render_scene_text_scroll_content(layer, w, h, sy, elapsed, now, upload_fonts_dir, scroll_axis)
@@ -2417,6 +2497,8 @@ def render_scene(scene: dict, width: int, height: int, elapsed: float, now: date
         w = max(1,int(round(float(layer.get("w",design_w) or design_w)*sx)))
         h = max(1,int(round(float(layer.get("h",design_h) or design_h)*sy)))
         ltype = str(layer.get("type") or "text")
+        text_render_mode = layer.get("cloud_render_mode") if ltype == "cloud-text" else layer.get("render_mode")
+        layer_is_crisp = (ltype == "icon") or (ltype in ("text", "cloud-text", "widget") and _is_crisp_mode(str(text_render_mode or "smooth")))
         zone_clip = _scene_zone_rect(scene, layer, sx, sy)
         animation = str(layer.get("animation") or "static")
 
@@ -2435,11 +2517,11 @@ def render_scene(scene: dict, width: int, height: int, elapsed: float, now: date
             content=_render_layer_content(layer,ltype,w,h,sy,elapsed,now,upload_fonts_dir,axis)
             rotation=int(round(float(layer.get("rotation",0) or 0)))%360
             if rotation:
-                crisp=(ltype == "icon") or (ltype in ("text","widget") and _is_crisp_mode(str(layer.get("render_mode") or "smooth")))
+                crisp=layer_is_crisp
                 content=content.rotate(-rotation,expand=True,resample=Image.Resampling.NEAREST if crisp else Image.Resampling.BICUBIC)
             viewport,visible=_render_scroll_viewport(layer,content,w,h,sy,elapsed,animation)
             if not visible: continue
-            crisp=(ltype == "icon") or (ltype in ("text","widget") and _is_crisp_mode(str(layer.get("render_mode") or "smooth")))
+            crisp=layer_is_crisp
             viewport,visible=_apply_layer_transition(viewport,layer,elapsed,crisp,forced_exit_elapsed)
             if not visible: continue
             opacity=max(0.0,min(1.0,float(layer.get("opacity",100) or 0)/100.0))
@@ -2449,11 +2531,11 @@ def render_scene(scene: dict, width: int, height: int, elapsed: float, now: date
             content=_render_layer_content(layer,ltype,w,h,sy,elapsed,now,upload_fonts_dir)
             rotation=int(round(float(layer.get("rotation",0) or 0)))%360
             if rotation:
-                crisp=(ltype == "icon") or (ltype in ("text","widget") and _is_crisp_mode(str(layer.get("render_mode") or "smooth")))
+                crisp=layer_is_crisp
                 content=content.rotate(-rotation,expand=True,resample=Image.Resampling.NEAREST if crisp else Image.Resampling.BICUBIC)
             viewport,visible=_render_bounce_viewport(layer,content,w,h,sy,elapsed,animation)
             if not visible: continue
-            crisp=(ltype == "icon") or (ltype in ("text","widget") and _is_crisp_mode(str(layer.get("render_mode") or "smooth")))
+            crisp=layer_is_crisp
             viewport,visible=_apply_layer_transition(viewport,layer,elapsed,crisp,forced_exit_elapsed)
             if not visible: continue
             opacity=max(0.0,min(1.0,float(layer.get("opacity",100) or 0)/100.0))
@@ -2462,18 +2544,18 @@ def render_scene(scene: dict, width: int, height: int, elapsed: float, now: date
         lim=_render_layer_content(layer,ltype,w,h,sy,elapsed,now,upload_fonts_dir)
         rotation=int(round(float(layer.get("rotation",0) or 0)))%360
         if rotation:
-            crisp=(ltype == "icon") or (ltype in ("text","widget") and _is_crisp_mode(str(layer.get("render_mode") or "smooth")))
+            crisp=layer_is_crisp
             lim=lim.rotate(-rotation,expand=True,resample=Image.Resampling.NEAREST if crisp else Image.Resampling.BICUBIC)
             x-=(lim.width-w)//2;y-=(lim.height-h)//2;w,h=lim.width,lim.height
         x,y,effect_alpha,visible=_layer_motion(layer,x,y,w,h,width,height,elapsed)
         if not visible: continue
-        has_transition=(ltype in ("text","image","video","widget","icon","shader") and
+        has_transition=(ltype in ("text","cloud-text","image","video","widget","icon","shader") and
                         (str(layer.get("entrance_effect") or "none")!="none" or str(layer.get("exit_effect") or "none")!="none"))
         if has_transition:
             orig_x=int(round(float(layer.get("x",0) or 0)*sx));orig_y=int(round(float(layer.get("y",0) or 0)*sy))
             orig_w=max(1,int(round(float(layer.get("w",design_w) or design_w)*sx)));orig_h=max(1,int(round(float(layer.get("h",design_h) or design_h)*sy)))
             viewport=Image.new("RGBA",(orig_w,orig_h),(0,0,0,0));viewport.alpha_composite(lim,((orig_w-lim.width)//2,(orig_h-lim.height)//2))
-            crisp=(ltype == "icon") or (ltype in ("text","widget") and _is_crisp_mode(str(layer.get("render_mode") or "smooth")))
+            crisp=layer_is_crisp
             viewport,visible=_apply_layer_transition(viewport,layer,elapsed,crisp,forced_exit_elapsed)
             if not visible: continue
             opacity=max(0.0,min(1.0,float(layer.get("opacity",100) or 0)/100.0))*effect_alpha
@@ -2670,7 +2752,7 @@ def _message_exit_duration(message: dict | None) -> float:
     if not isinstance(layers,list): return duration
     for layer in layers:
         if not isinstance(layer,dict) or not bool(layer.get("enabled",True)): continue
-        if str(layer.get("type") or "text") not in ("text","image","video","widget","icon","shader"): continue
+        if str(layer.get("type") or "text") not in ("text","cloud-text","image","video","widget","icon","shader"): continue
         if str(layer.get("exit_effect") or "none").lower()=="none": continue
         try: duration=max(duration,max(.05,float(layer.get("exit_duration",.5) or .5)))
         except Exception: duration=max(duration,.5)

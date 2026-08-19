@@ -1,4 +1,12 @@
-# Pi Matrix Signage v0.6.16
+# Pi Matrix Signage v0.6.17
+
+
+## v0.6.17 – Cloud Text layers
+
+- Adds a **Cloud Text** Designer layer for displaying a list of short phrases at randomized positions.
+- Shuffles the complete phrase list before repeating, so every entry receives a turn while each playback uses a fresh order and placement.
+- Automatically fits every phrase inside a reserved area of the layer, keeping visible phrases fully on-screen and preventing overlap.
+- Adds controls for appearance interval, visible time, fade-in/out, maximum simultaneous phrases, spacing, font, LED text rendering and solid or random-palette colours.
 
 
 ## v0.6.16 – built-in Help manual
