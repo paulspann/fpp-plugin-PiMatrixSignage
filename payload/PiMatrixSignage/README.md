@@ -1,4 +1,10 @@
-# Pi Matrix Signage v0.6.17
+# Pi Matrix Signage v0.6.18
+
+
+## v0.6.18 – whole-word Cloud Text wrapping
+
+- Prevents Cloud Text from splitting a word across two lines.
+- Wraps only at spaces and shrinks unusually long individual words to keep them visible inside their reserved area.
 
 
 ## v0.6.17 – Cloud Text layers

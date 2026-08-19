@@ -3,13 +3,13 @@ from pathlib import Path
 import sys
 from unittest.mock import patch
 
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from renderer import _cloud_text_entries, _render_cloud_text
+from renderer import _cloud_text_entries, _led_wrap, _render_cloud_text, _wrap_text_pixels
 
 
 START = datetime(2026, 8, 19, 12, 0, tzinfo=timezone.utc)
@@ -22,6 +22,14 @@ def opaque_text(_layer, width, height, *_args):
 def test_cloud_text_cleans_entries_and_caps_untrusted_lists():
     assert _cloud_text_entries({"cloud_text_items": " Message 1\n\nMessage 2 "}) == ["Message 1", "Message 2"]
     assert len(_cloud_text_entries({"cloud_text_items": [str(i) for i in range(250)]})) == 200
+
+
+def test_cloud_text_wrapping_never_splits_a_word():
+    font = ImageFont.load_default()
+    draw = ImageDraw.Draw(Image.new("RGBA", (4, 4)))
+    wrapped = _wrap_text_pixels("LONGWORD short", font, 24, draw, break_long_words=False)
+    assert wrapped.splitlines() == ["LONGWORD", "short"]
+    assert _led_wrap("ABCDEFGHIJ next", 4, break_long_words=False).splitlines() == ["ABCDEFGHIJ", "next"]
 
 
 def test_every_phrase_appears_once_before_the_list_repeats():
@@ -42,6 +50,19 @@ def test_every_phrase_appears_once_before_the_list_repeats():
             _render_cloud_text(layer, 96, 32, 1, elapsed, START + timedelta(seconds=elapsed), "")
     assert len(seen) == 3
     assert set(seen) == {"One", "Two", "Three"}
+
+
+def test_cloud_renderer_disables_long_word_splitting():
+    rendered = []
+
+    def capture(layer, width, height, *_args):
+        rendered.append(layer)
+        return Image.new("RGBA", (width, height), (255, 255, 255, 255))
+
+    layer = {"cloud_text_items": "DoNotSplitThisWord", "cloud_fade_in": 0, "cloud_fade_out": 0}
+    with patch("renderer._render_scene_text", side_effect=capture):
+        _render_cloud_text(layer, 64, 32, 1, 1, START + timedelta(seconds=1), "")
+    assert rendered[0]["break_long_words"] is False
 
 
 def test_cloud_text_fades_in_and_out_over_its_visible_lifetime():
@@ -83,4 +104,5 @@ def test_cloud_text_designer_controls_and_release_version():
     ):
         assert marker in html
         assert marker in js
-    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.6.17"
+    version = tuple(int(x) for x in (ROOT / "VERSION").read_text(encoding="utf-8").strip().split("."))
+    assert version >= (0, 6, 17)
