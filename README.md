@@ -27,7 +27,7 @@ For beta testing, open FPP's Plugin Manager, paste that raw `pluginInfo.json` UR
 
 ## Current bootstrap payload
 
-This test bootstrap contains Pi Matrix Signage v0.6.29. The next commercial-hardening stage should move the application payload out of the public bootstrap repository and retrieve a signed, licence-authorised release package from the ISSL/WHMCS licensing service.
+This test bootstrap contains Pi Matrix Signage v0.6.30. The next commercial-hardening stage should move the application payload out of the public bootstrap repository and retrieve a signed, licence-authorised release package from the ISSL/WHMCS licensing service.
 
 
 ## v0.1.2
@@ -69,6 +69,6 @@ FPP Plugin Manager updates intentionally do **not** ship `scripts/fpp_upgrade.sh
 
 ## v0.1.9
 
-- Bundles Pi Matrix Signage **v0.6.29**.
+- Bundles Pi Matrix Signage **v0.6.30**.
 - Installs/removes the new root-owned `pi-matrix-signage-reset` helper and grants only the plugin service account passwordless access to the three narrow privileged helpers.
 - Adds transfer-safe factory reset support without removing the Pi Matrix Signage application or FPP plugin.

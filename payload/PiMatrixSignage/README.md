@@ -1,5 +1,11 @@
-# Pi Matrix Signage v0.6.29
+# Pi Matrix Signage v0.6.30
 
+
+
+## v0.6.30 – licence purchase, reissue and support link
+
+- Adds a prominent ISSL Support link directly to the **Software licence** panel for licence purchases, WHMCS reissues and licensing help.
+- Opens the support page safely in a new browser tab and documents the same route in the built-in Help manual.
 
 
 ## v0.6.29 – dedicated System diagnostics page
