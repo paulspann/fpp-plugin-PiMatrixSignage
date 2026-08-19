@@ -53,5 +53,6 @@ def test_support_package_redacts_secrets_and_can_include_preview():
     assert '"license_key"' not in app[app.index('def support_package_api():'):app.index('@app.get("/api/backups")')]
 
 
-def test_release_version_is_v0626():
-    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.6.26"
+def test_release_version_is_v0626_or_later():
+    version = tuple(int(part) for part in (ROOT / "VERSION").read_text(encoding="utf-8").strip().split("."))
+    assert version >= (0, 6, 26)

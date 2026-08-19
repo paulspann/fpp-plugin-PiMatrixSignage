@@ -1,5 +1,11 @@
-# Pi Matrix Signage v0.6.26
+# Pi Matrix Signage v0.6.27
 
+
+## v0.6.27 – built-in hardware profile starters
+
+- Adds four permanent starter profiles for common Hanson P5 and Colorlight P5/P10 layouts.
+- Clearly labels built-ins as starting points whose scan, driver mapping and colour order must be checked against the actual panel.
+- Keeps starter profiles read-only while allowing installers to apply, adjust and save site-specific copies.
 
 ## v0.6.26 – commissioning, profiles and support packages
 
