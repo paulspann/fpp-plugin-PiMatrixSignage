@@ -191,7 +191,8 @@
   $$('.tab').forEach(btn => btn.addEventListener('click', () => {
     $$('.tab').forEach(x=>x.classList.remove('active')); btn.classList.add('active');
     $$('.page').forEach(x=>x.classList.remove('active')); $(`page-${btn.dataset.tab}`).classList.add('active');
-    if (btn.dataset.tab === 'setup') { loadFppSetup(); loadDiagnostics(true); loadLicence(); loadHardwareProfiles(); detectColorlightInterfaces(true); }
+    if (btn.dataset.tab === 'setup') { loadFppSetup(); loadLicence(); loadHardwareProfiles(); detectColorlightInterfaces(true); }
+    if (btn.dataset.tab === 'diagnostics') loadDiagnostics(true);
     if (btn.dataset.tab === 'upgrade') loadUpgradeStatus();
     if (btn.dataset.tab === 'backup') loadBackups(true);
     if (btn.dataset.tab === 'users') loadUsers();
@@ -959,6 +960,7 @@
     let s=Math.max(0,Math.floor(Number(seconds)||0)),d=Math.floor(s/86400);s%=86400;const h=Math.floor(s/3600),m=Math.floor((s%3600)/60);return d?`${d}d ${h}h ${m}m`:`${h}h ${m}m`;
   }
   function setupTabVisible(){return document.querySelector('.tab.active')?.dataset.tab==='setup';}
+  function diagnosticsTabVisible(){return document.querySelector('.tab.active')?.dataset.tab==='diagnostics';}
   function renderDiagnostics(d,syncControls=false){
     if(!d||d.error){$('diagOverall').textContent=d?.error||'Diagnostics unavailable';$('diagOverall').className='health-badge error';return;}
     state.lastDiagnostics=d;const overall=d.overall||'warn';$('diagOverall').textContent=overall==='ok'?'All systems healthy':overall==='error'?'Attention required':'Warnings';$('diagOverall').className=`health-badge ${overall}`;
@@ -978,7 +980,7 @@
     const events=recovery.events||[];$('recoveryHistory').innerHTML=events.length?events.map(e=>`<div class="recovery-row"><span>${esc(String(e.created_at||'').replace('T',' '))}</span><strong>${esc(e.action||e.event_type||'Recovery')}</strong><span class="result ${esc(e.result||'')}">${esc(e.result||'')}</span><span class="details" title="${esc(e.details||'')}">${esc(e.details||'')}</span></div>`).join(''):'<div class="recovery-empty">No automatic or manual recovery actions have been needed.</div>';
   }
   async function loadDiagnostics(syncControls=false){
-    if(!can('display_setup')||state.diagnosticsBusy)return;state.diagnosticsBusy=true;try{renderDiagnostics(await api('/api/diagnostics'),syncControls);}catch(e){if(setupTabVisible())toast(e.message,true);$('diagOverall').textContent='Diagnostics unavailable';$('diagOverall').className='health-badge error';}finally{state.diagnosticsBusy=false;}
+    if(!can('display_setup')||state.diagnosticsBusy)return;state.diagnosticsBusy=true;try{renderDiagnostics(await api('/api/diagnostics'),syncControls);}catch(e){if(diagnosticsTabVisible())toast(e.message,true);$('diagOverall').textContent='Diagnostics unavailable';$('diagOverall').className='health-badge error';}finally{state.diagnosticsBusy=false;}
   }
   async function saveRecoverySettings(){
     try{const body={auto_recovery_enabled:$('autoRecoveryEnabled').checked,auto_recover_renderer:$('autoRecoverRenderer').checked,auto_recover_fppd:$('autoRecoverFppd').checked,renderer_stall_seconds:+$('rendererStallSeconds').value,recovery_cooldown_seconds:+$('recoveryCooldownSeconds').value};state.settings=await api('/api/settings',{method:'PUT',body});toast('Recovery settings saved');await loadDiagnostics(true);}catch(e){toast(e.message,true);}
@@ -1234,5 +1236,5 @@
   setupMessageEditorWorkspace();
   enhanceColourPickers();
   initDesignerPanelPreferences();
-  loadAll().then(()=>{refreshStatus();setInterval(refreshStatus,1600);setInterval(()=>{if(setupTabVisible())loadDiagnostics(false);},3000);setInterval(()=>{if(setupTabVisible()&&can('display_setup'))loadGpioControls(false);},900);const saved=localStorage.getItem('pimatrixLivePreview');const rate=localStorage.getItem('pimatrixLivePreviewRate');if(rate&&[...$('livePreviewRate').options].some(o=>o.value===rate))$('livePreviewRate').value=rate;const liveMode=localStorage.getItem('pimatrixPreviewMode:live')||'p5',designerMode=localStorage.getItem('pimatrixPreviewMode:designer')||'p5';if([...$('livePreviewMode').options].some(o=>o.value===liveMode))$('livePreviewMode').value=liveMode;if([...$('designerPreviewMode').options].some(o=>o.value===designerMode))$('designerPreviewMode').value=designerMode;setLivePreviewEnabled(saved!=='0');updateHistoryButtons();updateClipboardButton();refreshPreviewSimulation();});
+  loadAll().then(()=>{refreshStatus();setInterval(refreshStatus,1600);setInterval(()=>{if(diagnosticsTabVisible())loadDiagnostics(false);},3000);setInterval(()=>{if(setupTabVisible()&&can('display_setup'))loadGpioControls(false);},900);const saved=localStorage.getItem('pimatrixLivePreview');const rate=localStorage.getItem('pimatrixLivePreviewRate');if(rate&&[...$('livePreviewRate').options].some(o=>o.value===rate))$('livePreviewRate').value=rate;const liveMode=localStorage.getItem('pimatrixPreviewMode:live')||'p5',designerMode=localStorage.getItem('pimatrixPreviewMode:designer')||'p5';if([...$('livePreviewMode').options].some(o=>o.value===liveMode))$('livePreviewMode').value=liveMode;if([...$('designerPreviewMode').options].some(o=>o.value===designerMode))$('designerPreviewMode').value=designerMode;setLivePreviewEnabled(saved!=='0');updateHistoryButtons();updateClipboardButton();refreshPreviewSimulation();});
 })();

@@ -103,4 +103,4 @@ def test_pillow_tests_use_non_deprecated_flattened_pixel_api():
 
 
 def test_release_version_is_v0628():
-    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.6.28"
+    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.6.29"

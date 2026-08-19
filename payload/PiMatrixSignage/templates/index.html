@@ -27,6 +27,7 @@
         <button class="settings-menu-toggle" id="settingsMenuToggle" type="button" aria-label="Open settings menu" aria-haspopup="true" aria-expanded="false" aria-controls="settingsMenuPanel"><span aria-hidden="true">⚙</span></button>
         <div class="settings-menu-panel hidden" id="settingsMenuPanel" role="menu">
           <button class="tab settings-menu-item permission-gated" data-tab="setup" data-permission="display_setup" type="button" role="menuitem">Display setup</button>
+          <button class="tab settings-menu-item permission-gated" data-tab="diagnostics" data-permission="display_setup" type="button" role="menuitem">System diagnostics</button>
           <button class="tab settings-menu-item permission-gated" data-tab="backup" data-permission="backup" type="button" role="menuitem">Backup &amp; restore</button>
           <button class="tab settings-menu-item permission-gated" data-tab="users" data-permission="users" type="button" role="menuitem">Users</button>
         </div>
@@ -758,6 +759,22 @@
           <div class="callout warn"><strong>Emergency recommendation:</strong> use a normally-open momentary button with <em>Latch until cleared</em>. One press activates the configured Emergency message; releasing the button cannot accidentally cancel it. For a fail-safe wired loop, choose Normally closed.</div>
         </article>
 
+
+        <article class="card full-span danger-zone">
+          <div class="card-head"><div><h2>Raspberry Pi power</h2><p>Safely halt the Pi before removing power.</p></div><button class="btn danger" id="shutdownPi">Shut down Pi…</button></div>
+          <div class="callout warn"><strong>Safe shutdown:</strong> the display and web interface will go offline. Wait until the Pi activity LED has stopped before removing power. Only users with Display setup permission can request a shutdown.</div>
+        </article>
+
+        <article class="card full-span">
+          <div class="card-head"><div><h2>FPP setup helper</h2><p>Use these hardware-specific values in Falcon Player after saving Display Setup.</p></div><button class="btn secondary" id="refreshFpp">Refresh</button></div>
+          <div id="fppSetup" class="fpp-setup"></div>
+          <div class="callout"><strong>Important:</strong> FPP owns the physical output and timing. Pi Matrix Signage sends the finished RGB frame to FPP, which drives either the Hanson board or the Colorlight receiver.</div>
+        </article>
+      </div>
+    </section>
+
+    <section class="page permission-page" id="page-diagnostics" data-permission="display_setup">
+      <div class="grid diagnostics-grid">
         <article class="card full-span diagnostics-card">
           <div class="card-head">
             <div><h2>System diagnostics &amp; recovery</h2><p>Live health of the Pi, renderer, FPP and network. Automatic recovery is deliberately limited to safe service/renderer restarts.</p></div>
@@ -801,16 +818,6 @@
           </details>
         </article>
 
-        <article class="card full-span danger-zone">
-          <div class="card-head"><div><h2>Raspberry Pi power</h2><p>Safely halt the Pi before removing power.</p></div><button class="btn danger" id="shutdownPi">Shut down Pi…</button></div>
-          <div class="callout warn"><strong>Safe shutdown:</strong> the display and web interface will go offline. Wait until the Pi activity LED has stopped before removing power. Only users with Display setup permission can request a shutdown.</div>
-        </article>
-
-        <article class="card full-span">
-          <div class="card-head"><div><h2>FPP setup helper</h2><p>Use these hardware-specific values in Falcon Player after saving Display Setup.</p></div><button class="btn secondary" id="refreshFpp">Refresh</button></div>
-          <div id="fppSetup" class="fpp-setup"></div>
-          <div class="callout"><strong>Important:</strong> FPP owns the physical output and timing. Pi Matrix Signage sends the finished RGB frame to FPP, which drives either the Hanson board or the Colorlight receiver.</div>
-        </article>
       </div>
     </section>
 

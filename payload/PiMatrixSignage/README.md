@@ -1,5 +1,13 @@
-# Pi Matrix Signage v0.6.28
+# Pi Matrix Signage v0.6.29
 
+
+
+## v0.6.29 – dedicated System diagnostics page
+
+- Moves **System diagnostics & recovery** out of Display Setup into its own cog-wheel menu page.
+- Keeps the existing **Display setup** permission for diagnostics, so existing user access is unchanged.
+- Live diagnostic polling now runs only while the dedicated diagnostics page is open.
+- Updates the built-in Help manual to document the new location and safe recovery controls.
 
 ## v0.6.28 – transfer reset, commissioning certificate and Pillow cleanup
 
