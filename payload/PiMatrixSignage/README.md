@@ -1,4 +1,11 @@
-# Pi Matrix Signage v0.6.19
+# Pi Matrix Signage v0.6.20
+
+
+## v0.6.20 – stable Cloud Text arrivals
+
+- Keeps every phrase at one random position for its complete visible lifetime, preventing apparent instant duplicates when another phrase expires.
+- Gives each playback a fresh stable random seed instead of deriving positioning from render-frame timing.
+- Enforces at least 0.2 seconds of fade-in and fade-out so Cloud Text cannot appear or disappear as a hard cut.
 
 
 ## v0.6.19 – free-positioned Cloud Text
