@@ -31,9 +31,9 @@ def test_fpp_menu_opens_pimatrix_directly():
     assert "Pi Matrix Signage" in menu
 
 
-def test_payload_is_v069_or_later():
+def test_payload_is_v0610_or_later():
     version = tuple(int(x) for x in (ROOT / 'payload' / 'PiMatrixSignage' / 'VERSION').read_text().strip().split('.')[:3])
-    assert version >= (0, 6, 9)
+    assert version >= (0, 6, 10)
 
 
 def test_plugin_info_uses_published_repository():
@@ -42,7 +42,7 @@ def test_plugin_info_uses_published_repository():
     assert info['versions'][0]['branch'] == 'main'
 
 
-def test_plugin_update_is_the_customer_facing_application_update_path():
+def test_plugin_update_path_remains_packaged_without_customer_update_ui():
     # FPP's documented upgrade flow falls back to scripts/fpp_install.sh when
     # fpp_upgrade.sh is absent.  Deliberately do not ship fpp_upgrade.sh: a file
     # newly uploaded through GitHub can lose its executable bit, which makes
@@ -50,7 +50,8 @@ def test_plugin_update_is_the_customer_facing_application_update_path():
     assert not (ROOT / 'scripts' / 'fpp_upgrade.sh').exists()
     html = (ROOT / 'payload' / 'PiMatrixSignage' / 'templates' / 'index.html').read_text(encoding='utf-8')
     assert 'data-tab="upgrade"' not in html
-    assert 'Content Setup → Plugin Manager' in html
+    assert '<h2>Software updates</h2>' not in html
+    assert (ROOT / 'scripts' / 'fpp_install.sh').is_file()
 
 
 def test_plugin_verifies_running_application_version_after_update():
@@ -90,6 +91,22 @@ def test_install_does_not_require_payload_executable_bit():
     sh=(ROOT/'scripts'/'fpp_install.sh').read_text(encoding='utf-8')
     assert '! -x "$PAYLOAD/install.sh"' not in sh
     assert 'bash "$PAYLOAD/install.sh"' in sh
+
+
+def test_release_pipeline_runs_tests_and_builds_validated_zip():
+    workflow = (ROOT / '.github' / 'workflows' / 'verify-and-package.yml').read_text(encoding='utf-8')
+    builder = (ROOT / 'scripts' / 'build_release.sh').read_text(encoding='utf-8')
+    ignore = (ROOT / '.gitignore').read_text(encoding='utf-8')
+
+    assert 'python -m pytest -q' in workflow
+    assert 'node --check payload/PiMatrixSignage/static/app.js' in workflow
+    assert 'scripts/build_release.sh' in workflow
+    assert 'actions/upload-artifact@v4' in workflow
+    assert 'unzip -tq "$TEMP_ZIP"' in builder
+    assert 'zipinfo -l "$TEMP_ZIP"' in builder
+    assert "__pycache__/" in ignore
+    assert "*.py[cod]" in ignore
+    assert "dist/" in ignore
 
 def test_plugin_manager_sees_install_errors_while_logging_them():
     install=(ROOT/'scripts'/'fpp_install.sh').read_text(encoding='utf-8')

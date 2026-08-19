@@ -8,6 +8,7 @@ SERVICE="pi-matrix-signage.service"
 UPGRADE_HELPER="/usr/local/sbin/pi-matrix-signage-upgrade"
 SUDOERS_FILE="/etc/sudoers.d/pi-matrix-signage"
 POWER_HELPER="/usr/local/sbin/pi-matrix-signage-poweroff"
+RESET_HELPER="/usr/local/sbin/pi-matrix-signage-reset"
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [[ ${EUID} -ne 0 ]]; then
@@ -32,11 +33,10 @@ fi
 mkdir -p "$DEST" "$PERSIST/data" "$PERSIST/uploads/images" "$PERSIST/uploads/fonts" "$PERSIST/uploads/videos" "$PERSIST/uploads/video-src" "$PERSIST/uploads/shaders" /home/fpp/media/logs
 
 # Commercial licensing is configured outside the replaceable application folder.
-# Existing installs keep their current values during upgrades. v0.6.2 ships in
-# development mode until the native WHMCS addon has been installed and tested.
+# Existing keys, signed entitlements, endpoints and device data remain persistent.
 if [[ ! -f "$PERSIST/license.env" ]]; then
   cat > "$PERSIST/license.env" <<'EOF'
-PIMATRIX_LICENSE_MODE=development
+PIMATRIX_LICENSE_MODE=whmcs
 PIMATRIX_LICENSE_PREFIX=PMS-
 PIMATRIX_LICENSE_CHECK_HOURS=168
 PIMATRIX_LICENSE_GRACE_DAYS=30
@@ -46,6 +46,9 @@ PIMATRIX_LICENSE_PUBLIC_KEY_URL=https://www.issl.co.uk/support/modules/addons/pi
 # PIMATRIX_LICENSE_PUBLIC_KEY=/home/fpp/media/pi-matrix-signage-data/data/license-public.pem
 EOF
   chmod 0640 "$PERSIST/license.env"
+elif grep -q '^PIMATRIX_LICENSE_MODE=development[[:space:]]*$' "$PERSIST/license.env"; then
+  echo "==> Enabling live WHMCS licence enforcement"
+  sed -i 's/^PIMATRIX_LICENSE_MODE=development[[:space:]]*$/PIMATRIX_LICENSE_MODE=whmcs/' "$PERSIST/license.env"
 fi
 
 # Copy application code while keeping persistent database/uploads outside the code folder.
@@ -65,7 +68,8 @@ install -m 0644 "$DEST/systemd/$SERVICE" "/etc/systemd/system/$SERVICE"
 # Install the narrow, root-owned updater. The web service itself still runs as fpp.
 install -o root -g root -m 0755 "$DEST/systemd/pi-matrix-signage-upgrade" "$UPGRADE_HELPER"
 install -o root -g root -m 0755 "$DEST/systemd/pi-matrix-signage-poweroff" "$POWER_HELPER"
-printf 'fpp ALL=(root) NOPASSWD: %s, %s\n' "$UPGRADE_HELPER" "$POWER_HELPER" > "$SUDOERS_FILE"
+install -o root -g root -m 0755 "$DEST/systemd/pi-matrix-signage-reset" "$RESET_HELPER"
+printf 'fpp ALL=(root) NOPASSWD: %s, %s, %s\n' "$UPGRADE_HELPER" "$POWER_HELPER" "$RESET_HELPER" > "$SUDOERS_FILE"
 chmod 0440 "$SUDOERS_FILE"
 rm -f /etc/sudoers.d/pi-matrix-signage-upgrade
 if command -v visudo >/dev/null 2>&1; then

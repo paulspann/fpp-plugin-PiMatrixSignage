@@ -1,4 +1,134 @@
-# Pi Matrix Signage v0.6.9
+# Pi Matrix Signage v0.6.28
+
+
+## v0.6.28 – transfer reset, commissioning certificate and Pillow cleanup
+
+- Adds a guarded **Factory reset / transfer ownership** workflow requiring the current password, exact typed confirmation and Backup + Users + Display Setup permissions.
+- Factory reset erases Pi Matrix messages, users, media, hardware profiles, backups/rollback copies and local WHMCS licence state while leaving the application/FPP installation intact; FPP site/output state is reset and Wi-Fi/network credentials can be erased for ownership transfer.
+- Adds a root-owned, narrowly scoped reset helper installed through the existing FPP plugin flow; network reset reboots the Pi so FPP can return to its first-use networking behaviour.
+- Persists the individual commissioning checks and includes a human-readable `commissioning-certificate.txt` in every support ZIP with software versions, Device ID, panel/output details, commissioning date/operator and test results.
+- Removes the Pillow 12.3 `Image.getdata()` deprecation warnings from the test suite using `get_flattened_data()` with an older-Pillow compatibility fallback.
+
+
+## v0.6.27 – built-in hardware profile starters
+
+- Adds four permanent starter profiles for common Hanson P5 and Colorlight P5/P10 layouts.
+- Clearly labels built-ins as starting points whose scan, driver mapping and colour order must be checked against the actual panel.
+- Keeps starter profiles read-only while allowing installers to apply, adjust and save site-specific copies.
+
+## v0.6.26 – commissioning, profiles and support packages
+
+- Adds a guided Colorlight commissioning wizard with interface detection, normal-LAN warnings, FPP configuration checks and physical test-pattern sign-off.
+- Adds reusable named hardware profiles covering panel model, dimensions, scan, output hardware, receiver, interface, layout, rotation, colour order and brightness limit.
+- Adds a one-click sanitised support ZIP with app/FPP versions, diagnostics, recent errors, hardware/commissioning details, safe licence status and an optional display preview.
+
+## v0.6.25 – hardware-neutral branding
+
+- Replaces the Hanson-only login and top-bar subtitle with hardware-neutral P5/P10 signage wording.
+
+## v0.6.24 – optional Colorlight output
+
+- Adds a saved Hanson rPI-MFC / Colorlight output choice in Display Setup.
+- Supports Colorlight 5A-75B and 5A-75E receiver profiles with a dedicated network-interface setting.
+- Builds hardware-specific FPP setup instructions and checks whether the selected interface is present.
+- Adds common Colorlight scan rates while preserving rPI-MFC validation and GPIO behaviour.
+
+## v0.6.23 – reliable black colour selection
+
+- Stops the colour picker's internal native input from being enhanced as a second nested colour field, which caused the popover to jump and then disappear.
+- Adds Black and White to the preset palette for immediate selection.
+- Applies a preset on the first click and closes the popover without changing the inspector layout.
+
+
+## v0.6.22 – duplicate-free Cloud Text
+
+- Prevents a phrase at the start of a new shuffled round from duplicating one still visible from the preceding round.
+- Removes duplicate input phrases using case-insensitive, whitespace-normalized matching while preserving the first spelling entered.
+- Automatically spaces arrivals according to the number of unique phrases when that is lower than Maximum visible.
+
+
+## v0.6.21 – accurate colour by word
+
+- Makes **Colour by word** follow the real rendered word boundaries rather than dividing the layer into equal-width colour bands.
+- Keeps every letter of a word in one palette colour regardless of differences in word length, spacing, alignment or font width.
+
+
+## v0.6.20 – stable Cloud Text arrivals
+
+- Keeps every phrase at one random position for its complete visible lifetime, preventing apparent instant duplicates when another phrase expires.
+- Gives each playback a fresh stable random seed instead of deriving positioning from render-frame timing.
+- Enforces at least 0.2 seconds of fade-in and fade-out so Cloud Text cannot appear or disappear as a hard cut.
+
+
+## v0.6.19 – free-positioned Cloud Text
+
+- Replaces Cloud Text's visibly column-based slots with collision-aware random positioning across the complete layer.
+- Randomizes both horizontal and vertical placement while retrying positions that would overlap visible text.
+- Retains whole-word wrapping, in-layer containment, spacing and the maximum-visible limit.
+
+
+## v0.6.18 – whole-word Cloud Text wrapping
+
+- Prevents Cloud Text from splitting a word across two lines.
+- Wraps only at spaces and shrinks unusually long individual words to keep them visible inside their reserved area.
+
+
+## v0.6.17 – Cloud Text layers
+
+- Adds a **Cloud Text** Designer layer for displaying a list of short phrases at randomized positions.
+- Shuffles the complete phrase list before repeating, so every entry receives a turn while each playback uses a fresh order and placement.
+- Automatically fits every phrase inside a reserved area of the layer, keeping visible phrases fully on-screen and preventing overlap.
+- Adds controls for appearance interval, visible time, fade-in/out, maximum simultaneous phrases, spacing, font, LED text rendering and solid or random-palette colours.
+
+
+## v0.6.16 – built-in Help manual
+
+- Adds a comprehensive searchable operating manual at `/help` covering setup, licensing, content, Designer, shaders, live weather, playlists, schedules, emergency operation, backups, users, permissions, remote control, maintenance and troubleshooting.
+- Adds a top-bar **Help** link that opens the manual in a new browser tab.
+- Automatically changes the Help link fragment as users navigate so it opens at the section matching the current application page.
+
+
+## v0.6.15 – live WHMCS licence enforcement
+
+- Changes new installations from development licensing to live WHMCS enforcement by default.
+- Migrates an existing default `PIMATRIX_LICENSE_MODE=development` setting to `whmcs` during upgrade while preserving its licence key, signed entitlement, endpoint and device identity.
+- Keeps development mode available only as an explicit diagnostic override.
+
+
+## v0.6.14 – streamlined Display setup
+
+- Removes the entire customer-facing **Software updates** information block from Display setup, including the installed-version badge and FPP update instructions.
+- Keeps the underlying FPP update, health-check, licence refresh and rollback machinery unchanged.
+
+
+## v0.6.13 – licence refresh after software updates
+
+- Re-authenticates an installed WHMCS licence shortly after the application restarts on a new software version.
+- Sends the newly installed application version through the existing signed licence-check request and records the version successfully reported.
+- Retries later if WHMCS is temporarily unavailable without blocking installation, startup or the existing offline grace entitlement.
+
+
+## v0.6.12 – optional live weather shader
+
+- Adds an optional **Use live weather** mode to the built-in Sky Weather shader for both scene backgrounds and shader layers.
+- Uses the existing Open-Meteo integration to select clear, cloudy, rain, snow or storm visuals and day/night phase automatically.
+- Maps live cloud cover, wind direction, wind speed and precipitation intensity to the shader while retaining saved manual controls as an offline fallback.
+- Keeps manual Sky Weather operation unchanged when live weather is disabled.
+
+
+## v0.6.11 – independent sun and moon positioning
+
+- Keeps cloud and weather animation speed independent from the sun or moon.
+- Adds horizontal position and height controls for the sun or moon.
+- Makes the celestial body stationary by default, with optional left-to-right or right-to-left movement and a separate speed control.
+
+
+## v0.6.10 – animated sky and weather shader
+
+- Adds a built-in **Sky Weather** generator with clear, partly cloudy, overcast, rain, snow and storm modes.
+- Provides day, sunset and night phases with a moving sun or moon, stars, horizon glow and layered wind-driven clouds.
+- Adds controls for movement speed, wind direction, cloud cover, precipitation intensity, sun/moon size and all key colours.
+- Keeps rain streaks, snow particles, clouds and lightning readable on low-resolution P5/P10 panels.
 
 
 ## v0.6.9 – settings menu
@@ -19,7 +149,6 @@
 
 - Removes the customer-facing **Upgrade** tab now that Pi Matrix Signage is installed and updated through the FPP Plugin Manager.
 - Removes the obsolete Upgrade checkbox from the Users tab; existing backend `can_upgrade` data remains untouched for legacy maintenance endpoints.
-- Adds a **Software updates** information panel under Display setup showing the installed version and directing administrators to **FPP → Content Setup → Plugin Manager → Pi Matrix Signage → Update**.
 - Keeps the existing privileged upgrade helper, health-check, safety backup and rollback code packaged underneath rather than deleting the proven recovery machinery.
 - Makes legacy upgrade-page JavaScript conditional so removing the page cannot cause browser startup errors.
 

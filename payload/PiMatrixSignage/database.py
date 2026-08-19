@@ -8,14 +8,22 @@ from contextlib import contextmanager
 from datetime import datetime
 from typing import Any, Iterable
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 11
 
 DEFAULT_SETTINGS = {
     "panel_width": 64,
     "panel_height": 32,
+    "panel_model": "Custom P5/P10 panel",
     "panels_across": 1,
     "panels_down": 1,
     "panel_scan": "1/16",
+    "panel_output_type": "rpi_mfc",
+    "colorlight_receiver_model": "5a-75b",
+    "colorlight_interface": "eth1",
+    "colorlight_commissioned": False,
+    "colorlight_commissioned_at": "",
+    "colorlight_commissioned_by": "",
+    "colorlight_commissioning_tests": {},
     "display_rotation": 0,
     "brightness": 60,
     "frame_rate": 25,
@@ -177,6 +185,14 @@ class Database:
                 );
                 CREATE INDEX IF NOT EXISTS idx_recovery_events_created_at
                     ON recovery_events(created_at DESC);
+
+                CREATE TABLE IF NOT EXISTS hardware_profiles (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                    config_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
 
                 CREATE TABLE IF NOT EXISTS conditional_rules (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -908,3 +924,47 @@ class Database:
         with self.conn() as con:
             con.execute("DELETE FROM recovery_events")
 
+    # Hardware profiles --------------------------------------------------
+    def list_hardware_profiles(self) -> list[dict[str, Any]]:
+        with self.conn() as con:
+            rows = con.execute("SELECT * FROM hardware_profiles ORDER BY name COLLATE NOCASE").fetchall()
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["config"] = json.loads(item.pop("config_json"))
+            result.append(item)
+        return result
+
+    def save_hardware_profile(self, name: str, config: dict[str, Any], profile_id: int | None = None) -> int:
+        name = str(name or "").strip()
+        if not name:
+            raise ValueError("Profile name is required")
+        if len(name) > 80:
+            raise ValueError("Profile name is too long")
+        raw = json.dumps(config, separators=(",", ":"), sort_keys=True)
+        now = datetime.now().isoformat(timespec="seconds")
+        with self.conn() as con:
+            conflict = con.execute("SELECT id FROM hardware_profiles WHERE name=? COLLATE NOCASE AND (? IS NULL OR id<>?)", (name, profile_id, profile_id)).fetchone()
+            if conflict:
+                raise ValueError("A hardware profile with that name already exists")
+            if profile_id:
+                found = con.execute("SELECT id FROM hardware_profiles WHERE id=?", (int(profile_id),)).fetchone()
+                if not found:
+                    raise ValueError("Hardware profile not found")
+                con.execute("UPDATE hardware_profiles SET name=?,config_json=?,updated_at=? WHERE id=?", (name, raw, now, int(profile_id)))
+                return int(profile_id)
+            cur = con.execute("INSERT INTO hardware_profiles(name,config_json,created_at,updated_at) VALUES(?,?,?,?)", (name, raw, now, now))
+            return int(cur.lastrowid)
+
+    def get_hardware_profile(self, profile_id: int) -> dict[str, Any] | None:
+        with self.conn() as con:
+            row = con.execute("SELECT * FROM hardware_profiles WHERE id=?", (int(profile_id),)).fetchone()
+        if not row:
+            return None
+        item = dict(row)
+        item["config"] = json.loads(item.pop("config_json"))
+        return item
+
+    def delete_hardware_profile(self, profile_id: int) -> None:
+        with self.conn() as con:
+            con.execute("DELETE FROM hardware_profiles WHERE id=?", (int(profile_id),))

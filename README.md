@@ -1,4 +1,4 @@
-# Pi Matrix Signage FPP Plugin v0.1.7
+# Pi Matrix Signage FPP Plugin v0.1.9
 
 10+ bootstrap/integration plugin for Pi Matrix Signage on Raspberry Pi.
 
@@ -27,7 +27,7 @@ For beta testing, open FPP's Plugin Manager, paste that raw `pluginInfo.json` UR
 
 ## Current bootstrap payload
 
-This test bootstrap contains Pi Matrix Signage v0.6.9. The next commercial-hardening stage should move the application payload out of the public bootstrap repository and retrieve a signed, licence-authorised release package from the ISSL/WHMCS licensing service.
+This test bootstrap contains Pi Matrix Signage v0.6.28. The next commercial-hardening stage should move the application payload out of the public bootstrap repository and retrieve a signed, licence-authorised release package from the ISSL/WHMCS licensing service.
 
 
 ## v0.1.2
@@ -53,7 +53,7 @@ This test bootstrap contains Pi Matrix Signage v0.6.9. The next commercial-harde
 
 ## v0.1.5
 
-- Bundles Pi Matrix Signage v0.6.9.
+- Bundles Pi Matrix Signage v0.6.28.
 - Fixes Plugin Manager updates that copied new files but left the old Python process running.
 - Verifies `/health` reports the expected application version before an install/update is considered successful.
 
@@ -65,3 +65,10 @@ This test bootstrap contains Pi Matrix Signage v0.6.9. The next commercial-harde
 ## v0.1.8 upgrade compatibility
 
 FPP Plugin Manager updates intentionally do **not** ship `scripts/fpp_upgrade.sh`. Current FPP falls back to rerunning `scripts/fpp_install.sh` when that file is absent. This avoids a Git executable-mode failure where FPP tried to execute a newly uploaded `fpp_upgrade.sh` directly and `sudo` returned `command not found`. The normal install script is idempotent and already performs the application update, service restart, and exact running-version health check.
+
+
+## v0.1.9
+
+- Bundles Pi Matrix Signage **v0.6.28**.
+- Installs/removes the new root-owned `pi-matrix-signage-reset` helper and grants only the plugin service account passwordless access to the three narrow privileged helpers.
+- Adds transfer-safe factory reset support without removing the Pi Matrix Signage application or FPP plugin.

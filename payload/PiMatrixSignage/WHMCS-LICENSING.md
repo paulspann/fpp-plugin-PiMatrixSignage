@@ -1,6 +1,6 @@
 # WHMCS licensing setup – Pi Matrix Signage v0.6.2+
 
-Pi Matrix Signage now uses the native **Pi Matrix Signage Licensing** WHMCS addon module rather than a standalone bridge script. The application still ships with `PIMATRIX_LICENSE_MODE=development` so an existing sign cannot be disabled before the commercial licensing product is ready.
+Pi Matrix Signage uses the native **Pi Matrix Signage Licensing** WHMCS addon module rather than a standalone bridge script. New and upgraded installations use live WHMCS enforcement by default.
 
 ## WHMCS
 
@@ -48,7 +48,7 @@ After the product exists, configure **Allowed WHMCS Product IDs** in the Pi Matr
 The persistent `license.env` should contain:
 
 ```text
-PIMATRIX_LICENSE_MODE=development
+PIMATRIX_LICENSE_MODE=whmcs
 PIMATRIX_LICENSE_PREFIX=PMS-
 PIMATRIX_LICENSE_CHECK_HOURS=168
 PIMATRIX_LICENSE_GRACE_DAYS=30
@@ -56,10 +56,12 @@ PIMATRIX_LICENSE_ENDPOINT=https://www.issl.co.uk/support/modules/addons/pimatrix
 PIMATRIX_LICENSE_PUBLIC_KEY_URL=https://www.issl.co.uk/support/modules/addons/pimatrixlicensing/public-key.php
 ```
 
-During initial testing leave `PIMATRIX_LICENSE_MODE=development`. Once a real WHMCS licence has activated and the replacement/reissue path has been tested, switch it to:
+Live installations use:
 
 ```text
 PIMATRIX_LICENSE_MODE=whmcs
 ```
+
+`development` remains available only as an explicit diagnostic override for controlled testing.
 
 On the first activation/check, Pi Matrix downloads the public signing key over HTTPS and stores it locally in the persistent data directory. The WHMCS private key and local-key secret never leave the WHMCS server.

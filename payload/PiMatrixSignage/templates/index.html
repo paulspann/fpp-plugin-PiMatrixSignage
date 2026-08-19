@@ -11,13 +11,14 @@
   <header class="topbar">
     <div>
       <h1>Pi Matrix Signage</h1>
-      <p>Hanson rPI-MFC · P5/P10 LED display controller · v{{ app_version }}</p>
+      <p>P5/P10 LED signage controller · v{{ app_version }}</p>
     </div>
     <div class="topbar-actions">
       <div class="status-pill" id="statusPill"><span class="dot"></span><span>Starting…</span></div>
       <div class="user-strip">
         <span class="user-avatar" id="currentUserInitial">U</span>
         <span class="user-name" id="currentUserName">User</span>
+        <a class="topbar-link" id="helpLink" href="/help#dashboard" target="_blank" rel="noopener">Help</a>
         <a class="topbar-link" href="/remote">Remote</a>
         <a class="topbar-link" href="/change-password">Password</a>
         <button class="topbar-link button-link" id="logoutButton" type="button">Sign out</button>
@@ -230,6 +231,7 @@
               </div>
               <div class="toolbar"><span class="toolbar-label">Add layer</span>
                 <button class="btn secondary" id="addTextLayer">+ Text</button>
+                <button class="btn secondary" id="addCloudTextLayer">+ Cloud Text</button>
                 <button class="btn secondary" id="addImageLayer">+ Image</button>
                 <button class="btn secondary" id="addVideoLayer">+ Video</button>
                 <button class="btn secondary" id="addShaderLayer">+ Shader</button>
@@ -256,6 +258,15 @@
                 </div>
                 <div id="sceneBgShaderAssetInfo" class="shader-asset-info muted">Choose a shader to expose its controls.</div>
                 <div id="sceneBgShaderStatus" class="shader-render-status hidden" aria-live="polite"></div>
+                <div id="sceneBgShaderWeatherFields" class="hidden">
+                  <label class="checkline"><input type="checkbox" id="sceneBgShaderLiveWeather"> Use live weather</label>
+                  <div class="form-grid cols-3">
+                    <label>Latitude<input type="number" id="sceneBgShaderWeatherLat" step="0.0001" value="53.55"></label>
+                    <label>Longitude<input type="number" id="sceneBgShaderWeatherLon" step="0.0001" value="-2.52"></label>
+                    <label>Refresh every (s)<input type="number" id="sceneBgShaderWeatherRefresh" min="60" max="3600" step="60" value="600"></label>
+                  </div>
+                  <p class="hint">Optional. Live Open-Meteo conditions select the weather, day/night phase, cloud cover, wind and precipitation. Manual controls remain as the fallback if weather data is unavailable.</p>
+                </div>
                 <div id="sceneBgShaderParameterFields" class="shader-parameter-fields"></div>
                 <p class="hint">Auto performance first tries native LED resolution, allows extra time for shader compilation, then automatically falls back to ½ or ¼ resolution only if the effect is too expensive for the Pi. The result is scaled back to the physical LED canvas.</p>
               </div>
@@ -426,6 +437,29 @@
                     <p class="hint">For sharp matrix text, 1 outline pixel is one whole LED pixel. Shadow X/Y are offsets only; the shadow follows the glyph body and does not inherit the outline thickness.</p>
                   </div>
 
+                  <div id="cloudTextLayerProperties" class="layer-kind-properties content-properties hidden">
+                    <h3>Cloud Text</h3>
+                    <p class="hint">Enter one phrase per line. Every phrase is used once in a shuffled round before any repeats. Visible phrases are auto-fitted inside separate randomized areas, so they remain fully inside the layer and never overlap.</p>
+                    <label>Messages — one per line<textarea id="cloudTextItems" rows="8" placeholder="Message 1&#10;Message 2&#10;Text 3"></textarea></label>
+                    <div class="form-grid cols-4">
+                      <label>Appear every (s)<input type="number" id="cloudTextInterval" min="0.1" max="120" step="0.1" value="1.5"></label>
+                      <label>Visible for (s)<input type="number" id="cloudTextVisibleFor" min="0.5" max="300" step="0.1" value="4"></label>
+                      <label>Fade in (s)<input type="number" id="cloudTextFadeIn" min="0.2" max="30" step="0.1" value="0.6"></label>
+                      <label>Fade out (s)<input type="number" id="cloudTextFadeOut" min="0.2" max="30" step="0.1" value="0.8"></label>
+                    </div>
+                    <div class="form-grid cols-4">
+                      <label>Maximum visible<input type="number" id="cloudTextMaxVisible" min="1" max="12" step="1" value="3"></label>
+                      <label>Gap (LED px)<input type="number" id="cloudTextGap" min="0" max="20" step="1" value="2"></label>
+                      <label>Font<select id="cloudTextFont"><option value="">Default font</option></select></label>
+                      <label>Text rendering<select id="cloudTextRenderMode"><option value="pixel">Pixel sharp – TTF/OTF</option><option value="led3x5">LED 3×5 compact</option><option value="led4x6">LED 4×6</option><option value="led5x7">LED 5×7</option><option value="led6x8">LED 6×8</option><option value="smooth">Smooth / anti-aliased</option></select></label>
+                    </div>
+                    <div class="form-grid cols-3">
+                      <label>Colour mode<select id="cloudTextColorMode"><option value="solid">One colour</option><option value="palette">Random from palette</option></select></label>
+                      <label>Text colour<input type="color" id="cloudTextColor" value="#ffffff"></label>
+                      <label>Random palette<input id="cloudTextPalette" value="#ffffff,#55ccff,#ffd45d,#ff78c8" placeholder="#ffffff,#55ccff,#ffd45d"></label>
+                    </div>
+                  </div>
+
                   <div id="imageLayerProperties" class="layer-kind-properties content-properties hidden">
                     <div class="card-head mini"><div><h3>Image / logo</h3><p>Images can be independently positioned, resized, rotated and animated.</p></div><label class="btn secondary file-btn">Upload image<input type="file" id="designerImageUpload" accept="image/*"></label></div>
                     <div class="form-grid cols-2">
@@ -463,6 +497,15 @@
                     </div>
                     <div id="shaderAssetInfo" class="shader-asset-info muted">Choose a shader to expose its controls.</div>
                     <div id="shaderRenderStatus" class="shader-render-status hidden" aria-live="polite"></div>
+                    <div id="shaderWeatherFields" class="hidden">
+                      <label class="checkline"><input type="checkbox" id="layerShaderLiveWeather"> Use live weather</label>
+                      <div class="form-grid cols-3">
+                        <label>Latitude<input type="number" id="layerShaderWeatherLat" step="0.0001" value="53.55"></label>
+                        <label>Longitude<input type="number" id="layerShaderWeatherLon" step="0.0001" value="-2.52"></label>
+                        <label>Refresh every (s)<input type="number" id="layerShaderWeatherRefresh" min="60" max="3600" step="60" value="600"></label>
+                      </div>
+                      <p class="hint">Optional. Live Open-Meteo conditions select the weather, day/night phase, cloud cover, wind and precipitation. Manual controls remain as the fallback if weather data is unavailable.</p>
+                    </div>
                     <div id="shaderParameterFields" class="shader-parameter-fields"></div>
                     <p class="hint">Supports ISF-style fragment shaders using <code>TIME</code>, <code>RENDERSIZE</code>, float/bool/int, point2D and colour inputs. Shader rendering runs in an isolated helper process and is frame-limited so a broken or heavy shader cannot block the LED output loop.</p>
                   </div>
@@ -659,24 +702,23 @@
           </div>
           <div class="callout compact-callout" id="licenceHelp"><strong>Device locking:</strong> one WHMCS licence is bound to this controller's Device ID. Use WHMCS Reissue before moving the licence to replacement hardware.</div>
         </article>
-        <article class="card full-span software-update-card">
-          <div class="card-head">
-            <div><h2>Software updates</h2><p>Updates are managed by Falcon Player so customers do not need to download or upload release ZIP files.</p></div>
-            <div class="version-badge">Installed <strong>v{{ app_version }}</strong></div>
-          </div>
-          <div class="callout compact-callout"><strong>Update from FPP:</strong> open <em>Content Setup → Plugin Manager</em>, find <strong>Pi Matrix Signage</strong> and choose <strong>Update</strong> when a newer plugin release is available. The existing Pi Matrix health-check and rollback machinery remains installed underneath for safe application replacement.</div>
-        </article>
         <article class="card">
           <div class="card-head"><div><h2>Panel layout</h2><p>Tell the app the pixel size and arrangement of the physical panels.</p></div></div>
-          <div class="form-grid cols-3"><label>Pixels per panel – width<input type="number" id="panelWidth" min="8" max="512"></label><label>Pixels per panel – height<input type="number" id="panelHeight" min="8" max="512"></label><label>Panel scan rate<select id="panelScan"><option value="1/16">1/16 scan</option><option value="1/8">1/8 scan</option></select></label></div>
+          <label>Panel model / description<input id="panelModel" maxlength="100" placeholder="For example: P5 outdoor 64×32 1/8 scan"></label>
+          <div class="form-grid cols-3"><label>Pixels per panel – width<input type="number" id="panelWidth" min="8" max="512"></label><label>Pixels per panel – height<input type="number" id="panelHeight" min="8" max="512"></label><label>Panel scan rate<select id="panelScan"><option value="1/4">1/4 scan</option><option value="1/8">1/8 scan</option><option value="1/16">1/16 scan</option><option value="1/32">1/32 scan</option><option value="1/64">1/64 scan</option></select></label></div>
           <div class="form-grid cols-2"><label>Panels across<input type="number" id="panelsAcross" min="1" max="32"></label><label>Panels down<input type="number" id="panelsDown" min="1" max="32"></label></div>
           <label>Whole-display rotation<select id="displayRotation"><option value="0">0° – normal</option><option value="90">90° clockwise</option><option value="180">180°</option><option value="270">270° clockwise</option></select></label>
           <div class="layout-summary" id="layoutSummary"></div>
-          <div class="callout warn"><strong>Physical panel order/orientation:</strong> set each panel's wiring order and rotation once in FPP's LED Panels screen. This app then treats the result as one continuous canvas. The rPI-MFC's maximum panel count depends on panel size and scan rate, so do not assume every layout the editor can describe is electrically supported.</div>
+          <div class="callout warn" id="panelHardwareWarning"></div>
         </article>
 
         <article class="card">
-          <div class="card-head"><div><h2>Display output</h2><p>Normal Hanson/FPP installation uses localhost DDP.</p></div></div>
+          <div class="card-head"><div><h2>Display output</h2><p>Choose the hardware FPP uses to drive the panels. Pi Matrix Signage sends frames to FPP over localhost DDP in either mode.</p></div></div>
+          <label>Panel output hardware<select id="panelOutputType"><option value="rpi_mfc">Hanson rPI-MFC</option><option value="colorlight">Colorlight receiver card</option></select></label>
+          <div id="colorlightSettings" class="hidden">
+            <div class="form-grid cols-2"><label>Receiver model<select id="colorlightReceiverModel"><option value="5a-75b">Colorlight 5A-75B</option><option value="5a-75e">Colorlight 5A-75E</option></select></label><label>Dedicated Ethernet interface<input id="colorlightInterface" value="eth1" placeholder="eth1"></label></div>
+            <div class="callout warn compact-callout"><strong>Dedicated connection required:</strong> connect the receiver directly to this Ethernet interface and do not use it for the Pi's normal network connection. Program the receiver's driver IC, scan and cabinet mapping with Colorlight LEDVISION/LEDSetting before enabling the FPP output.</div>
+          </div>
           <div class="form-grid cols-2"><label>Brightness <span class="inline-value" id="brightnessValue">60%</span><input type="range" id="brightness" min="0" max="100"></label><label>Frame rate<input type="number" id="frameRate" min="1" max="60"></label></div>
           <div class="form-grid cols-2"><label>Colour order<select id="colorOrder"><option>RGB</option><option>RBG</option><option>GRB</option><option>GBR</option><option>BRG</option><option>BGR</option></select></label><label>Time zone<input id="timezone" value="Europe/London"></label></div>
           <details><summary>Advanced DDP settings</summary><div class="form-grid cols-3"><label>Host<input id="ddpHost"></label><label>UDP port<input type="number" id="ddpPort"></label><label>Channel offset<input type="number" id="ddpOffset"></label></div></details>
@@ -685,7 +727,23 @@
           <div class="toolbar"><button class="btn primary" id="saveSettings">Save display settings</button></div>
         </article>
 
-        <article class="card full-span gpio-controls-card">
+        <article class="card full-span" id="colorlightWizardCard">
+          <div class="card-head"><div><h2>Colorlight setup &amp; commissioning</h2><p>Follow each step in order, test the physical display, then record the installation as commissioned.</p></div><span class="health-badge" id="commissioningBadge">Not commissioned</span></div>
+          <ol class="commissioning-steps">
+            <li><strong>Choose the dedicated interface</strong><p>Refresh the detected interfaces, select one that is not carrying the normal LAN, then save Display settings.</p><div class="toolbar compact"><select id="detectedColorlightInterface"></select><button class="btn secondary" id="detectInterfaces" type="button">Detect interfaces</button><button class="btn secondary" id="useDetectedInterface" type="button">Use selected</button></div><div class="callout compact-callout" id="interfaceWarning">Interfaces have not been checked yet.</div></li>
+            <li><strong>Test the FPP output</strong><p>Checks that FPPD is active and its saved ColorLight 5A-75 output references the selected interface.</p><div class="toolbar compact"><button class="btn secondary" id="testColorlightFpp" type="button">Test FPP configuration</button><label class="checkline"><input type="checkbox" id="commissionFpp" disabled> FPP check passed</label></div><div class="callout compact-callout" id="colorlightFppResult">Not tested.</div></li>
+            <li><strong>Verify the panel tests</strong><p>Run each pattern and confirm the complete physical display is correct.</p><div class="commission-tests"><label><button class="btn secondary wizard-pattern" data-pattern="grid" type="button">Show Grid</button><input type="checkbox" id="commissionGrid"> Correct</label><label><button class="btn secondary wizard-pattern" data-pattern="checker" type="button">Show Checker</button><input type="checkbox" id="commissionChecker"> Correct</label><label><button class="btn red wizard-pattern" data-pattern="red" type="button">Red</button><input type="checkbox" id="commissionRed"> Correct</label><label><button class="btn green wizard-pattern" data-pattern="green" type="button">Green</button><input type="checkbox" id="commissionGreen"> Correct</label><label><button class="btn blue wizard-pattern" data-pattern="blue" type="button">Blue</button><input type="checkbox" id="commissionBlue"> Correct</label><label><button class="btn secondary wizard-pattern" data-pattern="white" type="button">Full white</button><input type="checkbox" id="commissionWhite"> Correct</label></div></li>
+            <li><strong>Complete commissioning</strong><p>This records who passed the installation and when. Changing or applying hardware settings clears the commissioning state.</p><button class="btn primary" id="completeCommissioning" type="button">Mark installation commissioned</button><small id="commissioningDetail" class="muted"></small></li>
+          </ol>
+        </article>
+
+        <article class="card full-span" id="hardwareProfilesCard">
+          <div class="card-head"><div><h2>Hardware profiles</h2><p>Save the current panel, receiver, interface, layout, rotation, colour order and brightness settings for reuse.</p></div><div class="toolbar compact"><input id="hardwareProfileName" maxlength="80" placeholder="Profile name, e.g. Shop window 2×2"><button class="btn primary" id="saveHardwareProfile" type="button">Save current</button></div></div>
+          <div class="callout compact-callout warn"><strong>Starter profiles are not electrical specifications.</strong> Apply the closest template, verify its scan rate, driver mapping and colour order against the panel label/datasheet, then save a site-specific profile after commissioning.</div>
+          <div id="hardwareProfileList" class="backup-list"><p class="muted">No hardware profiles saved yet.</p></div>
+        </article>
+
+        <article class="card full-span gpio-controls-card" id="gpioControlsCard">
           <div class="card-head">
             <div><h2>GPIO / physical controls</h2><p>Use the three dedicated Hanson rPi-MFC user-input connectors for physical buttons or voltage-free relay contacts.</p></div>
             <label class="switchline"><input type="checkbox" id="gpioControlsEnabled"> Enable physical controls</label>
@@ -749,9 +807,9 @@
         </article>
 
         <article class="card full-span">
-          <div class="card-head"><div><h2>FPP setup helper</h2><p>Use these values in Falcon Player after setting the same physical panel layout there.</p></div><button class="btn secondary" id="refreshFpp">Refresh</button></div>
+          <div class="card-head"><div><h2>FPP setup helper</h2><p>Use these hardware-specific values in Falcon Player after saving Display Setup.</p></div><button class="btn secondary" id="refreshFpp">Refresh</button></div>
           <div id="fppSetup" class="fpp-setup"></div>
-          <div class="callout"><strong>Important:</strong> the Hanson rPI-MFC is the hardware interface. FPP drives the timing-critical HUB75 signals; Pi Matrix Signage sends the finished RGB frame to FPP.</div>
+          <div class="callout"><strong>Important:</strong> FPP owns the physical output and timing. Pi Matrix Signage sends the finished RGB frame to FPP, which drives either the Hanson board or the Colorlight receiver.</div>
         </article>
       </div>
     </section>
@@ -776,6 +834,26 @@
           <div class="card-head"><div><h2>Portable configuration</h2><p>Move the complete Pi Matrix Signage creative configuration between signs without copying user accounts or FPP.</p></div><div class="toolbar compact"><button class="btn secondary" id="exportConfiguration">Export configuration</button><label class="btn secondary file-btn compact-file-btn">Import configuration<input type="file" id="importConfigurationFile" accept=".zip,application/zip"></label></div></div>
           <div class="portable-config-includes"><span>Messages &amp; assets</span><span>Components</span><span>Playlists</span><span>Schedules &amp; rules</span><span>Brightness profiles</span><span>Display settings</span></div>
           <div class="callout compact-callout warn"><strong>Import replaces the current creative configuration.</strong> User accounts/passwords and FPP configuration are deliberately left untouched. Use Backup &amp; restore for full disaster recovery.</div>
+        </article>
+
+        <article class="card full-span">
+          <div class="card-head"><div><h2>System support package</h2><p>Download a privacy-safe diagnostic ZIP for support without including passwords or the licence key.</p></div><button class="btn primary" id="createSupportPackage" type="button">Create support package</button></div>
+          <label class="checkline"><input type="checkbox" id="supportIncludePreview"> Include the current display preview/test-pattern image</label>
+          <div class="backup-includes"><div><strong>Commissioning certificate</strong><span>Human-readable hardware, software, Device ID, commissioning date and recorded panel-test results.</span></div><div><strong>Versions and health</strong><span>Application, FPP service state, diagnostics and recent warnings/errors.</span></div><div><strong>Hardware</strong><span>Selected profile, network interfaces, commissioning result and Colorlight test.</span></div><div><strong>Sanitised FPP output</strong><span>Channel-output configuration with known passwords, keys, tokens and secrets removed.</span></div><div><strong>Licence status</strong><span>Status and verification dates only; the licence key is excluded.</span></div></div>
+          <div class="callout compact-callout warn"><strong>Review before sharing:</strong> automatic redaction removes known secret fields, but the package can still identify the controller, network interface names and IP addresses.</div>
+        </article>
+
+        <article class="card full-span">
+          <div class="card-head"><div><h2>Factory reset / transfer ownership</h2><p>Permanently erase customer data and return this controller to a clean Pi Matrix Signage setup without reinstalling FPP or the application.</p></div></div>
+          <div class="callout warn"><strong>Destructive action:</strong> this erases messages, playlists, schedules, users, uploaded media, saved hardware profiles, local licence key/entitlement, backups/rollback copies and FPP site/output configuration. It cannot be undone. Download any backup you need first.</div>
+          <div class="form-grid cols-2">
+            <label>Current password<input type="password" id="factoryResetPassword" autocomplete="current-password" placeholder="Required"></label>
+            <label>Type RESET THIS CONTROLLER<input id="factoryResetConfirmation" autocomplete="off" spellcheck="false" placeholder="RESET THIS CONTROLLER"></label>
+          </div>
+          <label class="checkline"><input type="checkbox" id="factoryResetClearNetwork" checked> Erase FPP network/Wi-Fi settings too (recommended when transferring ownership; this connection will be lost and the Pi will reboot)</label>
+          <label class="checkline"><input type="checkbox" id="factoryResetAcknowledge"> I understand this permanently erases the controller data and I have downloaded any backup I need.</label>
+          <div class="toolbar"><button class="btn danger" id="factoryResetController" type="button">Factory reset controller…</button></div>
+          <div class="callout compact-callout"><strong>Licence transfer:</strong> the local licence key and signed entitlement are erased. WHMCS remains authoritative, so use WHMCS Reissue/transfer before activating that licence on replacement hardware.</div>
         </article>
 
         <article class="card full-span">

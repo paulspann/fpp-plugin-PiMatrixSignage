@@ -29,6 +29,12 @@ from renderer import (
 from shader_support import list_shader_assets, prepare_fragment_source, shader_default_params, ShaderClient
 
 
+def _pixels(image):
+    """Pillow 12.1+ replacement for deprecated Image.getdata(), with old-Pillow fallback."""
+    getter = getattr(image, "get_flattened_data", None)
+    return getter() if getter is not None else image.getdata()
+
+
 class CoreTests(unittest.TestCase):
     def test_ddp_packetization_offsets_and_push(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -63,7 +69,7 @@ class CoreTests(unittest.TestCase):
         im = render_message(msg, 64, 32, 0, datetime(2026, 8, 16, 9, 42), "/tmp/does-not-exist")
         self.assertEqual(im.size, (64, 32))
         # At least one red text pixel should be present.
-        self.assertTrue(any(r > 100 and g < 80 and b < 80 for r, g, b in im.getdata()))
+        self.assertTrue(any(r > 100 and g < 80 and b < 80 for r, g, b in _pixels(im)))
 
 
     def test_render_message_accepts_fractional_text_bounds(self):
@@ -95,8 +101,8 @@ class CoreTests(unittest.TestCase):
         msg = {"editor_mode": "designer", "scene_json": json.dumps(scene)}
         im = render_message(msg, 128, 32, 0.5, datetime(2026, 8, 16, 11, 22), "/tmp/does-not-exist")
         self.assertEqual(im.size, (128, 32))
-        self.assertTrue(any(r > 180 and g < 80 and b < 80 for r, g, b in im.getdata()))
-        self.assertTrue(any(r > 150 and g > 150 and b > 150 for r, g, b in im.getdata()))
+        self.assertTrue(any(r > 180 and g < 80 and b < 80 for r, g, b in _pixels(im)))
+        self.assertTrue(any(r > 150 and g > 150 and b > 150 for r, g, b in _pixels(im)))
 
     def test_designer_scroll_can_move_layer_partly_off_canvas(self):
         scene = {"version":1,"design_width":64,"design_height":32,"background":{"mode":"solid","color1":"#000000","color2":"#000000"},"layers":[
@@ -225,9 +231,9 @@ class CoreTests(unittest.TestCase):
             before=render_message(msg,40,20,.8,datetime(2026,8,16,11,0),"/tmp/does-not-exist")
             during=render_message(msg,40,20,1.5,datetime(2026,8,16,11,0),"/tmp/does-not-exist")
             after=render_message(msg,40,20,2.2,datetime(2026,8,16,11,0),"/tmp/does-not-exist")
-            self.assertGreater(sum(1 for p in before.getdata() if p[0]>200), 50)
-            self.assertGreater(sum(1 for p in during.getdata() if p[0]>20), 0)
-            self.assertEqual(sum(1 for p in after.getdata() if p[0]>0), 0)
+            self.assertGreater(sum(1 for p in _pixels(before) if p[0]>200), 50)
+            self.assertGreater(sum(1 for p in _pixels(during) if p[0]>20), 0)
+            self.assertEqual(sum(1 for p in _pixels(after) if p[0]>0), 0)
 
     def test_designer_scroll_can_combine_with_wipe_entrance_and_exit(self):
         scene={"version":1,"design_width":64,"design_height":24,"background":{"mode":"solid","color1":"#000000","color2":"#000000"},"layers":[
@@ -255,9 +261,9 @@ class CoreTests(unittest.TestCase):
         normal=render_message(msg,32,16,5.0,datetime(2026,8,16,11,0),"/tmp/does-not-exist")
         halfway=render_message(msg,32,16,5.5,datetime(2026,8,16,11,0),"/tmp/does-not-exist",forced_exit_elapsed=.5)
         finished=render_message(msg,32,16,6.1,datetime(2026,8,16,11,0),"/tmp/does-not-exist",forced_exit_elapsed=1.1)
-        normal_sum=sum(sum(p) for p in normal.getdata())
-        halfway_sum=sum(sum(p) for p in halfway.getdata())
-        finished_sum=sum(sum(p) for p in finished.getdata())
+        normal_sum=sum(sum(p) for p in _pixels(normal))
+        halfway_sum=sum(sum(p) for p in _pixels(halfway))
+        finished_sum=sum(sum(p) for p in _pixels(finished))
         self.assertGreater(normal_sum, halfway_sum)
         self.assertGreater(halfway_sum, 0)
         self.assertEqual(finished_sum, 0)
@@ -353,7 +359,7 @@ class CoreTests(unittest.TestCase):
             "render_mode": "pixel", "pixel_scale": 1, "pixel_bold": 0, "letter_spacing": 0,
         }
         im = render_message(msg, 128, 32, 0, datetime(2026,8,16,11,30), "/tmp/does-not-exist")
-        colours = set(im.getdata())
+        colours = set(_pixels(im))
         self.assertTrue(any(r == 255 and g == 0 and b == 0 for r,g,b in colours))
         # Pixel mode should not leave dim anti-aliased red edge pixels on a black background.
         self.assertFalse(any(0 < r < 255 and g == 0 and b == 0 for r,g,b in colours))
@@ -369,7 +375,7 @@ class CoreTests(unittest.TestCase):
         }
         im = render_message(msg, 256, 32, 0, datetime(2026,8,16,11,30), "/tmp/does-not-exist")
         self.assertEqual(im.size, (256,32))
-        colours = set(im.getdata())
+        colours = set(_pixels(im))
         self.assertIn((0,255,0), colours)
         self.assertTrue(colours.issubset({(0,0,0),(0,255,0)}))
 
@@ -460,8 +466,8 @@ class CoreTests(unittest.TestCase):
         app_py = (ROOT / "app.py").read_text(encoding="utf-8")
         self.assertNotIn('data-tab="upgrade"', html)
         self.assertNotIn('id="upgradeDropZone"', html)
-        self.assertIn('Software updates', html)
-        self.assertIn('Content Setup → Plugin Manager', html)
+        self.assertNotIn('Software updates', html)
+        self.assertNotIn('Update from FPP:', html)
         self.assertIn('/api/upgrade', app_py)
         self.assertIn('/usr/local/sbin/pi-matrix-signage-upgrade', install)
         self.assertTrue((ROOT / "systemd" / "pi-matrix-signage-upgrade").is_file())
@@ -482,7 +488,7 @@ class CoreTests(unittest.TestCase):
             ]}
             im=render_message({"editor_mode":"designer","scene_json":json.dumps(scene)},96,32,0,
                               datetime(2026,8,16,20,0),"/tmp/does-not-exist")
-            colours=set(im.getdata())
+            colours=set(_pixels(im))
             self.assertIn((0,255,0), colours, mode)
             self.assertTrue(colours.issubset({(0,0,0),(0,255,0)}), mode)
 
@@ -521,13 +527,18 @@ class CoreTests(unittest.TestCase):
     def test_live_data_async_replaces_loading_placeholder(self):
         key="test-live-ready"
         _LIVE_DATA_CACHE.pop(key,None)
-        self.assertEqual(_live_fetch_async(key,60,lambda:"Ready"),"Loading…")
-        for _ in range(50):
-            time.sleep(.01)
-            value=_live_fetch_async(key,60,lambda:"Ready")
-            if value=="Ready": break
-        self.assertEqual(value,"Ready")
-        _LIVE_DATA_CACHE.pop(key,None)
+        self.addCleanup(_LIVE_DATA_CACHE.pop,key,None)
+        workers=[]
+
+        class DeferredThread:
+            def __init__(self,target,**_kwargs): workers.append(target)
+            def start(self): pass
+
+        with patch("renderer.threading.Thread",DeferredThread), patch("renderer.time.monotonic",return_value=1.0):
+            self.assertEqual(_live_fetch_async(key,60,lambda:"Ready"),"Loading…")
+        self.assertEqual(len(workers),1)
+        workers[0]()
+        self.assertEqual(_live_fetch_async(key,60,lambda:"Ready"),"Ready")
 
     def test_live_data_watchdog_replaces_stuck_weather_loading(self):
         key="test-live-stuck"
@@ -558,8 +569,8 @@ class CoreTests(unittest.TestCase):
         msg={"editor_mode":"designer","scene_json":json.dumps(base)}
         a=render_message(msg,128,32,.3,datetime(2026,8,16,21,42),"/tmp/no")
         b=render_message(msg,128,32,1.5,datetime(2026,8,16,21,42),"/tmp/no")
-        lit_a=sum(1 for p in a.getdata() if max(p)>0)
-        lit_b=sum(1 for p in b.getdata() if max(p)>0)
+        lit_a=sum(1 for p in _pixels(a) if max(p)>0)
+        lit_b=sum(1 for p in _pixels(b) if max(p)>0)
         self.assertGreater(lit_b,lit_a)
 
 
@@ -576,9 +587,9 @@ class CoreTests(unittest.TestCase):
         a=render_message(msg,128,32,0.2,datetime(2026,8,16,21,42),"/tmp/no")
         b=render_message(msg,128,32,1.2,datetime(2026,8,16,21,42),"/tmp/no")
         c=render_message(msg,128,32,2.2,datetime(2026,8,16,21,42),"/tmp/no")
-        lit_a=sum(1 for p in a.getdata() if max(p)>0)
-        lit_b=sum(1 for p in b.getdata() if max(p)>0)
-        lit_c=sum(1 for p in c.getdata() if max(p)>0)
+        lit_a=sum(1 for p in _pixels(a) if max(p)>0)
+        lit_b=sum(1 for p in _pixels(b) if max(p)>0)
+        lit_c=sum(1 for p in _pixels(c) if max(p)>0)
         self.assertGreater(lit_b,lit_a)
         self.assertGreater(lit_c,lit_b)
 
@@ -598,8 +609,8 @@ class CoreTests(unittest.TestCase):
         s1=render_message(short,64,16,1,datetime(2026,8,16,21,42),"/tmp/no")
         l0=render_message(long,64,16,0,datetime(2026,8,16,21,42),"/tmp/no")
         l1=render_message(long,64,16,1,datetime(2026,8,16,21,42),"/tmp/no")
-        self.assertEqual(list(s0.getdata()),list(s1.getdata()))
-        self.assertNotEqual(list(l0.getdata()),list(l1.getdata()))
+        self.assertEqual(list(_pixels(s0)),list(_pixels(s1)))
+        self.assertNotEqual(list(_pixels(l0)),list(_pixels(l1)))
 
     def test_scene_transitions_and_exit_duration(self):
         base=Image.new("RGB",(32,16),(255,255,255))
@@ -607,13 +618,13 @@ class CoreTests(unittest.TestCase):
                "transition_out":"fade","transition_out_duration":1.25}
         early=_apply_scene_transition(base,scene,.2)
         finished=_apply_scene_transition(base,scene,1.2)
-        self.assertLess(sum(sum(p) for p in early.getdata()),sum(sum(p) for p in finished.getdata()))
+        self.assertLess(sum(sum(p) for p in _pixels(early)),sum(sum(p) for p in _pixels(finished)))
         message={"editor_mode":"designer","scene_json":json.dumps({**scene,"layers":[]})}
         self.assertEqual(_message_exit_duration(message),1.25)
         outgoing=_apply_scene_transition(base,scene,9.0,forced_exit_elapsed=.7)
         gone=_apply_scene_transition(base,scene,9.0,forced_exit_elapsed=1.3)
-        self.assertGreater(sum(sum(p) for p in outgoing.getdata()),0)
-        self.assertEqual(sum(sum(p) for p in gone.getdata()),0)
+        self.assertGreater(sum(sum(p) for p in _pixels(outgoing)),0)
+        self.assertEqual(sum(sum(p) for p in _pixels(gone)),0)
 
     def test_gradient_rainbow_glow_and_character_colours_render(self):
         effects=("gradient","rainbow","cycle","characters","words")
@@ -629,7 +640,7 @@ class CoreTests(unittest.TestCase):
             ]}
             im=render_message({"editor_mode":"designer","scene_json":json.dumps(scene)},96,32,.7,
                               datetime(2026,8,16,21,42),"/tmp/no")
-            nonblack={p for p in im.getdata() if max(p)>0}
+            nonblack={p for p in _pixels(im) if max(p)>0}
             self.assertGreater(len(nonblack),1,effect)
 
     def test_v030_ui_contains_timeline_media_widgets_and_shutdown(self):
@@ -666,7 +677,7 @@ class CoreTests(unittest.TestCase):
         ]}
         im=render_message({"editor_mode":"designer","scene_json":json.dumps(scene)},32,32,0,
                           datetime(2026,8,16,3,0,0),"/tmp/no")
-        pixels=list(im.getdata())
+        pixels=list(_pixels(im))
         self.assertTrue(any(r>220 and g>220 and b>220 for r,g,b in pixels))
         self.assertTrue(any(r>220 and g<80 and b<80 for r,g,b in pixels))
 
@@ -691,8 +702,8 @@ class CoreTests(unittest.TestCase):
             return render_message({"editor_mode":"designer","scene_json":json.dumps(scene)},96,24,0,datetime(2026,8,16,22,0),"/tmp/no")
         compact=render("led3x5","1234")
         digital=render("led-digital","1234")
-        self.assertNotEqual(list(compact.getdata()),list(digital.getdata()))
-        self.assertTrue(set(digital.getdata()).issubset({(0,0,0),(0,255,0)}))
+        self.assertNotEqual(list(_pixels(compact)),list(_pixels(digital)))
+        self.assertTrue(set(_pixels(digital)).issubset({(0,0,0),(0,255,0)}))
 
     def test_v041_video_upload_progress_ui_and_async_api_are_packaged(self):
         html=(ROOT/"templates"/"index.html").read_text(encoding="utf-8")
@@ -824,8 +835,8 @@ class CoreTests(unittest.TestCase):
         for category in ("clear","partly-cloudy","cloudy","rain","snow","fog","thunder"):
             a=_weather_draw_icon(category,32,32,.2,True,True,12,270,"mph")
             b=_weather_draw_icon(category,32,32,1.0,True,True,12,270,"mph")
-            self.assertGreater(sum(1 for px in a.getdata() if px[3]>0),4,category)
-            self.assertNotEqual(list(a.getdata()),list(b.getdata()),category)
+            self.assertGreater(sum(1 for px in _pixels(a) if px[3]>0),4,category)
+            self.assertNotEqual(list(_pixels(a)),list(_pixels(b)),category)
 
     def test_v0410_weather_template_supports_extended_current_conditions(self):
         layer={"weather_template":"{TEMP}{TEMP_UNIT} feels {FEELS}{TEMP_UNIT} · {WIND_DIR} {WIND}{WIND_UNIT} · gust {GUST}{WIND_UNIT} · RH {HUMIDITY}% · {PRECIP}mm"}
@@ -841,8 +852,8 @@ class CoreTests(unittest.TestCase):
             a=_render_weather_widget(layer,96,32,1.0,.1,datetime(2026,8,17,9,0),"/tmp/does-not-exist")
             b=_render_weather_widget(layer,96,32,1.0,.8,datetime(2026,8,17,9,0),"/tmp/does-not-exist")
         self.assertEqual(a.size,(96,32));self.assertEqual(b.size,(96,32))
-        self.assertNotEqual(list(a.getdata()),list(b.getdata()))
-        self.assertGreater(sum(1 for px in a.getdata() if px[3]>0),20)
+        self.assertNotEqual(list(_pixels(a)),list(_pixels(b)))
+        self.assertGreater(sum(1 for px in _pixels(a) if px[3]>0),20)
 
     def test_v0410_weather_ui_exposes_animation_metrics_and_units(self):
         html=(ROOT/"templates"/"index.html").read_text(encoding="utf-8")
@@ -887,8 +898,8 @@ class CoreTests(unittest.TestCase):
             slow=_weather_draw_icon(category,32,32,1.5,True,True,3,270,"mph")
             fast=_weather_draw_icon(category,32,32,1.5,True,True,25,270,"mph")
             reverse=_weather_draw_icon(category,32,32,1.5,True,True,25,90,"mph")
-            self.assertNotEqual(list(slow.getdata()),list(fast.getdata()),category)
-            self.assertNotEqual(list(fast.getdata()),list(reverse.getdata()),category)
+            self.assertNotEqual(list(_pixels(slow)),list(_pixels(fast)),category)
+            self.assertNotEqual(list(_pixels(fast)),list(_pixels(reverse)),category)
 
     def test_v049_builtin_icon_library_renders_crisp_pictograms(self):
         icons=("arrow-left","arrow-right","arrow-up","arrow-down","warning","info","wheelchair","toilet","parking","wifi","phone","tick","cross","heart","smile","walking","bell","star","gift","snowflake","sale-tag","queue")
@@ -897,15 +908,15 @@ class CoreTests(unittest.TestCase):
                 {"id":"i","type":"icon","name":name,"enabled":True,"x":0,"y":0,"w":32,"h":32,"z":1,"opacity":100,"rotation":0,"delay":0,"animation":"static","icon_name":name,"icon_color":"#ffffff","icon_color2":"#003748","icon_effect":"none","icon_period":1}
             ]}
             im=render_message({"editor_mode":"designer","scene_json":json.dumps(scene)},32,32,.2,datetime(2026,8,17,8,45),"/tmp/does-not-exist")
-            self.assertGreater(sum(1 for px in im.getdata() if max(px)>0),2,name)
-            self.assertTrue(set(im.getdata()).issubset({(0,0,0),(255,255,255),(0,55,72)}),name)
+            self.assertGreater(sum(1 for px in _pixels(im) if max(px)>0),2,name)
+            self.assertTrue(set(_pixels(im)).issubset({(0,0,0),(255,255,255),(0,55,72)}),name)
 
     def test_v049_icon_effects_animate_without_moving_layer_box(self):
         base={"id":"i","type":"icon","name":"Walking","enabled":True,"x":8,"y":0,"w":24,"h":24,"z":1,"opacity":100,"rotation":0,"delay":0,"animation":"static","icon_name":"walking","icon_color":"#00ff00","icon_color2":"#003300","icon_effect":"native","icon_period":1}
         scene={"version":4,"design_width":48,"design_height":24,"background":{"mode":"solid","color1":"#000000","color2":"#000000"},"layers":[base]}
         a=render_message({"editor_mode":"designer","scene_json":json.dumps(scene)},48,24,.1,datetime(2026,8,17,8,45),"/tmp/does-not-exist")
         b=render_message({"editor_mode":"designer","scene_json":json.dumps(scene)},48,24,.35,datetime(2026,8,17,8,45),"/tmp/does-not-exist")
-        self.assertNotEqual(list(a.getdata()),list(b.getdata()))
+        self.assertNotEqual(list(_pixels(a)),list(_pixels(b)))
         for im in (a,b):
             lit=[(x,y) for y in range(24) for x in range(48) if max(im.getpixel((x,y)))>0]
             self.assertTrue(lit)

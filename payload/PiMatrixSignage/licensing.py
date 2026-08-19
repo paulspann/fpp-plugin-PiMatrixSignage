@@ -126,9 +126,9 @@ class LicenseManager:
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.app_version = str(app_version)
-        self.mode = str(os.environ.get("PIMATRIX_LICENSE_MODE", "development") or "development").strip().lower()
+        self.mode = str(os.environ.get("PIMATRIX_LICENSE_MODE", "whmcs") or "whmcs").strip().lower()
         if self.mode not in {"development", "whmcs"}:
-            self.mode = "development"
+            self.mode = "whmcs"
         self.endpoint = str(os.environ.get("PIMATRIX_LICENSE_ENDPOINT", "https://www.issl.co.uk/support/modules/addons/pimatrixlicensing/api.php") or "").strip()
         self.public_key_url = str(os.environ.get("PIMATRIX_LICENSE_PUBLIC_KEY_URL", "https://www.issl.co.uk/support/modules/addons/pimatrixlicensing/public-key.php") or "").strip()
         self.public_key_path = Path(os.environ.get("PIMATRIX_LICENSE_PUBLIC_KEY", str(self.data_dir / "license-public.pem")))
@@ -175,16 +175,25 @@ class LicenseManager:
             self._thread.join(timeout=2)
 
     def _run(self) -> None:
-        # Do not block app startup.  A configured commercial install checks shortly after boot.
+        # Do not block app startup. A controller with an installed key reports a
+        # newly installed app version shortly after restart, even when its cached
+        # entitlement is still within the normal online-validity window.
         if self._stop.wait(4):
             return
         while not self._stop.is_set():
             try:
-                if self.mode == "whmcs" and self._should_refresh():
+                if self._version_refresh_due() or (self.mode == "whmcs" and self._should_refresh()):
                     self.check_now(silent=True)
             except Exception as exc:
                 LOG.warning("Licence background refresh failed: %s", exc)
             self._stop.wait(60 * 30)
+
+    def _version_refresh_due(self) -> bool:
+        """Return true when an installed key has not reported this app version."""
+        with self._lock:
+            key_installed = bool(str(self._state.get("license_key") or "").strip())
+            reported = str(self._state.get("reported_app_version") or "")
+            return key_installed and reported != self.app_version
 
     def _download_public_key(self, force: bool = False) -> None:
         if serialization is None:
@@ -389,6 +398,7 @@ class LicenseManager:
                 raise LicenseError(result["reason"])
             self._state["license_key"] = key
             self._state["signed_entitlement"] = result["signed_entitlement"]
+            self._state["reported_app_version"] = self.app_version
             self._state["last_error"] = ""
             self._state.pop("last_failed_check_at", None)
             self._save_state()
@@ -411,6 +421,8 @@ class LicenseManager:
                 self._state["signed_entitlement"] = result["signed_entitlement"]
                 self._state["last_check_at"] = _iso(_utcnow())
                 self._state["last_error"] = "" if result["ok"] else result["reason"]
+                if result["ok"]:
+                    self._state["reported_app_version"] = self.app_version
                 self._save_state()
                 if not result["ok"] and not silent:
                     raise LicenseError(result["reason"])
@@ -475,6 +487,8 @@ class LicenseManager:
                     "last_check_at": str(self._state.get("last_check_at") or ""),
                     "last_failed_check_at": str(self._state.get("last_failed_check_at") or ""),
                     "last_error": str(self._state.get("last_error") or ""),
+                    "app_version": self.app_version,
+                    "reported_app_version": str(self._state.get("reported_app_version") or ""),
                     "endpoint_configured": bool(self.endpoint),
                     "public_key_configured": self.public_key_path.is_file(),
                     "public_key_url_configured": bool(self.public_key_url),
@@ -517,6 +531,8 @@ class LicenseManager:
                 "last_check_at": str(self._state.get("last_check_at") or ""),
                 "last_failed_check_at": str(self._state.get("last_failed_check_at") or ""),
                 "last_error": str(self._state.get("last_error") or ""),
+                "app_version": self.app_version,
+                "reported_app_version": str(self._state.get("reported_app_version") or ""),
                 "endpoint_configured": bool(self.endpoint),
                 "public_key_configured": self.public_key_path.is_file(),
                 "public_key_url_configured": bool(self.public_key_url),

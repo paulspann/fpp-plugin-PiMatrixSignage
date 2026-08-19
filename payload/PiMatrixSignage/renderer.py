@@ -11,6 +11,7 @@ import urllib.request
 import urllib.parse
 import xml.etree.ElementTree as ET
 import random
+import hashlib
 from functools import lru_cache
 from collections import deque
 import threading
@@ -70,6 +71,9 @@ _IMAGE_CACHE: dict[str, tuple[float, list[Image.Image], list[int]]] = {}
 _VIDEO_META_CACHE: dict[str, tuple[float, dict]] = {}
 _VIDEO_FRAME_CACHE: dict[tuple[str, int], Image.Image] = {}
 _TEXT_LAYER_CACHE: dict[str, Image.Image] = {}
+_CLOUD_POSITION_CACHE: dict[tuple, tuple[int, int, int, int]] = {}
+_CLOUD_PLAYBACK_STATE: dict[tuple[str, str], tuple[float, str]] = {}
+_CLOUD_CACHE_LOCK = threading.RLock()
 _LIVE_DATA_CACHE: dict[str, dict] = {}
 _LIVE_DATA_LOCK = threading.RLock()
 _SHADER_CLIENTS: dict[str, ShaderClient] = {}
@@ -286,7 +290,10 @@ def _live_fetch_async(key: str, ttl: float, fetcher, placeholder: str = "Loading
                 entry["value"] = error_value
             LOG.warning("Live data refresh timed out for %s after %.1fs", key, timeout_s)
 
-        stale = (now_m - float(entry.get("fetched") or 0.0)) >= max(5.0, float(ttl or 60.0))
+        fetched_at = float(entry.get("fetched") or 0.0)
+        # A new entry has never been fetched and must refresh immediately,
+        # including during the first cache-TTL seconds after a system boot.
+        stale = fetched_at <= 0.0 or (now_m - fetched_at) >= max(5.0, float(ttl or 60.0))
         if stale and not entry.get("fetching"):
             generation = int(entry.get("generation") or 0) + 1
             entry.update(fetching=True, started=now_m, generation=generation)
@@ -576,6 +583,42 @@ def _transform_text(text: str, mode: str) -> str:
     return text
 
 
+def _live_weather_shader_params(config: dict, params: dict) -> dict:
+    """Overlay Sky Weather uniforms with cached Open-Meteo conditions."""
+    out = dict(params or {})
+    if not bool(config.get("shader_live_weather")):
+        return out
+    weather_config = {
+        "weather_lat": config.get("shader_weather_lat", 53.55),
+        "weather_lon": config.get("shader_weather_lon", -2.52),
+        "weather_temp_unit": "c",
+        "weather_wind_unit": "mph",
+        "refresh_seconds": config.get("shader_weather_refresh", 600),
+    }
+    data = _weather_current(weather_config)
+    if data.get("status") != "ok":
+        return out
+    category = str(data.get("category") or "cloudy")
+    weather_mode = {
+        "clear": 0, "partly-cloudy": 1, "cloudy": 2, "fog": 2,
+        "drizzle": 3, "rain": 3, "showers": 3, "snow": 4, "snow-showers": 4,
+        "thunder": 5,
+    }.get(category, 2)
+    wind = max(0.0, float(data.get("wind") or 0.0))
+    wind_degrees = float(data.get("wind_direction") or 0.0) % 360.0
+    cloud = max(0.0, min(100.0, float(data.get("cloud") or 0.0))) / 100.0
+    precip = max(0.0, float(data.get("precip") or 0.0))
+    out.update({
+        "Weather": weather_mode,
+        "SkyPhase": 0 if bool(data.get("is_day", True)) else 2,
+        "CloudCover": cloud,
+        "Speed": max(0.05, min(4.0, 0.05 + wind / 8.0)),
+        "WindDirection": 0 if 180.0 <= wind_degrees < 360.0 else 1,
+        "PrecipIntensity": max(0.0, min(1.0, precip / 5.0)) if weather_mode < 3 else max(0.25, min(1.0, precip / 5.0)),
+    })
+    return out
+
+
 def _random_reveal_text(layer: dict, text: str, elapsed: float) -> str:
     """Reveal characters in-place in a stable random order over effect_period seconds."""
     delay = max(0.0, float(layer.get("delay", 0) or 0))
@@ -662,7 +705,8 @@ def _gradient_background(width: int, height: int, mode: str, c1: tuple[int, int,
     return _gradient_background_cached(width, height, mode, c1, c2).copy()
 
 
-def _wrap_text_pixels(text: str, font, max_width: int, draw: ImageDraw.ImageDraw, stroke: int = 0) -> str:
+def _wrap_text_pixels(text: str, font, max_width: int, draw: ImageDraw.ImageDraw, stroke: int = 0,
+                      break_long_words: bool = True) -> str:
     """Wrap text by rendered pixel width while preserving explicit newlines."""
     max_width = max(1, int(max_width))
     paragraphs = str(text or "").split("\n")
@@ -682,7 +726,10 @@ def _wrap_text_pixels(text: str, font, max_width: int, draw: ImageDraw.ImageDraw
             if line:
                 out.append(line)
                 line = ""
-            # Split a single over-wide word by characters so it never silently clips.
+            if not break_long_words:
+                line = word
+                continue
+            # Normal text layers may split a single over-wide word to avoid clipping.
             chunk = ""
             for ch in word:
                 trial_chunk = chunk + ch
@@ -697,23 +744,26 @@ def _wrap_text_pixels(text: str, font, max_width: int, draw: ImageDraw.ImageDraw
     return "\n".join(out)
 
 
-def _text_metrics(text: str, font, width: int, wrap: bool, align: str, spacing: int, stroke: int):
+def _text_metrics(text: str, font, width: int, wrap: bool, align: str, spacing: int, stroke: int,
+                  break_long_words: bool = True):
     probe = Image.new("RGBA", (4, 4), (0, 0, 0, 0))
     draw = ImageDraw.Draw(probe)
-    laid_out = _wrap_text_pixels(text, font, width, draw, stroke) if wrap else text
+    laid_out = _wrap_text_pixels(text, font, width, draw, stroke, break_long_words) if wrap else text
     raw = draw.multiline_textbbox((0, 0), laid_out or " ", font=font, spacing=spacing, align=align, stroke_width=stroke)
     box = (math.floor(raw[0]), math.floor(raw[1]), math.ceil(raw[2]), math.ceil(raw[3]))
     return laid_out, box
 
 
 def _fit_layer_font(text: str, target_w: int, target_h: int, font_value: str, upload_fonts_dir: str,
-                    wrap: bool, align: str, spacing_ratio: float, stroke: int, max_size: int = 512):
-    lo, hi, best = 4, max(5, min(max_size, max(target_h * 4, 16))), 4
+                    wrap: bool, align: str, spacing_ratio: float, stroke: int, max_size: int = 512,
+                    break_long_words: bool = True):
+    minimum = 4 if break_long_words else 1
+    lo, hi, best = minimum, max(minimum + 1, min(max_size, max(target_h * 4, 16))), minimum
     while lo <= hi:
         mid = (lo + hi) // 2
         font = _load_font(font_value, mid, upload_fonts_dir)
         spacing = max(0, int(round(mid * spacing_ratio)))
-        _, box = _text_metrics(text, font, target_w, wrap, align, spacing, stroke)
+        _, box = _text_metrics(text, font, target_w, wrap, align, spacing, stroke, break_long_words)
         if box[2] - box[0] <= target_w and box[3] - box[1] <= target_h:
             best = mid
             lo = mid + 1
@@ -939,7 +989,7 @@ def _seven_segment_pattern(ch: str) -> tuple[str, ...]:
     return tuple("".join(row) for row in grid)
 
 
-def _led_wrap(text: str, max_chars: int) -> str:
+def _led_wrap(text: str, max_chars: int, break_long_words: bool = True) -> str:
     if max_chars <= 0:
         return text
     out: list[str] = []
@@ -954,7 +1004,7 @@ def _led_wrap(text: str, max_chars: int) -> str:
                 line = trial
             else:
                 if line: out.append(line)
-                while len(word) > max_chars:
+                while break_long_words and len(word) > max_chars:
                     out.append(word[:max_chars]); word = word[max_chars:]
                 line = word
         out.append(line)
@@ -1070,7 +1120,7 @@ def _scale_pattern(pattern: tuple[str, ...], target_w: int, target_h: int) -> tu
 def _render_led_sprite(text: str, max_w: int, max_h: int, color: tuple[int, int, int],
                        outline: tuple[int, int, int], stroke: int, scale: int, auto_fit: bool,
                        wrap: bool, align: str, pixel_bold: bool, letter_spacing: int,
-                       line_gap: int, mode: str = "led5x7") -> Image.Image:
+                       line_gap: int, mode: str = "led5x7", break_long_words: bool = True) -> Image.Image:
     """Render the embedded LED font family directly onto an integer LED grid.
 
     v0.4 uses independent compact and seven-segment source alphabets rather than
@@ -1087,7 +1137,7 @@ def _render_led_sprite(text: str, max_w: int, max_h: int, color: tuple[int, int,
         cell_w=gw+(1 if bold else 0)
         per=(cell_w+char_gap)*sc
         max_chars=max(1,(max_w+char_gap*sc)//max(1,per))
-        laid=_led_wrap(text or " ",max_chars) if wrap else (text or " ")
+        laid=_led_wrap(text or " ",max_chars,break_long_words) if wrap else (text or " ")
         lines=laid.split("\n")
         widths=[]
         for line in lines:
@@ -1127,7 +1177,58 @@ def _render_led_sprite(text: str, max_w: int, max_h: int, color: tuple[int, int,
     return out
 
 
-def _apply_sprite_color_effect(sprite: Image.Image, layer: dict, elapsed: float) -> Image.Image:
+def _word_colour_ranges(alpha: Image.Image, text: str) -> list[tuple[int, int, int]]:
+    """Map laid-out words to their real ink spans instead of equal-width slices."""
+    w, h = alpha.size
+    pixels = alpha.load()
+    active_rows = [any(pixels[x, y] > 0 for x in range(w)) for y in range(h)]
+    text_lines = [line for line in str(text or "").split("\n") if line.strip()]
+    ink_rows = [y for y, active in enumerate(active_rows) if active]
+    if not ink_rows:
+        return []
+    first_row, last_row = ink_rows[0], ink_rows[-1] + 1
+    vertical_gaps = []
+    gap_start = None
+    for y in range(first_row, last_row + 1):
+        blank = y == last_row or not active_rows[y]
+        if blank and gap_start is None:
+            gap_start = y
+        elif not blank and gap_start is not None:
+            vertical_gaps.append((gap_start, y)); gap_start = None
+    line_cuts = sorted(
+        ((a + b) // 2 for a, b in sorted(vertical_gaps, key=lambda gap: gap[1] - gap[0], reverse=True)[:max(0, len(text_lines) - 1)])
+    )
+    row_boundaries = [first_row, *line_cuts, last_row]
+    row_bands = list(zip(row_boundaries, row_boundaries[1:]))
+    ranges = []
+    palette_index = 0
+    for band_index, (top, bottom) in enumerate(row_bands):
+        line = text_lines[band_index] if band_index < len(text_lines) else ""
+        word_count = max(1, len(re.findall(r"\S+", line)))
+        active_cols = [any(pixels[x, y] > 0 for y in range(top, bottom)) for x in range(w)]
+        ink = [x for x, active in enumerate(active_cols) if active]
+        if not ink:
+            continue
+        first, last = ink[0], ink[-1] + 1
+        gaps = []
+        gap_start = None
+        for x in range(first, last + 1):
+            blank = x == last or not active_cols[x]
+            if blank and gap_start is None:
+                gap_start = x
+            elif not blank and gap_start is not None:
+                gaps.append((gap_start, x)); gap_start = None
+        separators = sorted(gaps, key=lambda gap: (gap[1] - gap[0], -gap[0]), reverse=True)[:max(0, word_count - 1)]
+        cuts = sorted((a + b) // 2 for a, b in separators)
+        boundaries = [first, *cuts, last]
+        for index in range(len(boundaries) - 1):
+            ranges.append((boundaries[index], boundaries[index + 1], palette_index))
+            palette_index += 1
+    return ranges
+
+
+def _apply_sprite_color_effect(sprite: Image.Image, layer: dict, elapsed: float,
+                               laid_out_text: str | None = None) -> Image.Image:
     mode = str(layer.get("color_effect") or "none").lower()
     if mode == "none":
         return sprite
@@ -1168,13 +1269,20 @@ def _apply_sprite_color_effect(sprite: Image.Image, layer: dict, elapsed: float)
                 palette.append(_hex_color(raw, "#ffffff"))
         if not palette:
             palette = [c1, c2]
-        text = str(layer.get("text") or "")
-        units = list(text.replace("\n", "")) if mode == "characters" else [x for x in re.split(r"\s+", text.strip()) if x]
-        count = max(1, len(units))
-        for x in range(w):
-            idx = min(count - 1, int(x / max(1, w) * count))
-            col = palette[idx % len(palette)]
-            for y in range(h): px[x,y] = col
+        text = str(laid_out_text if laid_out_text is not None else layer.get("text") or "")
+        if mode == "words":
+            for left, right, index in _word_colour_ranges(alpha, text):
+                col = palette[index % len(palette)]
+                for x in range(left, right):
+                    for y in range(h):
+                        px[x, y] = col
+        else:
+            units = list(text.replace("\n", ""))
+            count = max(1, len(units))
+            for x in range(w):
+                idx = min(count - 1, int(x / max(1, w) * count))
+                col = palette[idx % len(palette)]
+                for y in range(h): px[x,y] = col
     rgba = rgb.convert("RGBA")
     rgba.putalpha(alpha)
     return rgba
@@ -1262,7 +1370,7 @@ def _layer_transition_phase(layer: dict, elapsed: float, forced_exit_elapsed: fl
     has been requested.  If this layer has an exit effect, that effect starts
     immediately and takes precedence over its normal entrance/exit timeline.
     """
-    if str(layer.get("type") or "text") not in ("text", "image", "video", "widget", "icon", "shader"):
+    if str(layer.get("type") or "text") not in ("text", "cloud-text", "image", "video", "widget", "icon", "shader"):
         return "none", 1.0, True, True
 
     if forced_exit_elapsed is not None:
@@ -1364,7 +1472,7 @@ def _render_scene_text(layer: dict, box_w: int, box_h: int, sy: float, elapsed: 
         "font", "font_size", "auto_fit", "wrap", "color", "outline_color", "outline_width",
         "padding", "align", "valign", "line_spacing", "shadow_color", "shadow_x", "shadow_y",
         "render_mode", "pixel_scale", "pixel_bold", "letter_spacing", "text_transform",
-        "overflow", "color_effect", "color2", "color_speed", "color_palette", "glow", "glow_color"
+        "overflow", "break_long_words", "color_effect", "color2", "color_speed", "color_palette", "glow", "glow_color"
     )}
     animated_color = str(layer.get("color_effect") or "none").lower() in ("rainbow", "cycle")
     cache_key = json.dumps([box_w, box_h, round(sy, 5), text, cache_fields, round(elapsed, 2) if animated_color else 0], sort_keys=True, default=str)
@@ -1384,6 +1492,7 @@ def _render_scene_text(layer: dict, box_w: int, box_h: int, sy: float, elapsed: 
         valign = "middle"
     overflow = str(layer.get("overflow") or "manual").lower()
     wrap = bool(layer.get("wrap", False)) or overflow == "wrap"
+    break_long_words = bool(layer.get("break_long_words", True))
     auto_fit = bool(layer.get("auto_fit", False)) or overflow == "shrink"
     if overflow in ("clip", "marquee"): wrap = False
     spacing_ratio = max(0.0, min(1.0, float(layer.get("line_spacing", 0.12) or 0.0)))
@@ -1404,7 +1513,7 @@ def _render_scene_text(layer: dict, box_w: int, box_h: int, sy: float, elapsed: 
         line_gap = max(1, int(round(1 + spacing_ratio * 4)))
         sprite = _render_led_sprite(
             text, inner_w, inner_h, color, outline, stroke, pixel_scale,
-            auto_fit, wrap, align, pixel_bold, letter_spacing, line_gap, render_mode
+            auto_fit, wrap, align, pixel_bold, letter_spacing, line_gap, render_mode, break_long_words
         )
         if needs_shadow:
             # The shadow follows the original glyph body, not the already-outlined
@@ -1412,24 +1521,24 @@ def _render_scene_text(layer: dict, box_w: int, box_h: int, sy: float, elapsed: 
             # one-pixel offset instead of visually compounding into a 2-3px halo.
             shadow_body = _render_led_sprite(
                 text, inner_w, inner_h, color, outline, 0, pixel_scale,
-                auto_fit, wrap, align, pixel_bold, letter_spacing, line_gap, render_mode
+                auto_fit, wrap, align, pixel_bold, letter_spacing, line_gap, render_mode, break_long_words
             )
     else:
         if auto_fit:
             font, font_size = _fit_layer_font(text, inner_w, inner_h, str(layer.get("font") or ""), upload_fonts_dir,
-                                              wrap, align, spacing_ratio, stroke)
+                                              wrap, align, spacing_ratio, stroke, break_long_words=break_long_words)
         else:
             font = _load_font(str(layer.get("font") or ""), font_size, upload_fonts_dir)
         spacing = max(0, int(round(font_size * spacing_ratio)))
         probe = ImageDraw.Draw(Image.new("RGBA", (4,4), (0,0,0,0)))
-        laid_out = _wrap_text_pixels(text, font, inner_w, probe, stroke) if wrap else text
+        laid_out = _wrap_text_pixels(text, font, inner_w, probe, stroke, break_long_words) if wrap else text
         sprite = _render_ttf_sprite(laid_out, font, color, outline, stroke, spacing, align,
                                     render_mode, pixel_scale, pixel_bold, letter_spacing)
         if needs_shadow:
             shadow_body = _render_ttf_sprite(laid_out, font, color, outline, 0, spacing, align,
                                              render_mode, pixel_scale, pixel_bold, letter_spacing)
 
-    sprite = _apply_sprite_color_effect(sprite, layer, elapsed)
+    sprite = _apply_sprite_color_effect(sprite, layer, elapsed, locals().get("laid_out", text))
     sprite = _with_glow(sprite, layer)
     tw, th = sprite.size
     tx = pad + _align_pos(inner_w, tw, align, 0)
@@ -1606,7 +1715,7 @@ def _render_scroll_viewport(layer: dict, content: Image.Image, box_w: int, box_h
     if local < 0:
         return viewport, False
 
-    is_text = str(layer.get("type") or "text") in ("text", "widget")
+    is_text = str(layer.get("type") or "text") in ("text", "cloud-text", "widget")
     pad = max(0, int(round(float(layer.get("padding", 0) or 0) * sy))) if is_text else 0
     left, top = pad, pad
     inner_w, inner_h = max(1, box_w - pad * 2), max(1, box_h - pad * 2)
@@ -1664,7 +1773,7 @@ def _render_bounce_viewport(layer: dict, content: Image.Image, box_w: int, box_h
     if local < 0:
         return viewport, False
 
-    is_text = str(layer.get("type") or "text") in ("text", "widget")
+    is_text = str(layer.get("type") or "text") in ("text", "cloud-text", "widget")
     pad = max(0, int(round(float(layer.get("padding", 0) or 0) * sy))) if is_text else 0
     inner_w, inner_h = max(1, box_w - pad * 2), max(1, box_h - pad * 2)
     align = str(layer.get("align") or "center") if is_text else "center"
@@ -2158,6 +2267,198 @@ def _render_weather_widget(layer: dict, box_w: int, box_h: int, sy: float, elaps
     return out
 
 
+def _cloud_text_entries(layer: dict) -> list[str]:
+    raw = layer.get("cloud_text_items")
+    values = raw if isinstance(raw, list) else str(raw or "").splitlines()
+    entries = []
+    seen = set()
+    for value in values:
+        phrase = str(value).strip()
+        key = " ".join(phrase.casefold().split())
+        if phrase and key not in seen:
+            seen.add(key)
+            entries.append(phrase)
+        if len(entries) >= 200:
+            break
+    return entries
+
+
+def _cloud_text_sequence(entry_count: int, through_occurrence: int, layer_key: str,
+                         playback_seed: str, visible_limit: int) -> list[int]:
+    """Build shuffled rounds without repeating an entry still in the visible window."""
+    if entry_count <= 0 or through_occurrence < 0:
+        return []
+    window = max(1, min(entry_count, visible_limit))
+    sequence: list[int] = []
+    round_index = 0
+    while len(sequence) <= through_occurrence:
+        candidates = list(range(entry_count))
+        seed = int.from_bytes(hashlib.sha256(
+            f"{layer_key}:{playback_seed}:{round_index}:order".encode()
+        ).digest()[:8], "big")
+        random.Random(seed).shuffle(candidates)
+        while candidates:
+            recent_count = window - 1
+            recent = set(sequence[-recent_count:]) if recent_count else set()
+            choice = next((value for value in candidates if value not in recent), candidates[0])
+            sequence.append(choice)
+            candidates.remove(choice)
+        round_index += 1
+    return sequence
+
+
+def _cloud_playback_seed(layer_key: str, elapsed: float, now: datetime) -> str:
+    """Return a stable seed for one playback and replace it when time restarts."""
+    context = "live" if threading.current_thread().name == "PiMatrixRenderer" else "preview"
+    state_key = (context, layer_key)
+    with _CLOUD_CACHE_LOCK:
+        previous = _CLOUD_PLAYBACK_STATE.get(state_key)
+        if previous is None or elapsed + 0.05 < previous[0]:
+            seed = f"{now.timestamp():.6f}:{random.SystemRandom().getrandbits(64)}"
+        else:
+            seed = previous[1]
+        _CLOUD_PLAYBACK_STATE[state_key] = (elapsed, seed)
+        return f"{context}:{seed}"
+
+
+def _cloud_position_is_clear(x: int, y: int, sprite_w: int, sprite_h: int, gap: int,
+                             occupied: list[tuple[int, int, int, int]]) -> bool:
+    left, top, right, bottom = x - gap, y - gap, x + sprite_w + gap, y + sprite_h + gap
+    return all(right <= ox0 or left >= ox1 or bottom <= oy0 or top >= oy1
+               for ox0, oy0, ox1, oy1 in occupied)
+
+
+def _cloud_random_position(sprite_w: int, sprite_h: int, box_w: int, box_h: int, gap: int,
+                           occupied: list[tuple[int, int, int, int]], rng: random.Random) -> tuple[int, int] | None:
+    """Choose an in-bounds random position which does not collide with visible text."""
+    min_x = min(max(0, gap), max(0, box_w - sprite_w))
+    min_y = min(max(0, gap), max(0, box_h - sprite_h))
+    max_x = max(min_x, box_w - sprite_w - gap)
+    max_y = max(min_y, box_h - sprite_h - gap)
+
+    # Random attempts produce the normal layout.  The exhaustive pass is only
+    # a safety net for crowded layers and starts at a randomized offset.
+    for _ in range(384):
+        x, y = rng.randint(min_x, max_x), rng.randint(min_y, max_y)
+        if _cloud_position_is_clear(x, y, sprite_w, sprite_h, gap, occupied):
+            return x, y
+    width_count, height_count = max_x - min_x + 1, max_y - min_y + 1
+    total = width_count * height_count
+    start = rng.randrange(total) if total else 0
+    for offset in range(total):
+        index = (start + offset) % total
+        x, y = min_x + index % width_count, min_y + index // width_count
+        if _cloud_position_is_clear(x, y, sprite_w, sprite_h, gap, occupied):
+            return x, y
+    return None
+
+
+def _render_cloud_text(layer: dict, box_w: int, box_h: int, sy: float, elapsed: float,
+                       now: datetime, upload_fonts_dir: str) -> Image.Image:
+    """Render timed phrases at collision-free random positions across the layer."""
+    out = Image.new("RGBA", (max(1, box_w), max(1, box_h)), (0, 0, 0, 0))
+    entries = _cloud_text_entries(layer)
+    if not entries:
+        return out
+    visible_for = max(0.5, float(layer.get("cloud_visible_for", 4.0) or 4.0))
+    max_visible = max(1, min(12, int(layer.get("cloud_max_visible", 3) or 3)))
+    unique_visible = min(max_visible, len(entries))
+    interval = max(0.1, float(layer.get("cloud_interval", 1.5) or 1.5), visible_for / unique_visible)
+    fade_in = max(0.2, min(visible_for, float(layer.get("cloud_fade_in", 0.6) or 0.0)))
+    fade_out = max(0.2, min(visible_for, float(layer.get("cloud_fade_out", 0.8) or 0.0)))
+    if fade_in + fade_out > visible_for * 0.9:
+        scale = visible_for * 0.9 / (fade_in + fade_out)
+        fade_in, fade_out = fade_in * scale, fade_out * scale
+    gap = max(0, int(round(float(layer.get("cloud_gap", 2) or 0) * sy)))
+    cols = max(1, min(max_visible, int(math.ceil(math.sqrt(max_visible * box_w / max(1, box_h))))))
+    rows = max(1, int(math.ceil(max_visible / cols)))
+    # These limits control phrase size only. Positioning uses the whole layer,
+    # avoiding the visibly column-based layout used by the first implementation.
+    available_w = max(1, box_w // cols - gap * 2)
+    available_h = max(1, box_h // max(2, rows) - gap * 2)
+    layer_key = str(layer.get("id") or "cloud-text")
+    playback_epoch = _cloud_playback_seed(layer_key, max(0.0, elapsed), now)
+    latest = int(math.floor(max(0.0, elapsed) / interval))
+    sequence = _cloud_text_sequence(len(entries), latest, layer_key, playback_epoch, unique_visible)
+    palette = [x.strip() for x in str(layer.get("cloud_palette") or "").split(",") if x.strip()]
+    active = []
+    for occurrence in range(max(0, latest - unique_visible + 1), latest + 1):
+        age = elapsed - occurrence * interval
+        if age < 0.0 or age >= visible_for:
+            continue
+        active.append((occurrence, age, _token_text(entries[sequence[occurrence]], now)))
+    sprites = []
+    for occurrence, age, phrase in active:
+        seed = int.from_bytes(hashlib.sha256(f"{layer_key}:{playback_epoch}:{occurrence}:position".encode()).digest()[:8], "big")
+        rng = random.Random(seed)
+        colour = str(layer.get("color") or "#ffffff")
+        if str(layer.get("cloud_color_mode") or "solid") == "palette" and palette:
+            colour = palette[rng.randrange(len(palette))]
+        child = dict(layer)
+        child.update({
+            "text": phrase, "color": colour, "auto_fit": True, "wrap": True,
+            "overflow": "shrink", "break_long_words": False,
+            "align": "center", "valign": "middle", "padding": 0,
+            "font": layer.get("cloud_font", layer.get("font", "")),
+            "font_size": layer.get("cloud_font_size", layer.get("font_size", 18)),
+            "render_mode": layer.get("cloud_render_mode", layer.get("render_mode", "pixel")),
+            "outline_width": 0, "shadow_x": 0, "shadow_y": 0, "glow": 0, "color_effect": "none",
+        })
+        tile = _render_scene_text(child, available_w, available_h, sy, elapsed, now, upload_fonts_dir)
+        bounds = tile.getchannel("A").getbbox()
+        if not bounds:
+            continue
+        sprite = tile.crop(bounds)
+        opacity = 1.0
+        if fade_in > 0.0 and age < fade_in:
+            opacity = min(opacity, age / fade_in)
+        remaining = visible_for - age
+        if fade_out > 0.0 and remaining < fade_out:
+            opacity = min(opacity, remaining / fade_out)
+        if opacity < 1.0:
+            sprite.putalpha(sprite.getchannel("A").point(lambda value: int(value * max(0.0, opacity))))
+        sprites.append((occurrence, sprite, rng))
+
+    occupied: list[tuple[int, int, int, int]] = []
+    for occurrence, sprite, rng in sprites:
+        cache_key = (playback_epoch, layer_key, occurrence, box_w, box_h, gap)
+        with _CLOUD_CACHE_LOCK:
+            cached_position = _CLOUD_POSITION_CACHE.get(cache_key)
+        position = None
+        if cached_position is not None:
+            px, py, cached_w, cached_h = cached_position
+            if (sprite.width, sprite.height) != (cached_w, cached_h):
+                crisp = _is_crisp_mode(str(layer.get("cloud_render_mode") or "pixel"))
+                sprite = sprite.resize((cached_w, cached_h), Image.Resampling.NEAREST if crisp else Image.Resampling.LANCZOS)
+            if _cloud_position_is_clear(px, py, sprite.width, sprite.height, gap, occupied):
+                position = (px, py)
+        if position is None:
+            position = _cloud_random_position(sprite.width, sprite.height, box_w, box_h, gap, occupied, rng)
+            # A random earlier phrase may divide a crowded layer awkwardly.
+            # Shrink only the new arrival until it fits; existing phrases never move.
+            if position is None:
+                original = sprite
+                crisp = _is_crisp_mode(str(layer.get("cloud_render_mode") or "pixel"))
+                for scale in (0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3):
+                    size = (max(1, int(round(original.width * scale))), max(1, int(round(original.height * scale))))
+                    sprite = original.resize(size, Image.Resampling.NEAREST if crisp else Image.Resampling.LANCZOS)
+                    position = _cloud_random_position(sprite.width, sprite.height, box_w, box_h, gap, occupied, rng)
+                    if position is not None:
+                        break
+            if position is not None:
+                with _CLOUD_CACHE_LOCK:
+                    _CLOUD_POSITION_CACHE[cache_key] = (position[0], position[1], sprite.width, sprite.height)
+                    if len(_CLOUD_POSITION_CACHE) > 4096:
+                        for old_key in list(_CLOUD_POSITION_CACHE)[:-3072]:
+                            _CLOUD_POSITION_CACHE.pop(old_key, None)
+        if position is None:
+            continue
+        px, py = position
+        occupied.append((px, py, px + sprite.width, py + sprite.height))
+        out.alpha_composite(sprite, (px, py))
+    return out
+
+
 def shader_layer_status(layer_id: str, upload_fonts_dir: str) -> dict:
     """Return non-fatal shader helper errors for browser preview/live rendering."""
     client = _shader_client(upload_fonts_dir)
@@ -2175,6 +2476,8 @@ def _render_scene_shader(layer: dict, w: int, h: int, elapsed: float, upload_fon
     if not asset_id:
         return Image.new("RGBA", (max(1,w), max(1,h)), (0,0,0,0))
     params = layer.get("shader_params") if isinstance(layer.get("shader_params"), dict) else {}
+    if asset_id == "builtin:Sky-Weather.fs":
+        params = _live_weather_shader_params(layer, params)
     fps = max(1.0, min(30.0, float(layer.get("shader_fps", 15) or 15)))
     _time_scale = layer.get("shader_time_scale", 1.0)
     time_scale = float(1.0 if _time_scale is None else _time_scale)
@@ -2198,6 +2501,8 @@ def _render_scene_background_shader(bg: dict, w: int, h: int, elapsed: float, up
     if not asset_id:
         return Image.new("RGBA", (max(1, w), max(1, h)), (0, 0, 0, 0))
     params = bg.get("shader_params") if isinstance(bg.get("shader_params"), dict) else {}
+    if asset_id == "builtin:Sky-Weather.fs":
+        params = _live_weather_shader_params(bg, params)
     fps = max(1.0, min(30.0, float(bg.get("shader_fps", 15) or 15)))
     raw_scale = bg.get("shader_time_scale", 1.0)
     time_scale = float(1.0 if raw_scale is None else raw_scale)
@@ -2213,6 +2518,8 @@ def _render_layer_content(layer: dict, ltype: str, w: int, h: int, sy: float, el
         return _render_analog_clock(layer, w, h, now)
     if ltype == "widget" and str(layer.get("widget_type") or "clock") == "weather" and str(layer.get("weather_display") or "text") != "text":
         return _render_weather_widget(layer, w, h, sy, elapsed, now, upload_fonts_dir)
+    if ltype == "cloud-text":
+        return _render_cloud_text(layer, w, h, sy, elapsed, now, upload_fonts_dir)
     if ltype in ("text", "widget"):
         if scroll_axis:
             return _render_scene_text_scroll_content(layer, w, h, sy, elapsed, now, upload_fonts_dir, scroll_axis)
@@ -2374,6 +2681,8 @@ def render_scene(scene: dict, width: int, height: int, elapsed: float, now: date
         w = max(1,int(round(float(layer.get("w",design_w) or design_w)*sx)))
         h = max(1,int(round(float(layer.get("h",design_h) or design_h)*sy)))
         ltype = str(layer.get("type") or "text")
+        text_render_mode = layer.get("cloud_render_mode") if ltype == "cloud-text" else layer.get("render_mode")
+        layer_is_crisp = (ltype == "icon") or (ltype in ("text", "cloud-text", "widget") and _is_crisp_mode(str(text_render_mode or "smooth")))
         zone_clip = _scene_zone_rect(scene, layer, sx, sy)
         animation = str(layer.get("animation") or "static")
 
@@ -2392,11 +2701,11 @@ def render_scene(scene: dict, width: int, height: int, elapsed: float, now: date
             content=_render_layer_content(layer,ltype,w,h,sy,elapsed,now,upload_fonts_dir,axis)
             rotation=int(round(float(layer.get("rotation",0) or 0)))%360
             if rotation:
-                crisp=(ltype == "icon") or (ltype in ("text","widget") and _is_crisp_mode(str(layer.get("render_mode") or "smooth")))
+                crisp=layer_is_crisp
                 content=content.rotate(-rotation,expand=True,resample=Image.Resampling.NEAREST if crisp else Image.Resampling.BICUBIC)
             viewport,visible=_render_scroll_viewport(layer,content,w,h,sy,elapsed,animation)
             if not visible: continue
-            crisp=(ltype == "icon") or (ltype in ("text","widget") and _is_crisp_mode(str(layer.get("render_mode") or "smooth")))
+            crisp=layer_is_crisp
             viewport,visible=_apply_layer_transition(viewport,layer,elapsed,crisp,forced_exit_elapsed)
             if not visible: continue
             opacity=max(0.0,min(1.0,float(layer.get("opacity",100) or 0)/100.0))
@@ -2406,11 +2715,11 @@ def render_scene(scene: dict, width: int, height: int, elapsed: float, now: date
             content=_render_layer_content(layer,ltype,w,h,sy,elapsed,now,upload_fonts_dir)
             rotation=int(round(float(layer.get("rotation",0) or 0)))%360
             if rotation:
-                crisp=(ltype == "icon") or (ltype in ("text","widget") and _is_crisp_mode(str(layer.get("render_mode") or "smooth")))
+                crisp=layer_is_crisp
                 content=content.rotate(-rotation,expand=True,resample=Image.Resampling.NEAREST if crisp else Image.Resampling.BICUBIC)
             viewport,visible=_render_bounce_viewport(layer,content,w,h,sy,elapsed,animation)
             if not visible: continue
-            crisp=(ltype == "icon") or (ltype in ("text","widget") and _is_crisp_mode(str(layer.get("render_mode") or "smooth")))
+            crisp=layer_is_crisp
             viewport,visible=_apply_layer_transition(viewport,layer,elapsed,crisp,forced_exit_elapsed)
             if not visible: continue
             opacity=max(0.0,min(1.0,float(layer.get("opacity",100) or 0)/100.0))
@@ -2419,18 +2728,18 @@ def render_scene(scene: dict, width: int, height: int, elapsed: float, now: date
         lim=_render_layer_content(layer,ltype,w,h,sy,elapsed,now,upload_fonts_dir)
         rotation=int(round(float(layer.get("rotation",0) or 0)))%360
         if rotation:
-            crisp=(ltype == "icon") or (ltype in ("text","widget") and _is_crisp_mode(str(layer.get("render_mode") or "smooth")))
+            crisp=layer_is_crisp
             lim=lim.rotate(-rotation,expand=True,resample=Image.Resampling.NEAREST if crisp else Image.Resampling.BICUBIC)
             x-=(lim.width-w)//2;y-=(lim.height-h)//2;w,h=lim.width,lim.height
         x,y,effect_alpha,visible=_layer_motion(layer,x,y,w,h,width,height,elapsed)
         if not visible: continue
-        has_transition=(ltype in ("text","image","video","widget","icon","shader") and
+        has_transition=(ltype in ("text","cloud-text","image","video","widget","icon","shader") and
                         (str(layer.get("entrance_effect") or "none")!="none" or str(layer.get("exit_effect") or "none")!="none"))
         if has_transition:
             orig_x=int(round(float(layer.get("x",0) or 0)*sx));orig_y=int(round(float(layer.get("y",0) or 0)*sy))
             orig_w=max(1,int(round(float(layer.get("w",design_w) or design_w)*sx)));orig_h=max(1,int(round(float(layer.get("h",design_h) or design_h)*sy)))
             viewport=Image.new("RGBA",(orig_w,orig_h),(0,0,0,0));viewport.alpha_composite(lim,((orig_w-lim.width)//2,(orig_h-lim.height)//2))
-            crisp=(ltype == "icon") or (ltype in ("text","widget") and _is_crisp_mode(str(layer.get("render_mode") or "smooth")))
+            crisp=layer_is_crisp
             viewport,visible=_apply_layer_transition(viewport,layer,elapsed,crisp,forced_exit_elapsed)
             if not visible: continue
             opacity=max(0.0,min(1.0,float(layer.get("opacity",100) or 0)/100.0))*effect_alpha
@@ -2627,7 +2936,7 @@ def _message_exit_duration(message: dict | None) -> float:
     if not isinstance(layers,list): return duration
     for layer in layers:
         if not isinstance(layer,dict) or not bool(layer.get("enabled",True)): continue
-        if str(layer.get("type") or "text") not in ("text","image","video","widget","icon","shader"): continue
+        if str(layer.get("type") or "text") not in ("text","cloud-text","image","video","widget","icon","shader"): continue
         if str(layer.get("exit_effect") or "none").lower()=="none": continue
         try: duration=max(duration,max(.05,float(layer.get("exit_duration",.5) or .5)))
         except Exception: duration=max(duration,.5)

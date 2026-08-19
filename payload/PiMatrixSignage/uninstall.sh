@@ -3,7 +3,7 @@ set -euo pipefail
 if [[ ${EUID} -ne 0 ]]; then echo "Run with sudo: sudo ./uninstall.sh"; exit 1; fi
 systemctl disable --now pi-matrix-signage.service 2>/dev/null || true
 rm -f /etc/systemd/system/pi-matrix-signage.service
-rm -f /usr/local/sbin/pi-matrix-signage-upgrade /usr/local/sbin/pi-matrix-signage-poweroff
+rm -f /usr/local/sbin/pi-matrix-signage-upgrade /usr/local/sbin/pi-matrix-signage-poweroff /usr/local/sbin/pi-matrix-signage-reset
 rm -f /etc/sudoers.d/pi-matrix-signage /etc/sudoers.d/pi-matrix-signage-upgrade
 systemctl daemon-reload
 rm -rf /home/fpp/media/pi-matrix-signage
