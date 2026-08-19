@@ -58,6 +58,13 @@ PORTABLE_MAX_FILES = 12000
 PORTABLE_MAX_UNCOMPRESSED = 4 * 1024 * 1024 * 1024
 UPGRADE_HELPER = Path("/usr/local/sbin/pi-matrix-signage-upgrade")
 POWER_HELPER = Path("/usr/local/sbin/pi-matrix-signage-poweroff")
+FPP_CONFIG_DIR = Path(os.environ.get("PIMATRIX_FPP_CONFIG_DIR", "/home/fpp/media/config"))
+
+HARDWARE_PROFILE_KEYS = (
+    "panel_output_type", "panel_model", "panel_width", "panel_height", "panel_scan",
+    "panels_across", "panels_down", "display_rotation", "color_order",
+    "brightness", "colorlight_receiver_model", "colorlight_interface",
+)
 
 logging.basicConfig(
     filename=str(LOG_PATH),
@@ -853,6 +860,11 @@ def put_settings():
         if scan not in supported_scans:
             raise ValueError(f"panel_scan is not supported for {output_type}")
         clean["panel_scan"] = scan
+    if "panel_model" in data:
+        panel_model = str(data["panel_model"]).strip()
+        if not panel_model or len(panel_model) > 100:
+            raise ValueError("Panel model must be between 1 and 100 characters")
+        clean["panel_model"] = panel_model
     if "ddp_host" in data:
         clean["ddp_host"] = str(data["ddp_host"]).strip() or "127.0.0.1"
     if "color_order" in data:
@@ -869,9 +881,153 @@ def put_settings():
     for key in ("auto_recovery_enabled", "auto_recover_renderer", "auto_recover_fppd"):
         if key in data:
             clean[key] = bool(data[key])
+    if any(key in clean and clean[key] != current.get(key) for key in HARDWARE_PROFILE_KEYS):
+        clean.update({"colorlight_commissioned": False, "colorlight_commissioned_at": "", "colorlight_commissioned_by": ""})
     db.update_settings(clean)
     engine.reload_settings()
     return get_settings()
+
+
+def _network_interfaces() -> list[dict]:
+    default_interface = ""
+    try:
+        for line in Path("/proc/net/route").read_text(encoding="utf-8", errors="replace").splitlines()[1:]:
+            columns = line.split()
+            if len(columns) >= 4 and columns[1] == "00000000" and int(columns[3], 16) & 2:
+                default_interface = columns[0]
+                break
+    except Exception:
+        pass
+    addresses: dict[str, list[str]] = {}
+    try:
+        result = subprocess.run(["ip", "-j", "address", "show"], capture_output=True, text=True, timeout=2)
+        if result.returncode == 0:
+            for item in json.loads(result.stdout):
+                addresses[str(item.get("ifname") or "")] = [str(x.get("local")) for x in item.get("addr_info", []) if x.get("local")]
+    except Exception:
+        pass
+    interfaces = []
+    for path in sorted(Path("/sys/class/net").glob("*"), key=lambda item: item.name):
+        name = path.name
+        if name == "lo":
+            continue
+        try:
+            state = (path / "operstate").read_text().strip()
+        except Exception:
+            state = "unknown"
+        interfaces.append({"name": name, "state": state, "addresses": addresses.get(name, []), "is_default": name == default_interface})
+    return interfaces
+
+
+def _fpp_colorlight_configuration(settings: dict | None = None) -> dict:
+    settings = settings or db.get_settings()
+    interface = str(settings.get("colorlight_interface") or "eth1")
+    candidates = [FPP_CONFIG_DIR / "channeloutputs.json", FPP_CONFIG_DIR / "co-universes.json"]
+    inspected = []
+    combined = ""
+    for path in candidates:
+        try:
+            raw = path.read_text(encoding="utf-8", errors="replace")
+            inspected.append(path.name)
+            combined += "\n" + raw.lower()
+        except Exception:
+            continue
+    has_colorlight = "colorlight" in combined or "color light" in combined
+    has_interface = interface.lower() in combined if interface else False
+    snap = diagnostics.snapshot()
+    fpp_active = str(snap.get("services", {}).get("fppd") or "") == "active"
+    interfaces = _network_interfaces()
+    selected_interface = next((item for item in interfaces if item["name"] == interface), None)
+    interface_present = selected_interface is not None
+    interface_is_default = bool(selected_interface and selected_interface["is_default"])
+    ok = bool(has_colorlight and has_interface and fpp_active and interface_present and not interface_is_default)
+    if interface_is_default:
+        message = "The selected interface carries the normal LAN/default route and must not be used for Colorlight output"
+    elif not interface_present:
+        message = "The selected Colorlight interface was not detected"
+    elif not (has_colorlight and has_interface):
+        message = "Save a ColorLight 5A-75 output using the selected interface in FPP, then test again"
+    elif not fpp_active:
+        message = "FPPD is not active"
+    else:
+        message = "FPP Colorlight output is configured"
+    return {
+        "ok": ok,
+        "fpp_active": fpp_active,
+        "colorlight_output_found": has_colorlight,
+        "interface_found": has_interface,
+        "interface": interface,
+        "interface_present": interface_present,
+        "interface_is_default": interface_is_default,
+        "files_inspected": inspected,
+        "message": message,
+    }
+
+
+@app.get("/api/hardware/network-interfaces")
+@permission_required("display_setup")
+def hardware_network_interfaces_api():
+    return jsonify({"interfaces": _network_interfaces()})
+
+
+@app.get("/api/hardware/colorlight-test")
+@permission_required("display_setup")
+def colorlight_test_api():
+    result = _fpp_colorlight_configuration()
+    result["interfaces"] = _network_interfaces()
+    return jsonify(result)
+
+
+@app.post("/api/hardware/colorlight-commission")
+@permission_required("display_setup")
+def colorlight_commission_api():
+    data = request.get_json(silent=True) or {}
+    required = ("fpp", "grid", "checker", "red", "green", "blue", "white")
+    confirmed = {str(item) for item in data.get("confirmed", [])}
+    missing = [item for item in required if item not in confirmed]
+    test = _fpp_colorlight_configuration()
+    if not test.get("ok"):
+        return jsonify({"error": test["message"], "test": test}), 400
+    if missing:
+        return jsonify({"error": "Complete every commissioning test before marking the installation passed", "missing": missing}), 400
+    now = datetime.now().astimezone().isoformat(timespec="seconds")
+    db.update_settings({"colorlight_commissioned": True, "colorlight_commissioned_at": now, "colorlight_commissioned_by": str(g.current_user.get("username") or "")})
+    return jsonify({"ok": True, "commissioned_at": now, "commissioned_by": g.current_user.get("username")})
+
+
+@app.get("/api/hardware-profiles")
+@permission_required("display_setup")
+def hardware_profiles_api():
+    return jsonify(db.list_hardware_profiles())
+
+
+@app.post("/api/hardware-profiles")
+@permission_required("display_setup")
+def hardware_profile_create_api():
+    data = request.get_json(silent=True) or {}
+    settings = db.get_settings()
+    config = {key: settings.get(key) for key in HARDWARE_PROFILE_KEYS}
+    profile_id = db.save_hardware_profile(str(data.get("name") or ""), config)
+    return jsonify(db.get_hardware_profile(profile_id)), 201
+
+
+@app.post("/api/hardware-profiles/<int:profile_id>/apply")
+@permission_required("display_setup")
+def hardware_profile_apply_api(profile_id: int):
+    profile = db.get_hardware_profile(profile_id)
+    if not profile:
+        return jsonify({"error": "Hardware profile not found"}), 404
+    db.update_settings({key: value for key, value in profile["config"].items() if key in HARDWARE_PROFILE_KEYS})
+    db.update_settings({"colorlight_commissioned": False, "colorlight_commissioned_at": "", "colorlight_commissioned_by": ""})
+    engine.reload_settings()
+    return get_settings()
+
+
+@app.delete("/api/hardware-profiles/<int:profile_id>")
+@permission_required("display_setup")
+def hardware_profile_delete_api(profile_id: int):
+    db.delete_hardware_profile(profile_id)
+    return jsonify({"ok": True})
 
 
 @app.get("/api/license")
@@ -1968,6 +2124,97 @@ def _backup_list() -> list[dict]:
         except Exception as exc:
             out.append({"filename": path.name, "size": path.stat().st_size, "modified_at": datetime.fromtimestamp(path.stat().st_mtime).astimezone().isoformat(timespec="seconds"), "invalid": True, "error": str(exc)})
     return out
+
+
+_SENSITIVE_SUPPORT_KEYS = {"password", "passwd", "secret", "token", "apikey", "api_key", "license_key", "licence_key", "wifi", "psk", "smtp_password"}
+
+
+def _sanitise_support_value(value, key: str = ""):
+    if any(part in key.lower() for part in _SENSITIVE_SUPPORT_KEYS):
+        return "[redacted]"
+    if isinstance(value, dict):
+        return {str(k): _sanitise_support_value(v, str(k)) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_sanitise_support_value(item) for item in value]
+    return value
+
+
+def _sanitised_fpp_outputs() -> dict:
+    result = {}
+    for name in ("channeloutputs.json", "co-universes.json", "model-overlays.json"):
+        path = FPP_CONFIG_DIR / name
+        try:
+            result[name] = _sanitise_support_value(json.loads(path.read_text(encoding="utf-8", errors="replace")))
+        except FileNotFoundError:
+            continue
+        except Exception as exc:
+            result[name] = {"error": f"Unable to parse: {exc}"}
+    return result
+
+
+def _fpp_version() -> str:
+    try:
+        req = urllib.request.Request("http://127.0.0.1/api/system/status", headers={"Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=2) as response:
+            payload = json.loads(response.read().decode("utf-8", errors="replace"))
+        for key in ("version", "fppVersion", "fpp_version"):
+            if payload.get(key):
+                return str(payload[key])
+    except Exception:
+        pass
+    for path in (Path("/opt/fpp/src/version.cmake"), Path("/etc/fpp/version")):
+        try:
+            raw = path.read_text(encoding="utf-8", errors="replace")
+            match = re.search(r"\d+\.\d+(?:\.\d+)?(?:[-+._A-Za-z0-9]*)", raw)
+            if match:
+                return match.group(0)
+        except Exception:
+            continue
+    return "unknown"
+
+
+def _redact_support_text(value: str) -> str:
+    text = str(value)
+    text = re.sub(r"(?i)(authorization|password|passwd|secret|token|api[_-]?key|licen[cs]e[_-]?key)(\s*[:=]\s*)([^\s,;]+)", r"\1\2[redacted]", text)
+    text = re.sub(r"\b(?:PMS|LIC)[-_][A-Za-z0-9_-]{8,}\b", "[redacted-licence-key]", text, flags=re.I)
+    return text
+
+
+@app.get("/api/support-package")
+@permission_required("backup")
+def support_package_api():
+    include_preview = str(request.args.get("include_preview") or "0").lower() in ("1", "true", "yes")
+    settings = db.get_settings()
+    licence = license_manager.info()
+    report = {
+        "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "app_version": APP_VERSION,
+        "fpp_version": _fpp_version(),
+        "hostname": socket.gethostname(),
+        "hardware_profile": {key: settings.get(key) for key in HARDWARE_PROFILE_KEYS},
+        "commissioning": {"passed": bool(settings.get("colorlight_commissioned")), "passed_at": settings.get("colorlight_commissioned_at") or "", "passed_by": settings.get("colorlight_commissioned_by") or ""},
+        "network_interfaces": _network_interfaces(),
+        "colorlight_test": _fpp_colorlight_configuration(settings),
+        "diagnostics": diagnostics.snapshot(),
+        "licence": {key: licence.get(key) for key in ("mode", "licensed", "status", "message", "device_id", "verified_until", "grace_until", "app_version") if key in licence},
+    }
+    log_lines = []
+    try:
+        lines = LOG_PATH.read_text(encoding="utf-8", errors="replace").splitlines()
+        log_lines = [_redact_support_text(line) for line in lines if " WARNING " in line or " ERROR " in line][-300:]
+    except Exception:
+        pass
+    memory = io.BytesIO()
+    with zipfile.ZipFile(memory, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("support-report.json", json.dumps(_sanitise_support_value(report), indent=2, sort_keys=True))
+        zf.writestr("fpp-output-sanitised.json", json.dumps(_sanitised_fpp_outputs(), indent=2, sort_keys=True))
+        zf.writestr("recent-warnings-errors.log", "\n".join(log_lines) + ("\n" if log_lines else ""))
+        zf.writestr("README.txt", "Pi Matrix Signage support package. Passwords, licence keys and known secret fields have been removed. Review before sharing.\n")
+        if include_preview:
+            zf.writestr("display-preview.png", engine.preview_png(6))
+    memory.seek(0)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    return send_file(memory, mimetype="application/zip", as_attachment=True, download_name=f"PiMatrixSignage-support-{stamp}-v{APP_VERSION}.zip")
 
 
 @app.get("/api/backups")

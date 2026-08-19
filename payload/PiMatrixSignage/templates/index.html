@@ -704,6 +704,7 @@
         </article>
         <article class="card">
           <div class="card-head"><div><h2>Panel layout</h2><p>Tell the app the pixel size and arrangement of the physical panels.</p></div></div>
+          <label>Panel model / description<input id="panelModel" maxlength="100" placeholder="For example: P5 outdoor 64×32 1/8 scan"></label>
           <div class="form-grid cols-3"><label>Pixels per panel – width<input type="number" id="panelWidth" min="8" max="512"></label><label>Pixels per panel – height<input type="number" id="panelHeight" min="8" max="512"></label><label>Panel scan rate<select id="panelScan"><option value="1/4">1/4 scan</option><option value="1/8">1/8 scan</option><option value="1/16">1/16 scan</option><option value="1/32">1/32 scan</option><option value="1/64">1/64 scan</option></select></label></div>
           <div class="form-grid cols-2"><label>Panels across<input type="number" id="panelsAcross" min="1" max="32"></label><label>Panels down<input type="number" id="panelsDown" min="1" max="32"></label></div>
           <label>Whole-display rotation<select id="displayRotation"><option value="0">0° – normal</option><option value="90">90° clockwise</option><option value="180">180°</option><option value="270">270° clockwise</option></select></label>
@@ -724,6 +725,21 @@
           <label>Default message<select id="defaultMessage"></select></label>
           <div class="callout compact-callout"><strong>Access control:</strong> usernames, passwords and tab permissions are managed from the Users tab.</div>
           <div class="toolbar"><button class="btn primary" id="saveSettings">Save display settings</button></div>
+        </article>
+
+        <article class="card full-span" id="colorlightWizardCard">
+          <div class="card-head"><div><h2>Colorlight setup &amp; commissioning</h2><p>Follow each step in order, test the physical display, then record the installation as commissioned.</p></div><span class="health-badge" id="commissioningBadge">Not commissioned</span></div>
+          <ol class="commissioning-steps">
+            <li><strong>Choose the dedicated interface</strong><p>Refresh the detected interfaces, select one that is not carrying the normal LAN, then save Display settings.</p><div class="toolbar compact"><select id="detectedColorlightInterface"></select><button class="btn secondary" id="detectInterfaces" type="button">Detect interfaces</button><button class="btn secondary" id="useDetectedInterface" type="button">Use selected</button></div><div class="callout compact-callout" id="interfaceWarning">Interfaces have not been checked yet.</div></li>
+            <li><strong>Test the FPP output</strong><p>Checks that FPPD is active and its saved ColorLight 5A-75 output references the selected interface.</p><div class="toolbar compact"><button class="btn secondary" id="testColorlightFpp" type="button">Test FPP configuration</button><label class="checkline"><input type="checkbox" id="commissionFpp" disabled> FPP check passed</label></div><div class="callout compact-callout" id="colorlightFppResult">Not tested.</div></li>
+            <li><strong>Verify the panel tests</strong><p>Run each pattern and confirm the complete physical display is correct.</p><div class="commission-tests"><label><button class="btn secondary wizard-pattern" data-pattern="grid" type="button">Show Grid</button><input type="checkbox" id="commissionGrid"> Correct</label><label><button class="btn secondary wizard-pattern" data-pattern="checker" type="button">Show Checker</button><input type="checkbox" id="commissionChecker"> Correct</label><label><button class="btn red wizard-pattern" data-pattern="red" type="button">Red</button><input type="checkbox" id="commissionRed"> Correct</label><label><button class="btn green wizard-pattern" data-pattern="green" type="button">Green</button><input type="checkbox" id="commissionGreen"> Correct</label><label><button class="btn blue wizard-pattern" data-pattern="blue" type="button">Blue</button><input type="checkbox" id="commissionBlue"> Correct</label><label><button class="btn secondary wizard-pattern" data-pattern="white" type="button">Full white</button><input type="checkbox" id="commissionWhite"> Correct</label></div></li>
+            <li><strong>Complete commissioning</strong><p>This records who passed the installation and when. Changing or applying hardware settings clears the commissioning state.</p><button class="btn primary" id="completeCommissioning" type="button">Mark installation commissioned</button><small id="commissioningDetail" class="muted"></small></li>
+          </ol>
+        </article>
+
+        <article class="card full-span" id="hardwareProfilesCard">
+          <div class="card-head"><div><h2>Hardware profiles</h2><p>Save the current panel, receiver, interface, layout, rotation, colour order and brightness settings for reuse.</p></div><div class="toolbar compact"><input id="hardwareProfileName" maxlength="80" placeholder="Profile name, e.g. Shop window 2×2"><button class="btn primary" id="saveHardwareProfile" type="button">Save current</button></div></div>
+          <div id="hardwareProfileList" class="backup-list"><p class="muted">No hardware profiles saved yet.</p></div>
         </article>
 
         <article class="card full-span gpio-controls-card" id="gpioControlsCard">
@@ -817,6 +833,13 @@
           <div class="card-head"><div><h2>Portable configuration</h2><p>Move the complete Pi Matrix Signage creative configuration between signs without copying user accounts or FPP.</p></div><div class="toolbar compact"><button class="btn secondary" id="exportConfiguration">Export configuration</button><label class="btn secondary file-btn compact-file-btn">Import configuration<input type="file" id="importConfigurationFile" accept=".zip,application/zip"></label></div></div>
           <div class="portable-config-includes"><span>Messages &amp; assets</span><span>Components</span><span>Playlists</span><span>Schedules &amp; rules</span><span>Brightness profiles</span><span>Display settings</span></div>
           <div class="callout compact-callout warn"><strong>Import replaces the current creative configuration.</strong> User accounts/passwords and FPP configuration are deliberately left untouched. Use Backup &amp; restore for full disaster recovery.</div>
+        </article>
+
+        <article class="card full-span">
+          <div class="card-head"><div><h2>System support package</h2><p>Download a privacy-safe diagnostic ZIP for support without including passwords or the licence key.</p></div><button class="btn primary" id="createSupportPackage" type="button">Create support package</button></div>
+          <label class="checkline"><input type="checkbox" id="supportIncludePreview"> Include the current display preview/test-pattern image</label>
+          <div class="backup-includes"><div><strong>Versions and health</strong><span>Application, FPP service state, diagnostics and recent warnings/errors.</span></div><div><strong>Hardware</strong><span>Selected profile, network interfaces, commissioning result and Colorlight test.</span></div><div><strong>Sanitised FPP output</strong><span>Channel-output configuration with known passwords, keys, tokens and secrets removed.</span></div><div><strong>Licence status</strong><span>Status and verification dates only; the licence key is excluded.</span></div></div>
+          <div class="callout compact-callout warn"><strong>Review before sharing:</strong> automatic redaction removes known secret fields, but the package can still identify the controller, network interface names and IP addresses.</div>
         </article>
 
         <article class="card full-span">

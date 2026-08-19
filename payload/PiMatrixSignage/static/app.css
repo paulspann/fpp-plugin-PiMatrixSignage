@@ -134,6 +134,7 @@ label{display:flex;flex-direction:column;gap:6px;color:#d9dfeb;font-size:13px;ma
 /* v0.5.3 GPIO / physical controls */
 .gpio-controls-card .switchline{display:flex;flex-direction:row;align-items:center;gap:.55rem;margin:0;white-space:nowrap}
 .gpio-controls-card .switchline input{width:auto;margin:0}
+.commissioning-steps{display:grid;gap:1rem;margin:0;padding-left:1.5rem}.commissioning-steps>li{padding:.85rem 1rem;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.018)}.commissioning-steps>li>p{color:var(--muted);margin:.3rem 0 .75rem}.commission-tests{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.65rem}.commission-tests label{display:flex;align-items:center;gap:.55rem}.commission-tests .btn{flex:1}.commission-tests input{width:auto;margin:0}@media(max-width:760px){.commission-tests{grid-template-columns:1fr}.commissioning-steps{padding-left:1.15rem}}
 .gpio-input-grid{display:grid;gap:.8rem;margin:1rem 0}
 .gpio-input-row{display:grid;grid-template-columns:minmax(150px,1.1fr) 90px minmax(180px,1.35fr) minmax(190px,1.35fr) minmax(190px,1.35fr) 130px auto;gap:.7rem;align-items:end;padding:.85rem;border:1px solid var(--border);border-radius:12px;background:rgba(255,255,255,.018)}
 .gpio-input-row>label{margin:0}
