@@ -9,7 +9,7 @@ from PIL import Image, ImageDraw, ImageFont
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from renderer import _cloud_text_entries, _led_wrap, _render_cloud_text, _wrap_text_pixels
+from renderer import _cloud_random_position, _cloud_text_entries, _led_wrap, _render_cloud_text, _wrap_text_pixels
 
 
 START = datetime(2026, 8, 19, 12, 0, tzinfo=timezone.utc)
@@ -80,18 +80,21 @@ def test_cloud_text_fades_in_and_out_over_its_visible_lifetime():
     assert 120 <= alpha_out.getextrema()[1] <= 130
 
 
-def test_simultaneous_phrases_use_separate_in_bounds_areas():
-    layer = {
-        "id": "cloud-layout", "cloud_text_items": "One\nTwo\nThree",
-        "cloud_visible_for": 3, "cloud_interval": 1, "cloud_max_visible": 3,
-        "cloud_fade_in": 0, "cloud_fade_out": 0, "cloud_gap": 2,
-    }
-    with patch("renderer._render_scene_text", side_effect=opaque_text):
-        image = _render_cloud_text(layer, 96, 32, 1, 2.5, START + timedelta(seconds=2.5), "")
-    alpha = image.getchannel("A")
-    assert alpha.getbbox() == (2, 2, 94, 30)
-    assert alpha.crop((30, 0, 34, 32)).getbbox() is None
-    assert alpha.crop((62, 0, 66, 32)).getbbox() is None
+def test_simultaneous_phrases_use_random_non_overlapping_positions():
+    occupied = []
+    positions = []
+    for seed in (101, 202, 303):
+        position = _cloud_random_position(20, 6, 96, 32, 2, occupied, __import__("random").Random(seed))
+        assert position is not None
+        x, y = position
+        assert 0 <= x <= 76 and 0 <= y <= 26
+        rect = (x, y, x + 20, y + 6)
+        for ox0, oy0, ox1, oy1 in occupied:
+            assert rect[2] + 2 <= ox0 or rect[0] - 2 >= ox1 or rect[3] + 2 <= oy0 or rect[1] - 2 >= oy1
+        occupied.append(rect)
+        positions.append(position)
+    assert len({y for _x, y in positions}) > 1
+    assert [x for x, _y in positions] != sorted(x for x, _y in positions)
 
 
 def test_cloud_text_designer_controls_and_release_version():
