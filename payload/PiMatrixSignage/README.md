@@ -1,4 +1,11 @@
-# Pi Matrix Signage v0.6.18
+# Pi Matrix Signage v0.6.19
+
+
+## v0.6.19 – free-positioned Cloud Text
+
+- Replaces Cloud Text's visibly column-based slots with collision-aware random positioning across the complete layer.
+- Randomizes both horizontal and vertical placement while retrying positions that would overlap visible text.
+- Retains whole-word wrapping, in-layer containment, spacing and the maximum-visible limit.
 
 
 ## v0.6.18 – whole-word Cloud Text wrapping

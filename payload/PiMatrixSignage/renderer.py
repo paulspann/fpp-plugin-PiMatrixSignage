@@ -2212,9 +2212,39 @@ def _cloud_text_entries(layer: dict) -> list[str]:
     return [str(value).strip() for value in values if str(value).strip()][:200]
 
 
+def _cloud_random_position(sprite_w: int, sprite_h: int, box_w: int, box_h: int, gap: int,
+                           occupied: list[tuple[int, int, int, int]], rng: random.Random) -> tuple[int, int] | None:
+    """Choose an in-bounds random position which does not collide with visible text."""
+    min_x = min(max(0, gap), max(0, box_w - sprite_w))
+    min_y = min(max(0, gap), max(0, box_h - sprite_h))
+    max_x = max(min_x, box_w - sprite_w - gap)
+    max_y = max(min_y, box_h - sprite_h - gap)
+
+    def clear(x: int, y: int) -> bool:
+        left, top, right, bottom = x - gap, y - gap, x + sprite_w + gap, y + sprite_h + gap
+        return all(right <= ox0 or left >= ox1 or bottom <= oy0 or top >= oy1
+                   for ox0, oy0, ox1, oy1 in occupied)
+
+    # Random attempts produce the normal layout.  The exhaustive pass is only
+    # a safety net for crowded layers and starts at a randomized offset.
+    for _ in range(384):
+        x, y = rng.randint(min_x, max_x), rng.randint(min_y, max_y)
+        if clear(x, y):
+            return x, y
+    width_count, height_count = max_x - min_x + 1, max_y - min_y + 1
+    total = width_count * height_count
+    start = rng.randrange(total) if total else 0
+    for offset in range(total):
+        index = (start + offset) % total
+        x, y = min_x + index % width_count, min_y + index // width_count
+        if clear(x, y):
+            return x, y
+    return None
+
+
 def _render_cloud_text(layer: dict, box_w: int, box_h: int, sy: float, elapsed: float,
                        now: datetime, upload_fonts_dir: str) -> Image.Image:
-    """Render timed, non-overlapping phrases into stable randomized cells."""
+    """Render timed phrases at collision-free random positions across the layer."""
     out = Image.new("RGBA", (max(1, box_w), max(1, box_h)), (0, 0, 0, 0))
     entries = _cloud_text_entries(layer)
     if not entries:
@@ -2227,7 +2257,10 @@ def _render_cloud_text(layer: dict, box_w: int, box_h: int, sy: float, elapsed: 
     gap = max(0, int(round(float(layer.get("cloud_gap", 2) or 0) * sy)))
     cols = max(1, min(max_visible, int(math.ceil(math.sqrt(max_visible * box_w / max(1, box_h))))))
     rows = max(1, int(math.ceil(max_visible / cols)))
-    cell_w, cell_h = max(1, box_w // cols), max(1, box_h // rows)
+    # These limits control phrase size only. Positioning uses the whole layer,
+    # avoiding the visibly column-based layout used by the first implementation.
+    available_w = max(1, box_w // cols - gap * 2)
+    available_h = max(1, box_h // max(2, rows) - gap * 2)
     playback_epoch = int(round(now.timestamp() - max(0.0, elapsed)))
     layer_key = str(layer.get("id") or "cloud-text")
     latest = int(math.floor(max(0.0, elapsed) / interval))
@@ -2242,13 +2275,8 @@ def _render_cloud_text(layer: dict, box_w: int, box_h: int, sy: float, elapsed: 
         order_seed = int.from_bytes(hashlib.sha256(f"{layer_key}:{playback_epoch}:{round_index}:order".encode()).digest()[:8], "big")
         random.Random(order_seed).shuffle(order)
         active.append((occurrence, age, _token_text(entries[order[within_round]], now)))
+    sprites = []
     for occurrence, age, phrase in active:
-        slot = occurrence % max_visible
-        row, col = divmod(slot, cols)
-        x0, y0 = col * cell_w, row * cell_h
-        x1 = box_w if col == cols - 1 else min(box_w, x0 + cell_w)
-        y1 = box_h if row == rows - 1 else min(box_h, y0 + cell_h)
-        available_w, available_h = max(1, x1 - x0 - gap * 2), max(1, y1 - y0 - gap * 2)
         seed = int.from_bytes(hashlib.sha256(f"{layer_key}:{playback_epoch}:{occurrence}:position".encode()).digest()[:8], "big")
         rng = random.Random(seed)
         colour = str(layer.get("color") or "#ffffff")
@@ -2269,9 +2297,6 @@ def _render_cloud_text(layer: dict, box_w: int, box_h: int, sy: float, elapsed: 
         if not bounds:
             continue
         sprite = tile.crop(bounds)
-        free_x, free_y = max(0, available_w - sprite.width), max(0, available_h - sprite.height)
-        px = x0 + gap + (rng.randrange(free_x + 1) if free_x else 0)
-        py = y0 + gap + (rng.randrange(free_y + 1) if free_y else 0)
         opacity = 1.0
         if fade_in > 0.0 and age < fade_in:
             opacity = min(opacity, age / fade_in)
@@ -2280,6 +2305,15 @@ def _render_cloud_text(layer: dict, box_w: int, box_h: int, sy: float, elapsed: 
             opacity = min(opacity, remaining / fade_out)
         if opacity < 1.0:
             sprite.putalpha(sprite.getchannel("A").point(lambda value: int(value * max(0.0, opacity))))
+        sprites.append((occurrence, sprite, rng))
+
+    occupied: list[tuple[int, int, int, int]] = []
+    for _occurrence, sprite, rng in sprites:
+        position = _cloud_random_position(sprite.width, sprite.height, box_w, box_h, gap, occupied, rng)
+        if position is None:
+            continue
+        px, py = position
+        occupied.append((px, py, px + sprite.width, py + sprite.height))
         out.alpha_composite(sprite, (px, py))
     return out
 
