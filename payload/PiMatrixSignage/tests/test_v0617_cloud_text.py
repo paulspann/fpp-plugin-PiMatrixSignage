@@ -9,7 +9,10 @@ from PIL import Image, ImageDraw, ImageFont
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from renderer import _cloud_random_position, _cloud_text_entries, _led_wrap, _render_cloud_text, _wrap_text_pixels
+from renderer import (
+    _cloud_playback_seed, _cloud_random_position, _cloud_text_entries,
+    _led_wrap, _render_cloud_text, _wrap_text_pixels,
+)
 
 
 START = datetime(2026, 8, 19, 12, 0, tzinfo=timezone.utc)
@@ -78,6 +81,44 @@ def test_cloud_text_fades_in_and_out_over_its_visible_lifetime():
     assert 120 <= alpha_in.getextrema()[1] <= 130
     assert alpha_full.getextrema()[1] == 255
     assert 120 <= alpha_out.getextrema()[1] <= 130
+
+
+def test_cloud_text_enforces_a_fade_even_if_zero_is_supplied():
+    layer = {
+        "id": "cloud-required-fade", "cloud_text_items": "Hello", "cloud_visible_for": 3,
+        "cloud_interval": 3, "cloud_max_visible": 1, "cloud_fade_in": 0,
+        "cloud_fade_out": 0, "cloud_gap": 0,
+    }
+    with patch("renderer._render_scene_text", side_effect=opaque_text):
+        alpha = _render_cloud_text(layer, 32, 16, 1, 0.1, START + timedelta(seconds=0.1), "").getchannel("A")
+    assert 120 <= alpha.getextrema()[1] <= 130
+
+
+def test_cloud_playback_seed_is_stable_until_elapsed_time_restarts():
+    first = _cloud_playback_seed("seed-test", 1, START)
+    assert _cloud_playback_seed("seed-test", 2, START + timedelta(seconds=1)) == first
+    assert _cloud_playback_seed("seed-test", 0, START + timedelta(seconds=2)) != first
+
+
+def test_visible_phrases_keep_cached_positions_when_an_older_phrase_expires():
+    import renderer
+
+    layer = {
+        "id": "cloud-stable-position", "cloud_text_items": "One\nTwo\nThree\nFour",
+        "cloud_visible_for": 3, "cloud_interval": 1, "cloud_max_visible": 3,
+        "cloud_fade_in": 0.2, "cloud_fade_out": 0.2, "cloud_gap": 2,
+    }
+    renderer._CLOUD_POSITION_CACHE.clear()
+    renderer._CLOUD_PLAYBACK_STATE.pop(("preview", layer["id"]), None)
+    with patch("renderer._render_scene_text", side_effect=opaque_text):
+        _render_cloud_text(layer, 96, 32, 1, 2.5, START + timedelta(seconds=2.5), "")
+        first = {key[2]: value for key, value in renderer._CLOUD_POSITION_CACHE.items() if key[1] == layer["id"]}
+        assert set(first) == {0, 1, 2}
+        _render_cloud_text(layer, 96, 32, 1, 3.1, START + timedelta(seconds=3.1), "")
+        second = {key[2]: value for key, value in renderer._CLOUD_POSITION_CACHE.items() if key[1] == layer["id"]}
+        assert second[1] == first[1]
+        assert second[2] == first[2]
+        assert 3 in second
 
 
 def test_simultaneous_phrases_use_random_non_overlapping_positions():

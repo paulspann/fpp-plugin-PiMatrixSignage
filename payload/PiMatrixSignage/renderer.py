@@ -71,6 +71,9 @@ _IMAGE_CACHE: dict[str, tuple[float, list[Image.Image], list[int]]] = {}
 _VIDEO_META_CACHE: dict[str, tuple[float, dict]] = {}
 _VIDEO_FRAME_CACHE: dict[tuple[str, int], Image.Image] = {}
 _TEXT_LAYER_CACHE: dict[str, Image.Image] = {}
+_CLOUD_POSITION_CACHE: dict[tuple, tuple[int, int, int, int]] = {}
+_CLOUD_PLAYBACK_STATE: dict[tuple[str, str], tuple[float, str]] = {}
+_CLOUD_CACHE_LOCK = threading.RLock()
 _LIVE_DATA_CACHE: dict[str, dict] = {}
 _LIVE_DATA_LOCK = threading.RLock()
 _SHADER_CLIENTS: dict[str, ShaderClient] = {}
@@ -2212,6 +2215,27 @@ def _cloud_text_entries(layer: dict) -> list[str]:
     return [str(value).strip() for value in values if str(value).strip()][:200]
 
 
+def _cloud_playback_seed(layer_key: str, elapsed: float, now: datetime) -> str:
+    """Return a stable seed for one playback and replace it when time restarts."""
+    context = "live" if threading.current_thread().name == "PiMatrixRenderer" else "preview"
+    state_key = (context, layer_key)
+    with _CLOUD_CACHE_LOCK:
+        previous = _CLOUD_PLAYBACK_STATE.get(state_key)
+        if previous is None or elapsed + 0.05 < previous[0]:
+            seed = f"{now.timestamp():.6f}:{random.SystemRandom().getrandbits(64)}"
+        else:
+            seed = previous[1]
+        _CLOUD_PLAYBACK_STATE[state_key] = (elapsed, seed)
+        return f"{context}:{seed}"
+
+
+def _cloud_position_is_clear(x: int, y: int, sprite_w: int, sprite_h: int, gap: int,
+                             occupied: list[tuple[int, int, int, int]]) -> bool:
+    left, top, right, bottom = x - gap, y - gap, x + sprite_w + gap, y + sprite_h + gap
+    return all(right <= ox0 or left >= ox1 or bottom <= oy0 or top >= oy1
+               for ox0, oy0, ox1, oy1 in occupied)
+
+
 def _cloud_random_position(sprite_w: int, sprite_h: int, box_w: int, box_h: int, gap: int,
                            occupied: list[tuple[int, int, int, int]], rng: random.Random) -> tuple[int, int] | None:
     """Choose an in-bounds random position which does not collide with visible text."""
@@ -2220,16 +2244,11 @@ def _cloud_random_position(sprite_w: int, sprite_h: int, box_w: int, box_h: int,
     max_x = max(min_x, box_w - sprite_w - gap)
     max_y = max(min_y, box_h - sprite_h - gap)
 
-    def clear(x: int, y: int) -> bool:
-        left, top, right, bottom = x - gap, y - gap, x + sprite_w + gap, y + sprite_h + gap
-        return all(right <= ox0 or left >= ox1 or bottom <= oy0 or top >= oy1
-                   for ox0, oy0, ox1, oy1 in occupied)
-
     # Random attempts produce the normal layout.  The exhaustive pass is only
     # a safety net for crowded layers and starts at a randomized offset.
     for _ in range(384):
         x, y = rng.randint(min_x, max_x), rng.randint(min_y, max_y)
-        if clear(x, y):
+        if _cloud_position_is_clear(x, y, sprite_w, sprite_h, gap, occupied):
             return x, y
     width_count, height_count = max_x - min_x + 1, max_y - min_y + 1
     total = width_count * height_count
@@ -2237,7 +2256,7 @@ def _cloud_random_position(sprite_w: int, sprite_h: int, box_w: int, box_h: int,
     for offset in range(total):
         index = (start + offset) % total
         x, y = min_x + index % width_count, min_y + index // width_count
-        if clear(x, y):
+        if _cloud_position_is_clear(x, y, sprite_w, sprite_h, gap, occupied):
             return x, y
     return None
 
@@ -2249,11 +2268,14 @@ def _render_cloud_text(layer: dict, box_w: int, box_h: int, sy: float, elapsed: 
     entries = _cloud_text_entries(layer)
     if not entries:
         return out
-    visible_for = max(0.2, float(layer.get("cloud_visible_for", 4.0) or 4.0))
+    visible_for = max(0.5, float(layer.get("cloud_visible_for", 4.0) or 4.0))
     max_visible = max(1, min(12, int(layer.get("cloud_max_visible", 3) or 3)))
     interval = max(0.1, float(layer.get("cloud_interval", 1.5) or 1.5), visible_for / max_visible)
-    fade_in = max(0.0, min(visible_for, float(layer.get("cloud_fade_in", 0.6) or 0.0)))
-    fade_out = max(0.0, min(visible_for, float(layer.get("cloud_fade_out", 0.8) or 0.0)))
+    fade_in = max(0.2, min(visible_for, float(layer.get("cloud_fade_in", 0.6) or 0.0)))
+    fade_out = max(0.2, min(visible_for, float(layer.get("cloud_fade_out", 0.8) or 0.0)))
+    if fade_in + fade_out > visible_for * 0.9:
+        scale = visible_for * 0.9 / (fade_in + fade_out)
+        fade_in, fade_out = fade_in * scale, fade_out * scale
     gap = max(0, int(round(float(layer.get("cloud_gap", 2) or 0) * sy)))
     cols = max(1, min(max_visible, int(math.ceil(math.sqrt(max_visible * box_w / max(1, box_h))))))
     rows = max(1, int(math.ceil(max_visible / cols)))
@@ -2261,8 +2283,8 @@ def _render_cloud_text(layer: dict, box_w: int, box_h: int, sy: float, elapsed: 
     # avoiding the visibly column-based layout used by the first implementation.
     available_w = max(1, box_w // cols - gap * 2)
     available_h = max(1, box_h // max(2, rows) - gap * 2)
-    playback_epoch = int(round(now.timestamp() - max(0.0, elapsed)))
     layer_key = str(layer.get("id") or "cloud-text")
+    playback_epoch = _cloud_playback_seed(layer_key, max(0.0, elapsed), now)
     latest = int(math.floor(max(0.0, elapsed) / interval))
     palette = [x.strip() for x in str(layer.get("cloud_palette") or "").split(",") if x.strip()]
     active = []
@@ -2308,8 +2330,37 @@ def _render_cloud_text(layer: dict, box_w: int, box_h: int, sy: float, elapsed: 
         sprites.append((occurrence, sprite, rng))
 
     occupied: list[tuple[int, int, int, int]] = []
-    for _occurrence, sprite, rng in sprites:
-        position = _cloud_random_position(sprite.width, sprite.height, box_w, box_h, gap, occupied, rng)
+    for occurrence, sprite, rng in sprites:
+        cache_key = (playback_epoch, layer_key, occurrence, box_w, box_h, gap)
+        with _CLOUD_CACHE_LOCK:
+            cached_position = _CLOUD_POSITION_CACHE.get(cache_key)
+        position = None
+        if cached_position is not None:
+            px, py, cached_w, cached_h = cached_position
+            if (sprite.width, sprite.height) != (cached_w, cached_h):
+                crisp = _is_crisp_mode(str(layer.get("cloud_render_mode") or "pixel"))
+                sprite = sprite.resize((cached_w, cached_h), Image.Resampling.NEAREST if crisp else Image.Resampling.LANCZOS)
+            if _cloud_position_is_clear(px, py, sprite.width, sprite.height, gap, occupied):
+                position = (px, py)
+        if position is None:
+            position = _cloud_random_position(sprite.width, sprite.height, box_w, box_h, gap, occupied, rng)
+            # A random earlier phrase may divide a crowded layer awkwardly.
+            # Shrink only the new arrival until it fits; existing phrases never move.
+            if position is None:
+                original = sprite
+                crisp = _is_crisp_mode(str(layer.get("cloud_render_mode") or "pixel"))
+                for scale in (0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3):
+                    size = (max(1, int(round(original.width * scale))), max(1, int(round(original.height * scale))))
+                    sprite = original.resize(size, Image.Resampling.NEAREST if crisp else Image.Resampling.LANCZOS)
+                    position = _cloud_random_position(sprite.width, sprite.height, box_w, box_h, gap, occupied, rng)
+                    if position is not None:
+                        break
+            if position is not None:
+                with _CLOUD_CACHE_LOCK:
+                    _CLOUD_POSITION_CACHE[cache_key] = (position[0], position[1], sprite.width, sprite.height)
+                    if len(_CLOUD_POSITION_CACHE) > 4096:
+                        for old_key in list(_CLOUD_POSITION_CACHE)[:-3072]:
+                            _CLOUD_POSITION_CACHE.pop(old_key, None)
         if position is None:
             continue
         px, py = position
