@@ -1,5 +1,12 @@
-# Pi Matrix Signage v0.6.30
+# Pi Matrix Signage v0.6.31
 
+
+
+## v0.6.31 – persistent licence support link
+
+- Fixes the ISSL licence purchase/reissue/support link being overwritten when live licence status rendered.
+- Moves the support route into its own always-visible row beneath the dynamic licence-status callout, so every licence state retains the support link.
+- Adds a regression test that verifies the support link is structurally separate from the JavaScript-replaced `licenceHelp` content.
 
 
 ## v0.6.30 – licence purchase, reissue and support link
