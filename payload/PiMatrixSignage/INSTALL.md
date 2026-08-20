@@ -51,7 +51,7 @@ The signing public key is downloaded automatically over HTTPS on the first real 
 
 ## Panel-output hardware detection
 
-Pi Matrix Signage automatically checks for the Hanson rPi-MFC FPP cape EEPROM. If a physical rPi-MFC identity is found, the Hanson direct-HUB75 output is offered alongside Colorlight. If it is not found, Hanson is hidden and Colorlight is assumed. This avoids presenting rPi-MFC-specific wiring on Colorlight-only controllers.
+Pi Matrix Signage automatically checks FPP's detected cape identity and the physical EEPROM location that FPP records during startup. Current FPP can remove the temporary `/sys/bus/i2c/devices/*-0050/eeprom` node after it has copied/read the EEPROM, so Pi Matrix Signage does not require that temporary sysfs node to remain present. If FPP confirms that the cape identity came from a physical rPi-MFC EEPROM, the Hanson direct-HUB75 output is offered alongside Colorlight. A virtual rPi-MFC cape selection alone is not enough. If physical Hanson hardware is not confirmed, Hanson is hidden and Colorlight is assumed.
 
 Some older/unprogrammed rPi-MFC boards may not expose a usable EEPROM identity. For support/recovery only, `PIMATRIX_FORCE_RPI_MFC=1` can be added to the persistent `license.env` environment file before restarting Pi Matrix Signage. Do not use this override unless the hardware has been positively identified.
 

@@ -42,7 +42,7 @@ def test_virtual_cape_info_alone_does_not_fake_physical_detection(tmp_path, monk
 
     result = detect_panel_hardware()
     assert result["rpi_mfc_detected"] is False
-    assert result["source"] == "no_physical_cape_eeprom"
+    assert result["source"] == "virtual_rpi_mfc_only"
 
 
 def test_physical_eeprom_plus_fpp_identity_handles_unreadable_or_unparsed_bytes(tmp_path, monkeypatch):
@@ -91,6 +91,6 @@ def test_hanson_profiles_are_filtered_when_board_is_absent():
 
 def test_help_documents_auto_detection_and_legacy_board_caveat():
     manual = (ROOT / "templates" / "help.html").read_text(encoding="utf-8")
-    assert "checks for the Hanson rPi-MFC physical FPP cape EEPROM" in manual
+    assert "checks FPP's detected cape identity" in manual
     assert "Hanson choice is hidden and Colorlight is selected automatically" in manual
     assert "old or unprogrammed board may not expose a usable EEPROM identity" in manual

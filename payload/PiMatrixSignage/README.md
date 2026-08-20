@@ -1,5 +1,14 @@
-# Pi Matrix Signage v0.6.35
+# Pi Matrix Signage v0.6.36
 
+
+
+## v0.6.36 – rPi-MFC v1.2 / FPP physical EEPROM detection fix
+
+- Fixes genuine Hanson rPi-MFC boards disappearing after FPP startup because v0.6.35 incorrectly required the temporary Linux `*-0050/eeprom` sysfs node to still exist.
+- Uses FPP's own recorded physical EEPROM origin (`media/tmp/eeprom_location.txt`) together with `cape-info.json` as the primary post-startup hardware proof.
+- Falls back to FPP's cached physical EEPROM bytes (`media/tmp/eeprom.bin`) when the parsed cape name is unavailable, and retains the live sysfs check for FPP revisions that leave the EEPROM instantiated.
+- Continues to reject a virtual rPi-MFC cape selection as physical hardware, so selecting the virtual cape in FPP alone does not make Hanson appear.
+- Improves the Display Setup detection message to report whether FPP physically confirmed the board or only has a virtual rPi-MFC configuration.
 
 ## v0.6.35 – automatic Hanson rPi-MFC detection
 

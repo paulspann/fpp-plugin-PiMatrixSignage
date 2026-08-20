@@ -1,4 +1,4 @@
-# Pi Matrix Signage FPP Plugin v0.1.13
+# Pi Matrix Signage FPP Plugin v0.1.14
 
 10+ bootstrap/integration plugin for Pi Matrix Signage on Raspberry Pi.
 
@@ -27,7 +27,7 @@ For beta testing, open FPP's Plugin Manager, paste that raw `pluginInfo.json` UR
 
 ## Current bootstrap payload
 
-This test bootstrap contains Pi Matrix Signage v0.6.35. The next commercial-hardening stage should move the application payload out of the public bootstrap repository and retrieve a signed, licence-authorised release package from the ISSL/WHMCS licensing service.
+This test bootstrap contains Pi Matrix Signage v0.6.36. The next commercial-hardening stage should move the application payload out of the public bootstrap repository and retrieve a signed, licence-authorised release package from the ISSL/WHMCS licensing service.
 
 
 ## v0.1.2
@@ -97,3 +97,10 @@ FPP Plugin Manager updates intentionally do **not** ship `scripts/fpp_upgrade.sh
 - Bundles Pi Matrix Signage **v0.6.35**.
 - Automatically detects a physical Hanson rPi-MFC from its FPP EEPROM identity.
 - Hides Hanson output/profile choices when the board is absent and assumes Colorlight instead, while retaining a support-only environment override for old/unprogrammed boards.
+
+
+## v0.1.14
+
+- Bundles Pi Matrix Signage **v0.6.36**.
+- Fixes Hanson rPi-MFC detection on current FPP by using FPP's recorded physical EEPROM origin/cache after FPP removes its temporary sysfs EEPROM node.
+- Keeps virtual rPi-MFC cape selections from being mistaken for physically fitted Hanson hardware.
