@@ -237,7 +237,7 @@ def detect_panel_hardware() -> dict:
             "source": "other_or_unidentified_eeprom",
             "cape_name": cape_name if _is_rpi_mfc_name(cape_name) else "",
             "eeprom": recorded_location or (str(paths[0]) if paths else ""),
-            "message": "A physical cape EEPROM was reported but it is not identified as a Hanson rPi-MFC; Colorlight is assumed.",
+            "message": "A physical cape EEPROM was reported but it is not identified as a Hanson rPi-MFC; choose Colorlight or the fitted Adafruit adapter manually.",
         }
 
     if _is_rpi_mfc_name(cape_name):
@@ -247,12 +247,12 @@ def detect_panel_hardware() -> dict:
             "cape_name": cape_name,
             "cape_version": cape_version,
             "eeprom": str(cape.get("eeprom_location") or ""),
-            "message": "FPP is configured for rPi-MFC via a virtual/non-physical cape identity, but no physical EEPROM was confirmed; Colorlight is assumed.",
+            "message": "FPP is configured for rPi-MFC via a virtual/non-physical cape identity, but no physical EEPROM was confirmed; Hanson is unavailable until physical hardware is confirmed.",
         }
 
     return {
         "rpi_mfc_detected": False,
         "source": "no_physical_cape_eeprom",
         "cape_name": "",
-        "message": "No physical Hanson rPi-MFC EEPROM was detected; Colorlight is assumed.",
+        "message": "No physical Hanson rPi-MFC EEPROM was detected; choose Colorlight or the fitted Adafruit adapter manually.",
     }

@@ -1,4 +1,4 @@
-# Pi Matrix Signage v0.6.7 – Install / Upgrade
+# Pi Matrix Signage v0.6.37 – Install / Upgrade
 
 Pi Matrix Signage is intended to be installed and updated through the **FPP Plugin Manager** on FPP 10+. The old customer-facing browser Upgrade tab has been removed; the underlying health-check and rollback machinery remains installed for safe application replacement.
 
@@ -15,7 +15,7 @@ The FPP-managed upgrade preserves the Pi Matrix database, media, uploaded shader
 
 ```bash
 cd /home/fpp/media/upload
-unzip -o PiMatrixSignage-v0.6.7.zip
+unzip -o PiMatrixSignage-v0.6.37.zip
 cd PiMatrixSignage
 sudo ./install.sh
 ```
@@ -51,12 +51,22 @@ The signing public key is downloaded automatically over HTTPS on the first real 
 
 ## Panel-output hardware detection
 
-Pi Matrix Signage automatically checks FPP's detected cape identity and the physical EEPROM location that FPP records during startup. Current FPP can remove the temporary `/sys/bus/i2c/devices/*-0050/eeprom` node after it has copied/read the EEPROM, so Pi Matrix Signage does not require that temporary sysfs node to remain present. If FPP confirms that the cape identity came from a physical rPi-MFC EEPROM, the Hanson direct-HUB75 output is offered alongside Colorlight. A virtual rPi-MFC cape selection alone is not enough. If physical Hanson hardware is not confirmed, Hanson is hidden and Colorlight is assumed.
+Pi Matrix Signage automatically checks FPP's detected cape identity and the physical EEPROM location that FPP records during startup. Current FPP can remove the temporary `/sys/bus/i2c/devices/*-0050/eeprom` node after it has copied/read the EEPROM, so Pi Matrix Signage does not require that temporary sysfs node to remain present. If FPP confirms that the cape identity came from a physical rPi-MFC EEPROM, the Hanson direct-HUB75 output is offered. A virtual rPi-MFC cape selection alone is not enough. If physical Hanson hardware is not confirmed, Hanson is hidden. Colorlight, Adafruit RGB Matrix HAT / Bonnet and Adafruit Triple Matrix Bonnet remain available as manual output choices; Adafruit hardware is not auto-detected because there is no reliable common identification signal across all board revisions.
 
 Some older/unprogrammed rPi-MFC boards may not expose a usable EEPROM identity. For support/recovery only, `PIMATRIX_FORCE_RPI_MFC=1` can be added to the persistent `license.env` environment file before restarting Pi Matrix Signage. Do not use this override unless the hardware has been positively identified.
+
+## Adafruit direct-HUB75 outputs
+
+**Adafruit RGB Matrix HAT / Bonnet:** on Raspberry Pi 4-class hardware, configure FPP LED Panels/RGBMatrix with the `adafruit-hat` wiring pinout and one parallel output. Do not use `adafruit-hat-pwm` unless the documented GPIO4-to-GPIO18 hardware modification is physically present. 64×64 panels may require the board's Address-E jumper configuration.
+
+**Adafruit Triple Matrix Bonnet:** configure FPP LED Panels/RGBMatrix with the `regular` wiring pinout and **3 parallel outputs** (Active3). Each IDC socket is a separate parallel HUB75 string. Power the LED panels independently from a correctly-sized 5V supply/distribution system.
+
+Current FPP RGBMatrix direct-panel output is not supported on Raspberry Pi 5, so these Pi Matrix Signage options are intended for Raspberry Pi 4-class controllers.
 
 ## GPIO / physical controls
 
 Pi Matrix Signage can monitor three GPIO inputs from **Display setup → GPIO / physical controls**. The fixed mappings are Input A = GPIO6 (header pin 31), Input B = GPIO13 (header pin 33), and Input C = GPIO26 (header pin 37). On a Hanson rPi-MFC use the dedicated CN2/CN3/CN4 connectors. On a Colorlight installation wire a dry/voltage-free contact directly between the matching Raspberry Pi header pin and a Pi GND pin; the switch does not connect to the Colorlight receiver. Never apply external voltage to a Pi GPIO input.
+
+GPIO physical controls are automatically unavailable when either Adafruit direct-HUB75 output is selected because both the `adafruit-hat` and Active3/`regular` mappings use GPIO6, GPIO13 and GPIO26 for panel signals.
 
 Use voltage-free switch/relay contacts only; the inputs use pull-ups and should be switched to GND. Do not apply external 5V/12V to a GPIO input.

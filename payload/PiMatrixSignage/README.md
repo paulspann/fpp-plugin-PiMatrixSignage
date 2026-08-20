@@ -1,5 +1,15 @@
-# Pi Matrix Signage v0.6.36
+# Pi Matrix Signage v0.6.37
 
+
+## v0.6.37 – Adafruit RGB Matrix HAT/Bonnet and Triple Matrix Bonnet
+
+- Adds **Adafruit RGB Matrix HAT / Bonnet** and **Adafruit Triple Matrix Bonnet** as first-class Display output choices alongside Hanson rPi-MFC and Colorlight.
+- Adds built-in starter profiles for a single Adafruit HAT/Bonnet panel and a three-panel Triple/Active3 arrangement.
+- Gives hardware-specific FPP setup guidance: single Adafruit uses RGBMatrix `adafruit-hat` with one parallel output; Triple uses RGBMatrix `regular` with 3 parallel outputs (Active3).
+- Keeps Adafruit selection manual because the HAT/Bonnet families do not expose one reliable hardware identity across all revisions; Hanson EEPROM auto-detection remains unchanged.
+- Automatically disables Pi Matrix GPIO / physical controls with either Adafruit direct-HUB75 output because the RGBMatrix mappings consume GPIO6/GPIO13/GPIO26 as panel signals. The backend also refuses enabling/testing those controls while an Adafruit output is active.
+- Adds Adafruit-specific panel scan validation, setup warnings, support-certificate output labels, Help and installation guidance.
+- Documents that current FPP RGBMatrix direct-panel output is intended for Raspberry Pi 4-class controllers and is not supported by FPP on Raspberry Pi 5.
 
 
 ## v0.6.36 – rPi-MFC v1.2 / FPP physical EEPROM detection fix
@@ -515,9 +525,9 @@ Designer now refreshes live widget layers even when **Animate preview** is off. 
 Live-data requests now have a render-thread watchdog. If DNS/network access stalls beyond the request limit, the placeholder changes to **Weather unavailable** / **Data unavailable** rather than remaining on Loading indefinitely; late responses from an expired request are safely ignored.
 
 
-A browser-operated LED matrix signage controller for a Raspberry Pi 4 fitted with the **Hanson Electronics rPI-MFC** and HUB75 LED panels such as P5/P10 panels.
+A browser-operated HUB75 LED matrix signage controller for Raspberry Pi 4, supporting **Hanson Electronics rPI-MFC**, **Colorlight 5A-75B/5A-75E**, **Adafruit RGB Matrix HAT / Bonnet** and **Adafruit Triple Matrix Bonnet** outputs with P5/P10 and compatible HUB75 panels.
 
-Pi Matrix Signage renders the RGB canvas and streams it locally to Falcon Player (FPP) by DDP. FPP remains responsible for the timing-critical rPI-MFC/HUB75 output.
+Pi Matrix Signage renders the RGB canvas and streams it locally to Falcon Player (FPP) by DDP. FPP remains responsible for the timing-critical physical panel output.
 
 ## What's new in 0.4.1
 
@@ -700,7 +710,7 @@ Falcon Player (FPP)
         |
         | HUB75 timing/GPIO
         v
-Hanson rPI-MFC  --->  P5/P10 panels
+Hanson rPI-MFC / Adafruit HAT / Adafruit Triple / Colorlight  --->  P5/P10 HUB75 panels
 ```
 
 Application code:
@@ -725,13 +735,13 @@ sudo journalctl -u pi-matrix-signage -n 100 --no-pager
 
 ## Hardware warning
 
-The rPI-MFC panel data connection does not replace proper panel power distribution. Use a PSU, wiring and fusing suitable for your panels and follow the current Hanson rPI-MFC power guidance.
+No panel-output adapter replaces proper LED-panel power distribution. Use a PSU, wiring and fusing suitable for the panels and the selected controller. The Adafruit Triple Matrix Bonnet in particular does not provide panel power.
 
 See [INSTALL.md](INSTALL.md) for installation, upgrade and usage notes.
 
 ## GPIO / physical controls
 
-Pi Matrix Signage monitors three Raspberry Pi GPIO lines using libgpiod: Input A = GPIO6/header pin 31, B = GPIO13/header pin 33, and C = GPIO26/header pin 37. On a Hanson rPi-MFC these are presented on the board's dedicated CN2/CN3/CN4 user-input connectors. On a Colorlight installation, wire the dry/voltage-free contact directly between the corresponding Raspberry Pi header pin and a Pi GND pin; do not connect physical-control contacts to the Colorlight receiver card. Configure the inputs under **Display setup → GPIO / physical controls** for Emergency, End Emergency, Next/Previous message, Blank, Return to Auto, or brightness cycling. The software requests internal pull-ups, so never apply 5V/12V or any other external voltage to an input. Emergency can latch until cleared or remain active only while the physical input is active.
+Pi Matrix Signage monitors three Raspberry Pi GPIO lines using libgpiod: Input A = GPIO6/header pin 31, B = GPIO13/header pin 33, and C = GPIO26/header pin 37. On a Hanson rPi-MFC these are presented on the board's dedicated CN2/CN3/CN4 user-input connectors. On a Colorlight installation, wire the dry/voltage-free contact directly between the corresponding Raspberry Pi header pin and a Pi GND pin; do not connect physical-control contacts to the Colorlight receiver card. With either Adafruit direct-HUB75 adapter, these GPIO lines are used for panel output, so Pi Matrix Signage disables physical controls automatically. Configure available inputs under **Display setup → GPIO / physical controls** for Emergency, End Emergency, Next/Previous message, Blank, Return to Auto, or brightness cycling. The software requests internal pull-ups, so never apply 5V/12V or any other external voltage to an input.
 
 
 ### v0.5.4

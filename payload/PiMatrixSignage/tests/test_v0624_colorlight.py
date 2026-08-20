@@ -21,10 +21,10 @@ def test_colorlight_settings_and_display_controls_are_packaged():
 
 def test_colorlight_validation_and_fpp_setup_are_hardware_specific():
     app = (ROOT / "app.py").read_text(encoding="utf-8")
-    assert 'output_type not in ("rpi_mfc", "colorlight")' in app
+    assert 'output_type not in PANEL_OUTPUT_LABELS' in app
     assert '("5a-75b", "5a-75e")' in app
     assert 'Path("/sys/class/net") / interface' in app
-    assert '"output_label": f"Colorlight {receiver_model}"' in app
+    assert 'f"Colorlight {receiver_model}" if colorlight else PANEL_OUTPUT_LABELS.get(output_type, output_type)' in app
     assert 'enable ColorLight 5A-75 and select {interface}' in app
 
 

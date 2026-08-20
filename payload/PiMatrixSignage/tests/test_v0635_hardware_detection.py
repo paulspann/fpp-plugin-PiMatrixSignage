@@ -77,8 +77,10 @@ def test_display_setup_hides_hanson_until_detection_enables_it():
     assert 'value="rpi_mfc"' not in static_select
     assert 'value="colorlight"' in static_select
     assert 'id="hardwareDetectionStatus"' in html
-    assert 'detected?\'<option value="rpi_mfc">Hanson rPI-MFC</option><option value="colorlight">Colorlight receiver card</option>\'' in js
-    assert "the Hanson option has been hidden and Colorlight is selected automatically" in js
+    assert '<option value="rpi_mfc">Hanson rPI-MFC</option>' in js
+    assert '<option value="adafruit_hat">Adafruit RGB Matrix HAT / Bonnet</option>' in js
+    assert '<option value="adafruit_triple">Adafruit Triple Matrix Bonnet</option>' in js
+    assert "Hanson is hidden. Colorlight and Adafruit RGB Matrix adapters remain available" in js
     assert "panel_output_type:'colorlight'" in js
     assert "Hanson rPi-MFC is not physically detected on this Raspberry Pi" in app
 
@@ -92,5 +94,6 @@ def test_hanson_profiles_are_filtered_when_board_is_absent():
 def test_help_documents_auto_detection_and_legacy_board_caveat():
     manual = (ROOT / "templates" / "help.html").read_text(encoding="utf-8")
     assert "checks FPP's detected cape identity" in manual
-    assert "Hanson choice is hidden and Colorlight is selected automatically" in manual
+    assert "A physically-confirmed Hanson rPi-MFC is offered automatically" in manual
+    assert "Adafruit RGB Matrix HAT / Bonnet" in manual
     assert "old or unprogrammed board may not expose a usable EEPROM identity" in manual

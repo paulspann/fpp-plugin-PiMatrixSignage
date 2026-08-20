@@ -68,11 +68,20 @@ HARDWARE_PROFILE_KEYS = (
     "brightness", "colorlight_receiver_model", "colorlight_interface",
 )
 
+PANEL_OUTPUT_LABELS = {
+    "rpi_mfc": "Hanson rPI-MFC",
+    "colorlight": "Colorlight receiver card",
+    "adafruit_hat": "Adafruit RGB Matrix HAT / Bonnet",
+    "adafruit_triple": "Adafruit Triple Matrix Bonnet",
+}
+
 BUILTIN_HARDWARE_PROFILES = (
     {"id": -1, "name": "Starter · Hanson P5 64×32 · 1 panel", "builtin": True, "config": {"panel_output_type": "rpi_mfc", "panel_model": "P5 64×32 (verify scan)", "panel_width": 64, "panel_height": 32, "panel_scan": "1/16", "panels_across": 1, "panels_down": 1, "display_rotation": 0, "color_order": "RGB", "brightness": 60, "colorlight_receiver_model": "5a-75b", "colorlight_interface": "eth1"}},
     {"id": -2, "name": "Starter · Hanson P5 64×32 · 2×2", "builtin": True, "config": {"panel_output_type": "rpi_mfc", "panel_model": "P5 64×32 (verify scan)", "panel_width": 64, "panel_height": 32, "panel_scan": "1/16", "panels_across": 2, "panels_down": 2, "display_rotation": 0, "color_order": "RGB", "brightness": 60, "colorlight_receiver_model": "5a-75b", "colorlight_interface": "eth1"}},
     {"id": -3, "name": "Starter · Colorlight P5 64×32 · 2×2", "builtin": True, "config": {"panel_output_type": "colorlight", "panel_model": "P5 64×32 (verify scan/driver)", "panel_width": 64, "panel_height": 32, "panel_scan": "1/16", "panels_across": 2, "panels_down": 2, "display_rotation": 0, "color_order": "RGB", "brightness": 60, "colorlight_receiver_model": "5a-75b", "colorlight_interface": "eth1"}},
     {"id": -4, "name": "Starter · Colorlight P10 32×16 · 4×2", "builtin": True, "config": {"panel_output_type": "colorlight", "panel_model": "P10 32×16 (verify scan/driver)", "panel_width": 32, "panel_height": 16, "panel_scan": "1/4", "panels_across": 4, "panels_down": 2, "display_rotation": 0, "color_order": "RGB", "brightness": 60, "colorlight_receiver_model": "5a-75e", "colorlight_interface": "eth1"}},
+    {"id": -5, "name": "Starter · Adafruit RGB Matrix HAT/Bonnet · P5 64×32 · 1 panel", "builtin": True, "config": {"panel_output_type": "adafruit_hat", "panel_model": "P5 64×32 (verify scan)", "panel_width": 64, "panel_height": 32, "panel_scan": "1/16", "panels_across": 1, "panels_down": 1, "display_rotation": 0, "color_order": "RGB", "brightness": 60, "colorlight_receiver_model": "5a-75b", "colorlight_interface": "eth1"}},
+    {"id": -6, "name": "Starter · Adafruit Triple Matrix Bonnet · P5 64×32 · 3 panels", "builtin": True, "config": {"panel_output_type": "adafruit_triple", "panel_model": "P5 64×32 (verify scan/layout)", "panel_width": 64, "panel_height": 32, "panel_scan": "1/16", "panels_across": 3, "panels_down": 1, "display_rotation": 0, "color_order": "RGB", "brightness": 60, "colorlight_receiver_model": "5a-75b", "colorlight_interface": "eth1"}},
 )
 
 logging.basicConfig(
@@ -853,8 +862,8 @@ def put_settings():
                 raise ValueError(f"{key} out of range")
             clean[key] = value
     output_type = str(data.get("panel_output_type", current.get("panel_output_type", "rpi_mfc"))).strip().lower()
-    if output_type not in ("rpi_mfc", "colorlight"):
-        raise ValueError("panel_output_type must be rpi_mfc or colorlight")
+    if output_type not in PANEL_OUTPUT_LABELS:
+        raise ValueError("Unsupported panel output hardware")
     if output_type == "rpi_mfc" and not detect_panel_hardware().get("rpi_mfc_detected"):
         raise ValueError("Hanson rPi-MFC is not physically detected on this Raspberry Pi")
     clean["panel_output_type"] = output_type
@@ -870,7 +879,12 @@ def put_settings():
         clean["colorlight_interface"] = interface
     if "panel_scan" in data:
         scan = str(data["panel_scan"]).strip()
-        supported_scans = ("1/8", "1/16") if output_type == "rpi_mfc" else ("1/4", "1/8", "1/16", "1/32", "1/64")
+        if output_type == "rpi_mfc":
+            supported_scans = ("1/8", "1/16")
+        elif output_type in ("adafruit_hat", "adafruit_triple"):
+            supported_scans = ("1/4", "1/8", "1/16", "1/32")
+        else:
+            supported_scans = ("1/4", "1/8", "1/16", "1/32", "1/64")
         if scan not in supported_scans:
             raise ValueError(f"panel_scan is not supported for {output_type}")
         clean["panel_scan"] = scan
@@ -1413,6 +1427,9 @@ def gpio_controls_api():
 def gpio_controls_update_api():
     data=request.get_json(force=True) or {}
     enabled=bool(data.get("enabled",False))
+    output_type = str(db.get_settings().get("panel_output_type") or "rpi_mfc")
+    if enabled and output_type in ("adafruit_hat", "adafruit_triple"):
+        raise ValueError("GPIO physical controls are unavailable with the selected Adafruit direct-HUB75 output because those GPIO lines are used for panel data")
     inputs=normalise_gpio_inputs(data.get("inputs"))
     # Store only the user-editable fields. GPIO numbers/header pins are fixed in
     # gpio_controls.py; the UI presents rPi-MFC connector names or direct Pi-header
@@ -2243,7 +2260,7 @@ def _commissioning_certificate(settings: dict, licence: dict, fpp_version: str, 
     detection = detect_panel_hardware()
     if output_type == "rpi_mfc" and not detection.get("rpi_mfc_detected"):
         output_type = "colorlight"
-    output_label = "Colorlight receiver card" if output_type == "colorlight" else "Hanson rPI-MFC"
+    output_label = PANEL_OUTPUT_LABELS.get(output_type, output_type or "Unknown")
     tests = settings.get("colorlight_commissioning_tests") or {}
     lines = [
         "PI MATRIX SIGNAGE - COMMISSIONING CERTIFICATE",
@@ -2612,10 +2629,12 @@ def fpp_setup_api():
     interface = str(s.get("colorlight_interface") or "eth1")
     receiver_model = str(s.get("colorlight_receiver_model") or "5a-75b").upper()
     interface_path = Path("/sys/class/net") / interface
+    common = [
+        "Leave FPP in Player or Remote mode; FPP 9.x no longer has a separate Bridge mode.",
+        "Under Channel Inputs, enable E1.31/ArtNet/DDP input. DDP does not require a universe row.",
+    ]
     if colorlight:
-        notes = [
-            "Leave FPP in Player or Remote mode; FPP 9.x no longer has a separate Bridge mode.",
-            "Under Channel Inputs, enable E1.31/ArtNet/DDP input. DDP does not require a universe row.",
+        notes = common + [
             f"Configure the Colorlight {receiver_model} receiver first with Colorlight LEDVISION/LEDSetting, including driver IC, scan rate and cabinet mapping, then save that configuration to the card.",
             f"Connect the receiver directly to the dedicated {interface} Ethernet interface. Do not share this interface with the normal LAN.",
             f"In FPP Channel Outputs, enable ColorLight 5A-75 and select {interface}.",
@@ -2623,10 +2642,27 @@ def fpp_setup_api():
             "The signage app continues to send DDP RGB data to FPP on localhost; FPP converts it to Colorlight Ethernet frames.",
             "If brightness control is inconsistent, update the receiver firmware and verify the saved receiver configuration with Colorlight's setup tool.",
         ]
+    elif output_type == "adafruit_hat":
+        notes = common + [
+            "In FPP Channel Outputs → LED Panels, use the RGBMatrix/librgbmatrix output and select the Adafruit HAT wiring pinout (hardware mapping adafruit-hat).",
+            "Use one parallel HUB75 output. Current FPP limits its Adafruit HAT mapping to one chain, so start with one directly-connected panel for an ISSL-supported configuration.",
+            f"Choose the panel definition matching {int(s['panel_width'])}x{int(s['panel_height'])} pixels and {s.get('panel_scan', '1/16')} scan, then match the FPP panel layout/orientation to the physical sign.",
+            "Do not select adafruit-hat-pwm unless the documented GPIO4-to-GPIO18 hardware modification has actually been made.",
+            "For 64x64 panels, follow the Adafruit Address-E jumper instructions for the exact HAT/Bonnet revision.",
+            "The Adafruit direct-HUB75 path uses Raspberry Pi GPIO lines needed by Pi Matrix physical controls, so GPIO / physical controls are unavailable in this mode.",
+            "Current FPP RGBMatrix direct-panel output is intended for Raspberry Pi 4-class controllers; do not use this path on Raspberry Pi 5.",
+        ]
+    elif output_type == "adafruit_triple":
+        notes = common + [
+            "In FPP Channel Outputs → LED Panels, use the RGBMatrix/librgbmatrix output with the Regular wiring pinout (hardware mapping regular).",
+            "Configure 3 parallel outputs for the Triple Matrix Bonnet / Active3 wiring. Each HUB75 socket is a separate parallel string and panels may be daisy-chained within each string as the refresh-rate budget allows.",
+            f"Choose the panel definition matching {int(s['panel_width'])}x{int(s['panel_height'])} pixels and {s.get('panel_scan', '1/16')} scan, then map the three outputs into the required {int(s['panels_across'])}×{int(s['panels_down'])} logical layout in FPP.",
+            "Power the LED panels from a separate correctly-sized 5V supply/distribution system; the Triple Matrix Bonnet does not provide panel power.",
+            "The Active3 mapping uses Raspberry Pi GPIO6/GPIO13/GPIO26 among its panel data lines, so Pi Matrix GPIO / physical controls are unavailable in this mode.",
+            "Current FPP RGBMatrix direct-panel output is intended for Raspberry Pi 4-class controllers; do not use this path on Raspberry Pi 5.",
+        ]
     else:
-        notes = [
-            "Leave FPP in Player or Remote mode; FPP 9.x no longer has a separate Bridge mode.",
-            "Under Channel Inputs, enable E1.31/ArtNet/DDP input. DDP does not require a universe row.",
+        notes = common + [
             "Enable the LED Panel output and choose Hat/Cap/Cape for the rPI-MFC.",
             f"Choose the FPP single-panel definition matching {int(s['panel_width'])}x{int(s['panel_height'])} pixels and {s.get('panel_scan', '1/16')} scan.",
             "Set the FPP panel layout and each physical panel orientation to match your wiring.",
@@ -2635,7 +2671,7 @@ def fpp_setup_api():
         ]
     return jsonify({
         "output_type": output_type,
-        "output_label": f"Colorlight {receiver_model}" if colorlight else "Hanson rPI-MFC",
+        "output_label": (f"Colorlight {receiver_model}" if colorlight else PANEL_OUTPUT_LABELS.get(output_type, output_type)),
         "network_interface": interface if colorlight else None,
         "interface_present": interface_path.exists() if colorlight else None,
         "panels_across": int(s["panels_across"]),

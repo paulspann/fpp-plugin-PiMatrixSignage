@@ -715,12 +715,16 @@
         </article>
 
         <article class="card">
-          <div class="card-head"><div><h2>Display output</h2><p>Choose the hardware FPP uses to drive the panels. Pi Matrix Signage sends frames to FPP over localhost DDP in either mode.</p></div></div>
-          <label>Panel output hardware<select id="panelOutputType"><option value="colorlight">Colorlight receiver card</option></select></label>
+          <div class="card-head"><div><h2>Display output</h2><p>Choose the hardware FPP uses to drive the panels. Pi Matrix Signage sends frames to FPP over localhost DDP for every supported output type.</p></div></div>
+          <label>Panel output hardware<select id="panelOutputType"><option value="colorlight">Colorlight receiver card</option><option value="adafruit_hat">Adafruit RGB Matrix HAT / Bonnet</option><option value="adafruit_triple">Adafruit Triple Matrix Bonnet</option></select></label>
           <div class="callout compact-callout" id="hardwareDetectionStatus">Detecting connected panel hardware…</div>
           <div id="colorlightSettings" class="hidden">
             <div class="form-grid cols-2"><label>Receiver model<select id="colorlightReceiverModel"><option value="5a-75b">Colorlight 5A-75B</option><option value="5a-75e">Colorlight 5A-75E</option></select></label><label>Dedicated Ethernet interface<input id="colorlightInterface" value="eth1" placeholder="eth1"></label></div>
             <div class="callout warn compact-callout"><strong>Dedicated connection required:</strong> connect the receiver directly to this Ethernet interface and do not use it for the Pi's normal network connection. Program the receiver's driver IC, scan and cabinet mapping with Colorlight LEDVISION/LEDSetting before enabling the FPP output.</div>
+          </div>
+          <div id="adafruitSettings" class="hidden">
+            <div class="callout compact-callout" id="adafruitOutputHelp"><strong>Adafruit direct-HUB75 output:</strong> save the selected adapter, then use the FPP setup helper below for the exact RGBMatrix wiring pinout and parallel-output settings.</div>
+            <div class="callout warn compact-callout"><strong>Manual hardware selection:</strong> Adafruit HAT/Bonnet revisions do not expose one reliable hardware identity that Pi Matrix Signage can safely auto-detect. Select the physically fitted adapter here. Shut the Pi down before fitting or removing any GPIO/HUB75 adapter.</div>
           </div>
           <div class="form-grid cols-2"><label>Brightness <span class="inline-value" id="brightnessValue">60%</span><input type="range" id="brightness" min="0" max="100"></label><label>Frame rate<input type="number" id="frameRate" min="1" max="60"></label></div>
           <div class="form-grid cols-2"><label>Colour order<select id="colorOrder"><option>RGB</option><option>RBG</option><option>GRB</option><option>GBR</option><option>BRG</option><option>BGR</option></select></label><label>Time zone<input id="timezone" value="Europe/London"></label></div>
@@ -741,7 +745,7 @@
         </article>
 
         <article class="card full-span" id="hardwareProfilesCard">
-          <div class="card-head"><div><h2>Hardware profiles</h2><p>Save the current panel, receiver, interface, layout, rotation, colour order and brightness settings for reuse.</p></div><div class="toolbar compact"><input id="hardwareProfileName" maxlength="80" placeholder="Profile name, e.g. Shop window 2×2"><button class="btn primary" id="saveHardwareProfile" type="button">Save current</button></div></div>
+          <div class="card-head"><div><h2>Hardware profiles</h2><p>Save the current output hardware, panel, receiver/interface where relevant, layout, rotation, colour order and brightness settings for reuse.</p></div><div class="toolbar compact"><input id="hardwareProfileName" maxlength="80" placeholder="Profile name, e.g. Shop window 2×2"><button class="btn primary" id="saveHardwareProfile" type="button">Save current</button></div></div>
           <div class="callout compact-callout warn"><strong>Starter profiles are not electrical specifications.</strong> Apply the closest template, verify its scan rate, driver mapping and colour order against the panel label/datasheet, then save a site-specific profile after commissioning.</div>
           <div id="hardwareProfileList" class="backup-list"><p class="muted">No hardware profiles saved yet.</p></div>
         </article>
@@ -770,7 +774,7 @@
         <article class="card full-span">
           <div class="card-head"><div><h2>FPP setup helper</h2><p>Use these hardware-specific values in Falcon Player after saving Display Setup.</p></div><button class="btn secondary" id="refreshFpp">Refresh</button></div>
           <div id="fppSetup" class="fpp-setup"></div>
-          <div class="callout"><strong>Important:</strong> FPP owns the physical output and timing. Pi Matrix Signage sends the finished RGB frame to FPP, which drives either the Hanson board or the Colorlight receiver.</div>
+          <div class="callout"><strong>Important:</strong> FPP owns the physical output and timing. Pi Matrix Signage sends the finished RGB frame to FPP, which drives the selected Hanson, Colorlight or Adafruit panel hardware.</div>
         </article>
       </div>
     </section>
@@ -824,7 +828,7 @@
           <div class="card-head"><div><h2>System support package</h2><p>Create a privacy-safe diagnostic ZIP to send to ISSL Support without including passwords or the licence key.</p></div><button class="btn primary" id="createSupportPackage" type="button">Create support package</button></div>
           <div class="callout compact-callout"><strong>Requesting support:</strong> email <a href="mailto:support@issl.co.uk?subject=Pi%20Matrix%20Signage%20support">support@issl.co.uk</a> and describe the issue, what you were doing when it happened, what you expected to happen, what actually happened and any steps that reproduce the problem. If possible, include the approximate date/time of the fault and a screenshot or photo. Create the support package as soon as practical after the issue occurs and attach the generated ZIP to your email. Please send the ZIP as generated rather than extracting or editing its contents.</div>
           <label class="checkline"><input type="checkbox" id="supportIncludePreview"> Include the current display preview/test-pattern image</label>
-          <div class="backup-includes"><div><strong>Commissioning certificate</strong><span>Human-readable hardware, software, Device ID, commissioning date and recorded panel-test results.</span></div><div><strong>Versions and health</strong><span>Application, FPP service state, diagnostics and recent warnings/errors.</span></div><div><strong>Hardware</strong><span>Selected profile, network interfaces, commissioning result and Colorlight test.</span></div><div><strong>Sanitised FPP output</strong><span>Channel-output configuration with known passwords, keys, tokens and secrets removed.</span></div><div><strong>Licence status</strong><span>Status and verification dates only; the licence key is excluded.</span></div></div>
+          <div class="backup-includes"><div><strong>Commissioning certificate</strong><span>Human-readable hardware, software, Device ID, commissioning date and recorded panel-test results.</span></div><div><strong>Versions and health</strong><span>Application, FPP service state, diagnostics and recent warnings/errors.</span></div><div><strong>Hardware</strong><span>Selected profile/output, network interfaces, hardware detection and commissioning result.</span></div><div><strong>Sanitised FPP output</strong><span>Channel-output configuration with known passwords, keys, tokens and secrets removed.</span></div><div><strong>Licence status</strong><span>Status and verification dates only; the licence key is excluded.</span></div></div>
           <div class="callout compact-callout warn"><strong>Review before sharing:</strong> automatic redaction removes known secret fields, but the package can still identify the controller, network interface names and IP addresses.</div>
         </article>
 

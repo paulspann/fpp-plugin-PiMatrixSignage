@@ -22,6 +22,7 @@ ACTIONS = {
 }
 CONTACT_TYPES = {"normally_open", "normally_closed"}
 EMERGENCY_BEHAVIOURS = {"latch", "while_active"}
+GPIO_CONFLICT_OUTPUTS = {"adafruit_hat", "adafruit_triple"}
 
 
 def default_gpio_inputs() -> list[dict]:
@@ -120,7 +121,13 @@ class GPIOControlManager:
 
     def settings(self) -> tuple[bool, list[dict]]:
         s = self.db.get_settings()
-        return bool(s.get("gpio_controls_enabled", False)), normalise_gpio_inputs(s.get("gpio_inputs"))
+        output_type = str(s.get("panel_output_type") or "rpi_mfc")
+        requested = bool(s.get("gpio_controls_enabled", False))
+        # Both Adafruit direct-HUB75 mappings consume GPIO6/GPIO13/GPIO26 as
+        # panel data/address lines. Never start gpiomon on those lines while
+        # FPP owns them for RGBMatrix output.
+        enabled = requested and output_type not in GPIO_CONFLICT_OUTPUTS
+        return enabled, normalise_gpio_inputs(s.get("gpio_inputs"))
 
     def status(self) -> dict:
         enabled, config = self.settings()
@@ -131,9 +138,19 @@ class GPIOControlManager:
                 st.update({k: item[k] for k in ("enabled", "action", "contact_type", "emergency_behaviour", "debounce_ms", "connector", "gpio", "header_pin", "pull")})
                 states.append(st)
         output_type = str(self.db.get_settings().get("panel_output_type") or "rpi_mfc")
-        profile = "Raspberry Pi GPIO (Colorlight mode)" if output_type == "colorlight" else "Hanson rPi-MFC inputs"
+        blocked = output_type in GPIO_CONFLICT_OUTPUTS
+        if output_type == "colorlight":
+            profile = "Raspberry Pi GPIO (Colorlight mode)"
+        elif output_type == "adafruit_hat":
+            profile = "Unavailable - Adafruit RGB Matrix HAT / Bonnet uses GPIO6/GPIO13/GPIO26"
+        elif output_type == "adafruit_triple":
+            profile = "Unavailable - Adafruit Triple Matrix Bonnet uses GPIO6/GPIO13/GPIO26"
+        else:
+            profile = "Hanson rPi-MFC inputs"
         return {
             "enabled": enabled,
+            "available_for_output": not blocked,
+            "blocked_reason": "The selected Adafruit direct-HUB75 output uses the Pi GPIO lines reserved for physical controls." if blocked else "",
             "profile": profile,
             "backend": "libgpiod/gpiomon" if shutil.which("gpiomon") else "unavailable",
             "inputs": states,
@@ -141,6 +158,9 @@ class GPIOControlManager:
 
     def test_action(self, key: str):
         enabled, config = self.settings()
+        output_type = str(self.db.get_settings().get("panel_output_type") or "rpi_mfc")
+        if output_type in GPIO_CONFLICT_OUTPUTS:
+            raise ValueError("GPIO physical controls are unavailable with the selected Adafruit direct-HUB75 output")
         item = next((x for x in config if x["id"] == str(key).upper()), None)
         if not item:
             raise ValueError("Unknown GPIO input")
