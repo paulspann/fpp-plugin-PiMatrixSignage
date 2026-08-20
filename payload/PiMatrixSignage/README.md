@@ -1,5 +1,13 @@
-# Pi Matrix Signage v0.6.32
+# Pi Matrix Signage v0.6.33
 
+
+
+## v0.6.33 – support request instructions
+
+- Adds clear **Requesting support** instructions directly to the System support package panel.
+- Directs customers to **support@issl.co.uk** and asks them to describe the issue, expected/actual result, reproduction steps and approximate fault time.
+- Tells users to generate the support ZIP soon after the fault, attach the ZIP as generated, and include screenshots/photos when useful.
+- Updates built-in Help with the same support workflow.
 
 
 ## v0.6.32 – support package moved to System diagnostics

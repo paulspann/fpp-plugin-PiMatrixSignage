@@ -27,7 +27,7 @@ For beta testing, open FPP's Plugin Manager, paste that raw `pluginInfo.json` UR
 
 ## Current bootstrap payload
 
-This test bootstrap contains Pi Matrix Signage v0.6.32. The next commercial-hardening stage should move the application payload out of the public bootstrap repository and retrieve a signed, licence-authorised release package from the ISSL/WHMCS licensing service.
+This test bootstrap contains Pi Matrix Signage v0.6.33. The next commercial-hardening stage should move the application payload out of the public bootstrap repository and retrieve a signed, licence-authorised release package from the ISSL/WHMCS licensing service.
 
 
 ## v0.1.2
@@ -80,6 +80,7 @@ FPP Plugin Manager updates intentionally do **not** ship `scripts/fpp_upgrade.sh
 
 ## v0.1.11
 
-- Bundles Pi Matrix Signage **v0.6.32**.
+- Bundles Pi Matrix Signage **v0.6.33**.
 - Moves the System support package from Backup & restore to System diagnostics and aligns its access permission with that page.
+- Adds customer-facing support instructions to that panel, directing users to support@issl.co.uk with the generated diagnostic ZIP and useful fault details.
 
