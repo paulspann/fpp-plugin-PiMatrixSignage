@@ -1,4 +1,4 @@
-# Pi Matrix Signage v0.6.37 – Install / Upgrade
+# Pi Matrix Signage v0.6.38 – Install / Upgrade
 
 Pi Matrix Signage is intended to be installed and updated through the **FPP Plugin Manager** on FPP 10+. The old customer-facing browser Upgrade tab has been removed; the underlying health-check and rollback machinery remains installed for safe application replacement.
 
@@ -15,7 +15,7 @@ The FPP-managed upgrade preserves the Pi Matrix database, media, uploaded shader
 
 ```bash
 cd /home/fpp/media/upload
-unzip -o PiMatrixSignage-v0.6.37.zip
+unzip -o PiMatrixSignage-v0.6.38.zip
 cd PiMatrixSignage
 sudo ./install.sh
 ```

@@ -734,6 +734,12 @@
           <div class="toolbar"><button class="btn primary" id="saveSettings">Save display settings</button></div>
         </article>
 
+        <article class="card full-span" id="hardwareProfilesCard">
+          <div class="card-head"><div><h2>Hardware profiles &amp; sample configurations</h2><p>Start from a built-in sample or save a known-good site configuration for reuse. Hanson samples appear only when an rPi-MFC is physically detected.</p></div><div class="toolbar compact"><input id="hardwareProfileName" maxlength="80" placeholder="Profile name, e.g. Shop window 2×2"><button class="btn primary" id="saveHardwareProfile" type="button">Save current</button></div></div>
+          <div class="callout compact-callout warn"><strong>16 built-in sample configurations are included.</strong> They cover common P5/P10 layouts for Hanson, Colorlight and Adafruit. <strong>Starter profiles are not electrical specifications.</strong> Verify scan rate, driver mapping and colour order against the actual panel before commissioning.</div>
+          <div id="hardwareProfileList" class="backup-list"><p class="muted">No hardware profiles saved yet.</p></div>
+        </article>
+
         <article class="card full-span" id="colorlightWizardCard">
           <div class="card-head"><div><h2>Colorlight setup &amp; commissioning</h2><p>Follow each step in order, test the physical display, then record the installation as commissioned.</p></div><span class="health-badge" id="commissioningBadge">Not commissioned</span></div>
           <ol class="commissioning-steps">
@@ -744,11 +750,7 @@
           </ol>
         </article>
 
-        <article class="card full-span" id="hardwareProfilesCard">
-          <div class="card-head"><div><h2>Hardware profiles</h2><p>Save the current output hardware, panel, receiver/interface where relevant, layout, rotation, colour order and brightness settings for reuse.</p></div><div class="toolbar compact"><input id="hardwareProfileName" maxlength="80" placeholder="Profile name, e.g. Shop window 2×2"><button class="btn primary" id="saveHardwareProfile" type="button">Save current</button></div></div>
-          <div class="callout compact-callout warn"><strong>Starter profiles are not electrical specifications.</strong> Apply the closest template, verify its scan rate, driver mapping and colour order against the panel label/datasheet, then save a site-specific profile after commissioning.</div>
-          <div id="hardwareProfileList" class="backup-list"><p class="muted">No hardware profiles saved yet.</p></div>
-        </article>
+
 
         <article class="card full-span gpio-controls-card" id="gpioControlsCard">
           <div class="card-head">

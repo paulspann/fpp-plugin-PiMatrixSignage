@@ -1,4 +1,13 @@
-# Pi Matrix Signage v0.6.37
+# Pi Matrix Signage v0.6.38
+
+## v0.6.38 – expanded hardware sample configurations
+
+- Expands the built-in hardware profile library from 6 to 16 sample configurations covering common P5/P10 layouts for Hanson rPi-MFC, Colorlight 5A-75B/5A-75E, Adafruit RGB Matrix HAT/Bonnet and Adafruit Triple Matrix Bonnet.
+- Adds common narrow-sign examples including 128×32 and 256×32 canvases, plus larger 128×64/256×64 examples where appropriate.
+- Moves Hardware profiles directly below Display output so the samples are easier to find before commissioning.
+- Groups sample configurations by output hardware, shows the calculated canvas size in each row, and separates user-saved site profiles from built-in samples.
+- Hanson samples remain hidden when no physical rPi-MFC is detected; the Colorlight and Adafruit samples remain available.
+- Samples remain read-only starting points and explicitly require the installer to verify panel scan, driver mapping, orientation and colour order before commissioning.
 
 
 ## v0.6.37 – Adafruit RGB Matrix HAT/Bonnet and Triple Matrix Bonnet

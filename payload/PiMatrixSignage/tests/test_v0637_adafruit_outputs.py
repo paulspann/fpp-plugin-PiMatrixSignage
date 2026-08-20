@@ -32,8 +32,8 @@ def test_fpp_setup_uses_documented_adafruit_mappings():
 
 def test_adafruit_starter_profiles_are_packaged():
     app = (ROOT / "app.py").read_text(encoding="utf-8")
-    assert "Starter · Adafruit RGB Matrix HAT/Bonnet · P5 64×32 · 1 panel" in app
-    assert "Starter · Adafruit Triple Matrix Bonnet · P5 64×32 · 3 panels" in app
+    assert "Adafruit HAT/Bonnet · P5 64×32 · 1 panel" in app
+    assert "Adafruit Triple · P5 64×32 · 3×1 · 192×32" in app
     assert '"panel_output_type": "adafruit_hat"' in app
     assert '"panel_output_type": "adafruit_triple"' in app
 
