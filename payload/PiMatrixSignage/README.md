@@ -1,6 +1,12 @@
-# Pi Matrix Signage v0.6.38
+# Pi Matrix Signage v0.6.39
 
-## v0.6.38 – expanded hardware sample configurations
+## v0.6.39 – hardware sample profile renderer fix
+
+- Restores the missing browser loader for Hardware profiles & sample configurations so the built-in sample library is fetched from `/api/hardware-profiles` and rendered on Display Setup.
+- Keeps built-in samples grouped by controller and user-created profiles in their own section.
+- Adds a regression test covering the API fetch → state → render path so backend-only sample definitions cannot silently pass while the UI remains empty.
+
+## v0.6.39 – expanded hardware sample configurations
 
 - Expands the built-in hardware profile library from 6 to 16 sample configurations covering common P5/P10 layouts for Hanson rPi-MFC, Colorlight 5A-75B/5A-75E, Adafruit RGB Matrix HAT/Bonnet and Adafruit Triple Matrix Bonnet.
 - Adds common narrow-sign examples including 128×32 and 256×32 canvases, plus larger 128×64/256×64 examples where appropriate.

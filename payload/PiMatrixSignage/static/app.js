@@ -991,6 +991,19 @@
   async function detectColorlightInterfaces(quiet=false){try{const data=await api('/api/hardware/network-interfaces'),select=$('detectedColorlightInterface');state.colorlightInterfaces=data.interfaces||[];select.innerHTML=state.colorlightInterfaces.map(i=>`<option value="${esc(i.name)}">${esc(i.name)} · ${esc(i.state)}${i.is_default?' · normal LAN':''}${i.addresses?.length?` · ${esc(i.addresses.join(', '))}`:''}</option>`).join('');const current=$('colorlightInterface').value;if([...select.options].some(o=>o.value===current))select.value=current;updateDetectedInterfaceWarning();}catch(e){if(!quiet)toast(e.message,true);}}
   async function testColorlightFpp(){try{const r=await api('/api/hardware/colorlight-test');$('commissionFpp').checked=!!r.ok;$('colorlightFppResult').textContent=r.message;$('colorlightFppResult').classList.toggle('warn',!r.ok);if(r.interface_is_default)toast('Choose a dedicated interface that is not the normal LAN',true);}catch(e){toast(e.message,true);}}
   async function completeColorlightCommissioning(){const map={fpp:'commissionFpp',grid:'commissionGrid',checker:'commissionChecker',red:'commissionRed',green:'commissionGreen',blue:'commissionBlue',white:'commissionWhite'},confirmed=Object.entries(map).filter(([,id])=>$(id).checked).map(([key])=>key);try{const r=await api('/api/hardware/colorlight-commission',{method:'POST',body:{confirmed}});state.settings.colorlight_commissioned=true;state.settings.colorlight_commissioned_at=r.commissioned_at;state.settings.colorlight_commissioned_by=r.commissioned_by;renderCommissioning();toast('Colorlight installation commissioned');}catch(e){toast(e.message,true);}}
+  async function loadHardwareProfiles(){
+    try{
+      const profiles=await api('/api/hardware-profiles');
+      state.hardwareProfiles=Array.isArray(profiles)?profiles:[];
+      renderHardwareProfiles();
+    }catch(e){
+      state.hardwareProfiles=[];
+      const list=$('hardwareProfileList');
+      if(list)list.innerHTML=`<p class="muted">Unable to load hardware profiles: ${esc(e.message)}</p>`;
+      throw e;
+    }
+  }
+
   function renderHardwareProfiles(){
     const list=$('hardwareProfileList'),profiles=state.hardwareProfiles||[];
     if(!profiles.length){list.innerHTML='<p class="muted">No hardware profiles are available.</p>';return;}
