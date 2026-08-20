@@ -49,8 +49,14 @@ The signing public key is downloaded automatically over HTTPS on the first real 
 
 `license.env` is deliberately persistent and the installer will not overwrite it. If it still points at the old `/pimatrix-licensing/pimatrix-license.php` bridge, update the two endpoint lines to the native addon URLs above before enabling WHMCS mode.
 
-## GPIO / physical controls (rPi-MFC)
+## Panel-output hardware detection
 
-Pi Matrix Signage can monitor the Hanson rPi-MFC's three dedicated user inputs from **Display setup → GPIO / physical controls**. The fixed mappings are Input A/CN2 = GPIO6 (header pin 31), Input B/CN3 = GPIO13 (header pin 33), and Input C/CN4 = GPIO26 (header pin 37).
+Pi Matrix Signage automatically checks for the Hanson rPi-MFC FPP cape EEPROM. If a physical rPi-MFC identity is found, the Hanson direct-HUB75 output is offered alongside Colorlight. If it is not found, Hanson is hidden and Colorlight is assumed. This avoids presenting rPi-MFC-specific wiring on Colorlight-only controllers.
+
+Some older/unprogrammed rPi-MFC boards may not expose a usable EEPROM identity. For support/recovery only, `PIMATRIX_FORCE_RPI_MFC=1` can be added to the persistent `license.env` environment file before restarting Pi Matrix Signage. Do not use this override unless the hardware has been positively identified.
+
+## GPIO / physical controls
+
+Pi Matrix Signage can monitor three GPIO inputs from **Display setup → GPIO / physical controls**. The fixed mappings are Input A = GPIO6 (header pin 31), Input B = GPIO13 (header pin 33), and Input C = GPIO26 (header pin 37). On a Hanson rPi-MFC use the dedicated CN2/CN3/CN4 connectors. On a Colorlight installation wire a dry/voltage-free contact directly between the matching Raspberry Pi header pin and a Pi GND pin; the switch does not connect to the Colorlight receiver. Never apply external voltage to a Pi GPIO input.
 
 Use voltage-free switch/relay contacts only; the inputs use pull-ups and should be switched to GND. Do not apply external 5V/12V to a GPIO input.

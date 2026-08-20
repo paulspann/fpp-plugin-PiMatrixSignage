@@ -15,7 +15,8 @@ def test_colorlight_settings_and_display_controls_are_packaged():
     assert 'id="colorlightReceiverModel"' in html
     assert 'id="colorlightInterface"' in html
     assert "function updateOutputHardware()" in js
-    assert "$('gpioControlsCard').classList.toggle('hidden',colorlight)" in js
+    assert "$('gpioControlsCard').classList.toggle('hidden',colorlight)" not in js
+    assert "These controls are wired to the Pi, not to the Colorlight receiver card." in js
 
 
 def test_colorlight_validation_and_fpp_setup_are_hardware_specific():

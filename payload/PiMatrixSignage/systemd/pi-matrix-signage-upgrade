@@ -49,6 +49,7 @@ REQUIRED = {
     "PiMatrixSignage/shader_support.py",
     "PiMatrixSignage/diagnostics.py",
     "PiMatrixSignage/gpio_controls.py",
+    "PiMatrixSignage/hardware_detection.py",
     "PiMatrixSignage/licensing.py",
     "PiMatrixSignage/ddp.py",
     "PiMatrixSignage/templates/index.html",

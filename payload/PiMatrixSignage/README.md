@@ -1,6 +1,21 @@
-# Pi Matrix Signage v0.6.33
+# Pi Matrix Signage v0.6.35
 
 
+## v0.6.35 – automatic Hanson rPi-MFC detection
+
+- Detects a physically-present Hanson rPi-MFC from its FPP cape EEPROM identity instead of always offering Hanson as a manual output choice.
+- Hides Hanson rPi-MFC from Display output and hardware-profile choices when no physical rPi-MFC EEPROM is detected, and automatically changes an old/default Hanson selection to Colorlight.
+- Keeps Colorlight available whether or not a Hanson board is present, so a controller can still be converted from direct HUB75 output to a receiver card.
+- Adds a visible hardware-detection status message and records the detection result in support packages/commissioning certificates.
+- Older/unprogrammed rPi-MFC boards that do not expose a usable FPP EEPROM identity are treated as not detected; support can temporarily enable the Hanson path with `PIMATRIX_FORCE_RPI_MFC=1` rather than exposing a confusing customer-facing override.
+
+## v0.6.34 – hardware-aware physical control wiring
+
+- Keeps the **GPIO / physical controls** panel available for both Hanson rPi-MFC and Colorlight installations.
+- Hanson mode identifies the dedicated CN2/CN3/CN4 connectors as before.
+- Colorlight mode instead instructs installers to wire voltage-free contacts directly to Raspberry Pi GPIO6/GPIO13/GPIO26 on physical header pins 31/33/37 and a Pi ground, because those controls do not connect to the Colorlight receiver.
+- Changes the three per-input wiring labels immediately when output hardware is switched and reports the GPIO backend as Raspberry Pi GPIO in Colorlight mode.
+- Adds explicit protection guidance not to apply external voltage to the Pi GPIO inputs.
 
 ## v0.6.33 – support request instructions
 
@@ -707,7 +722,7 @@ See [INSTALL.md](INSTALL.md) for installation, upgrade and usage notes.
 
 ## GPIO / physical controls
 
-On a Hanson rPi-MFC, Pi Matrix Signage can monitor the three dedicated user-input connectors directly using libgpiod: Input A (CN2/GPIO6/header pin 31), B (CN3/GPIO13/header pin 33), and C (CN4/GPIO26/header pin 37). Configure them under **Display setup → GPIO / physical controls** for Emergency, End Emergency, Next/Previous message, Blank, Return to Auto, or brightness cycling. Inputs default to pull-up operation with voltage-free switch/relay contacts to ground. Emergency can latch until cleared or remain active only while the physical input is active.
+Pi Matrix Signage monitors three Raspberry Pi GPIO lines using libgpiod: Input A = GPIO6/header pin 31, B = GPIO13/header pin 33, and C = GPIO26/header pin 37. On a Hanson rPi-MFC these are presented on the board's dedicated CN2/CN3/CN4 user-input connectors. On a Colorlight installation, wire the dry/voltage-free contact directly between the corresponding Raspberry Pi header pin and a Pi GND pin; do not connect physical-control contacts to the Colorlight receiver card. Configure the inputs under **Display setup → GPIO / physical controls** for Emergency, End Emergency, Next/Previous message, Blank, Return to Auto, or brightness cycling. The software requests internal pull-ups, so never apply 5V/12V or any other external voltage to an input. Emergency can latch until cleared or remain active only while the physical input is active.
 
 
 ### v0.5.4

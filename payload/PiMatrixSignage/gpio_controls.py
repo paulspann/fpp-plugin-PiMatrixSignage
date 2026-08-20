@@ -130,9 +130,11 @@ class GPIOControlManager:
                 st = dict(self._states.get(item["id"], self._blank_state(item["id"])))
                 st.update({k: item[k] for k in ("enabled", "action", "contact_type", "emergency_behaviour", "debounce_ms", "connector", "gpio", "header_pin", "pull")})
                 states.append(st)
+        output_type = str(self.db.get_settings().get("panel_output_type") or "rpi_mfc")
+        profile = "Raspberry Pi GPIO (Colorlight mode)" if output_type == "colorlight" else "Hanson rPi-MFC inputs"
         return {
             "enabled": enabled,
-            "profile": "Hanson rPi-MFC",
+            "profile": profile,
             "backend": "libgpiod/gpiomon" if shutil.which("gpiomon") else "unavailable",
             "inputs": states,
         }
@@ -264,8 +266,9 @@ class GPIOControlManager:
 
     @staticmethod
     def _is_active(item: dict, level: int) -> bool:
-        # rPi-MFC manual specifies pull-ups. With a voltage-free contact to GND,
-        # a normally-open switch is active low; a normally-closed safety loop is
+        # The Hanson rPi-MFC inputs and direct Raspberry Pi GPIO wiring used in
+        # Colorlight mode both use pull-ups with a voltage-free contact to GND.
+        # A normally-open switch is active low; a normally-closed safety loop is
         # active when the loop opens and the line rises.
         return (level == 0) if item.get("contact_type") == "normally_open" else (level == 1)
 

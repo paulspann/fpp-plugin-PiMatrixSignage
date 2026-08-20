@@ -38,6 +38,7 @@ from diagnostics import SystemDiagnostics
 from shader_support import SHADER_EXTENSIONS, list_shader_assets, shader_asset_from_path
 from gpio_controls import GPIOControlManager, normalise_gpio_inputs
 from licensing import LicenseError, LicenseManager
+from hardware_detection import detect_panel_hardware
 
 BASE_DIR = Path(__file__).resolve().parent
 APP_VERSION = (BASE_DIR / "VERSION").read_text(encoding="utf-8").strip() if (BASE_DIR / "VERSION").exists() else "dev"
@@ -131,6 +132,7 @@ UPGRADE_REQUIRED = {
     "PiMatrixSignage/shader_support.py",
     "PiMatrixSignage/diagnostics.py",
     "PiMatrixSignage/gpio_controls.py",
+    "PiMatrixSignage/hardware_detection.py",
     "PiMatrixSignage/licensing.py",
     "PiMatrixSignage/ddp.py",
     "PiMatrixSignage/templates/index.html",
@@ -824,6 +826,7 @@ def get_settings():
     safe["display_width"] = int(s["panel_width"]) * int(s["panels_across"])
     safe["display_height"] = int(s["panel_height"]) * int(s["panels_down"])
     safe["channel_count"] = safe["display_width"] * safe["display_height"] * 3
+    safe["hardware_detection"] = detect_panel_hardware()
     return jsonify(safe)
 
 
@@ -852,6 +855,8 @@ def put_settings():
     output_type = str(data.get("panel_output_type", current.get("panel_output_type", "rpi_mfc"))).strip().lower()
     if output_type not in ("rpi_mfc", "colorlight"):
         raise ValueError("panel_output_type must be rpi_mfc or colorlight")
+    if output_type == "rpi_mfc" and not detect_panel_hardware().get("rpi_mfc_detected"):
+        raise ValueError("Hanson rPi-MFC is not physically detected on this Raspberry Pi")
     clean["panel_output_type"] = output_type
     if "colorlight_receiver_model" in data:
         receiver_model = str(data["colorlight_receiver_model"]).strip().lower()
@@ -1021,10 +1026,19 @@ def colorlight_commission_api():
     return jsonify({"ok": True, "commissioned_at": now, "commissioned_by": g.current_user.get("username"), "tests": test_results})
 
 
+@app.get("/api/hardware-detection")
+@permission_required("display_setup")
+def hardware_detection_api():
+    return jsonify(detect_panel_hardware())
+
+
 @app.get("/api/hardware-profiles")
 @permission_required("display_setup")
 def hardware_profiles_api():
-    return jsonify([*BUILTIN_HARDWARE_PROFILES, *db.list_hardware_profiles()])
+    profiles = [*BUILTIN_HARDWARE_PROFILES, *db.list_hardware_profiles()]
+    if not detect_panel_hardware().get("rpi_mfc_detected"):
+        profiles = [item for item in profiles if str((item.get("config") or {}).get("panel_output_type") or "") != "rpi_mfc"]
+    return jsonify(profiles)
 
 
 @app.post("/api/hardware-profiles")
@@ -1043,6 +1057,8 @@ def hardware_profile_apply_api(profile_id: int):
     profile = next((item for item in BUILTIN_HARDWARE_PROFILES if int(item["id"]) == profile_id), None) if profile_id < 0 else db.get_hardware_profile(profile_id)
     if not profile:
         return jsonify({"error": "Hardware profile not found"}), 404
+    if str((profile.get("config") or {}).get("panel_output_type") or "") == "rpi_mfc" and not detect_panel_hardware().get("rpi_mfc_detected"):
+        return jsonify({"error": "Hanson rPi-MFC is not physically detected on this Raspberry Pi"}), 409
     db.update_settings({key: value for key, value in profile["config"].items() if key in HARDWARE_PROFILE_KEYS})
     db.update_settings({"colorlight_commissioned": False, "colorlight_commissioned_at": "", "colorlight_commissioned_by": "", "colorlight_commissioning_tests": {}})
     engine.reload_settings()
@@ -1398,8 +1414,9 @@ def gpio_controls_update_api():
     data=request.get_json(force=True) or {}
     enabled=bool(data.get("enabled",False))
     inputs=normalise_gpio_inputs(data.get("inputs"))
-    # Store only the user-editable fields. The physical rPi-MFC connector/pin
-    # mapping is fixed in gpio_controls.py and cannot be changed from the browser.
+    # Store only the user-editable fields. GPIO numbers/header pins are fixed in
+    # gpio_controls.py; the UI presents rPi-MFC connector names or direct Pi-header
+    # wiring instructions according to the selected output hardware.
     stored=[{k:item[k] for k in ("id","enabled","action","contact_type","emergency_behaviour","debounce_ms")} for item in inputs]
     db.update_settings({"gpio_controls_enabled":enabled,"gpio_inputs":stored})
     gpio_controls.reload()
@@ -2223,6 +2240,9 @@ def _commissioning_certificate(settings: dict, licence: dict, fpp_version: str, 
     across = int(settings.get("panels_across") or 0)
     down = int(settings.get("panels_down") or 0)
     output_type = str(settings.get("panel_output_type") or "")
+    detection = detect_panel_hardware()
+    if output_type == "rpi_mfc" and not detection.get("rpi_mfc_detected"):
+        output_type = "colorlight"
     output_label = "Colorlight receiver card" if output_type == "colorlight" else "Hanson rPI-MFC"
     tests = settings.get("colorlight_commissioning_tests") or {}
     lines = [
@@ -2239,6 +2259,7 @@ def _commissioning_certificate(settings: dict, licence: dict, fpp_version: str, 
         "DISPLAY HARDWARE",
         f"Hardware profile: {_current_hardware_profile_name(settings)}",
         f"Output type: {output_label}",
+        f"Hardware detection: {detection.get('message') or 'not available'}",
         f"Panel model: {settings.get('panel_model') or 'unspecified'}",
         f"Panel dimensions: {width} x {height} pixels",
         f"Panel scan rate: {settings.get('panel_scan') or 'unspecified'}",
@@ -2304,6 +2325,7 @@ def support_package_api():
         "hostname": socket.gethostname(),
         "hardware_profile_name": _current_hardware_profile_name(settings),
         "hardware_profile": {key: settings.get(key) for key in HARDWARE_PROFILE_KEYS},
+        "hardware_detection": detect_panel_hardware(),
         "commissioning": {
             "passed": bool(settings.get("colorlight_commissioned")),
             "passed_at": settings.get("colorlight_commissioned_at") or "",
@@ -2583,6 +2605,9 @@ def fpp_setup_api():
     w = int(s["panel_width"]) * int(s["panels_across"])
     h = int(s["panel_height"]) * int(s["panels_down"])
     output_type = str(s.get("panel_output_type") or "rpi_mfc")
+    detection = detect_panel_hardware()
+    if output_type == "rpi_mfc" and not detection.get("rpi_mfc_detected"):
+        output_type = "colorlight"
     colorlight = output_type == "colorlight"
     interface = str(s.get("colorlight_interface") or "eth1")
     receiver_model = str(s.get("colorlight_receiver_model") or "5a-75b").upper()
