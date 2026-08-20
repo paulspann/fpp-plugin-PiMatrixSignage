@@ -819,6 +819,13 @@
           </details>
         </article>
 
+        <article class="card full-span" id="systemSupportPackageCard">
+          <div class="card-head"><div><h2>System support package</h2><p>Download a privacy-safe diagnostic ZIP for support without including passwords or the licence key.</p></div><button class="btn primary" id="createSupportPackage" type="button">Create support package</button></div>
+          <label class="checkline"><input type="checkbox" id="supportIncludePreview"> Include the current display preview/test-pattern image</label>
+          <div class="backup-includes"><div><strong>Commissioning certificate</strong><span>Human-readable hardware, software, Device ID, commissioning date and recorded panel-test results.</span></div><div><strong>Versions and health</strong><span>Application, FPP service state, diagnostics and recent warnings/errors.</span></div><div><strong>Hardware</strong><span>Selected profile, network interfaces, commissioning result and Colorlight test.</span></div><div><strong>Sanitised FPP output</strong><span>Channel-output configuration with known passwords, keys, tokens and secrets removed.</span></div><div><strong>Licence status</strong><span>Status and verification dates only; the licence key is excluded.</span></div></div>
+          <div class="callout compact-callout warn"><strong>Review before sharing:</strong> automatic redaction removes known secret fields, but the package can still identify the controller, network interface names and IP addresses.</div>
+        </article>
+
       </div>
     </section>
 
@@ -842,13 +849,6 @@
           <div class="card-head"><div><h2>Portable configuration</h2><p>Move the complete Pi Matrix Signage creative configuration between signs without copying user accounts or FPP.</p></div><div class="toolbar compact"><button class="btn secondary" id="exportConfiguration">Export configuration</button><label class="btn secondary file-btn compact-file-btn">Import configuration<input type="file" id="importConfigurationFile" accept=".zip,application/zip"></label></div></div>
           <div class="portable-config-includes"><span>Messages &amp; assets</span><span>Components</span><span>Playlists</span><span>Schedules &amp; rules</span><span>Brightness profiles</span><span>Display settings</span></div>
           <div class="callout compact-callout warn"><strong>Import replaces the current creative configuration.</strong> User accounts/passwords and FPP configuration are deliberately left untouched. Use Backup &amp; restore for full disaster recovery.</div>
-        </article>
-
-        <article class="card full-span">
-          <div class="card-head"><div><h2>System support package</h2><p>Download a privacy-safe diagnostic ZIP for support without including passwords or the licence key.</p></div><button class="btn primary" id="createSupportPackage" type="button">Create support package</button></div>
-          <label class="checkline"><input type="checkbox" id="supportIncludePreview"> Include the current display preview/test-pattern image</label>
-          <div class="backup-includes"><div><strong>Commissioning certificate</strong><span>Human-readable hardware, software, Device ID, commissioning date and recorded panel-test results.</span></div><div><strong>Versions and health</strong><span>Application, FPP service state, diagnostics and recent warnings/errors.</span></div><div><strong>Hardware</strong><span>Selected profile, network interfaces, commissioning result and Colorlight test.</span></div><div><strong>Sanitised FPP output</strong><span>Channel-output configuration with known passwords, keys, tokens and secrets removed.</span></div><div><strong>Licence status</strong><span>Status and verification dates only; the licence key is excluded.</span></div></div>
-          <div class="callout compact-callout warn"><strong>Review before sharing:</strong> automatic redaction removes known secret fields, but the package can still identify the controller, network interface names and IP addresses.</div>
         </article>
 
         <article class="card full-span">

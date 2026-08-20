@@ -2290,7 +2290,7 @@ def _commissioning_certificate(settings: dict, licence: dict, fpp_version: str, 
 
 
 @app.get("/api/support-package")
-@permission_required("backup")
+@permission_required("display_setup")
 def support_package_api():
     include_preview = str(request.args.get("include_preview") or "0").lower() in ("1", "true", "yes")
     settings = db.get_settings()

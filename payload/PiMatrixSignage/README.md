@@ -1,5 +1,12 @@
-# Pi Matrix Signage v0.6.31
+# Pi Matrix Signage v0.6.32
 
+
+
+## v0.6.32 – support package moved to System diagnostics
+
+- Moves the **System support package** panel from Backup & restore to the dedicated **System diagnostics** page.
+- Changes the support-package API to use the same **Display setup** permission as System diagnostics, so users who can see the panel can generate it.
+- Updates built-in Help to document the new location and permission.
 
 
 ## v0.6.31 – persistent licence support link

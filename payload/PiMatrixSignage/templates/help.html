@@ -155,7 +155,9 @@
         <p>Automatic recovery can restart a stalled LED renderer and restart FPPD when the service is genuinely inactive. Threshold and cooldown settings prevent repeated recovery loops. Pi Matrix Signage never automatically reboots or powers off the Raspberry Pi.</p>
         <h3>Manual recovery and history</h3>
         <p>Use <strong>Restart renderer now</strong> or <strong>Restart FPPD now</strong> when diagnosing a live fault. Recovery history records automatic and manual actions and can be cleared when no longer needed.</p>
-        <div class="help-note"><strong>Access:</strong> System diagnostics uses the Display setup permission, so moving the page does not change any existing user's rights.</div>
+        <h3>System support package</h3>
+        <p>Create this smaller ZIP from System diagnostics when requesting technical help. It contains application and FPP versions, diagnostics, recent warnings/errors, the selected hardware profile, commissioning state, network-interface information, safe licence status, a commissioning certificate and sanitised FPP output configuration. The licence key, passwords and recognised secret fields are excluded. The current display preview is optional; review the ZIP before sharing it.</p>
+        <div class="help-note"><strong>Access:</strong> System diagnostics and its System support package use the Display setup permission.</div>
       </section>
 
       <section id="shaders">
@@ -181,15 +183,13 @@
         <div class="help-warning"><strong>Do not interrupt a restore.</strong> Keep power connected and wait for the interface or service to return before retrying.</div>
         <h3>Portable content versus full backup</h3>
         <p>Message, component and playlist exports are for moving selected content. A full backup is for disaster recovery and controller migration.</p>
-        <h3>System support package</h3>
-        <p>Create this smaller ZIP when requesting technical help. It contains application and FPP versions, diagnostics, recent warnings/errors, the selected hardware profile, commissioning state, network-interface information, safe licence status and sanitised FPP output configuration. The licence key, passwords and recognised secret fields are excluded. The current display preview is optional; review the ZIP before sharing it.</p>
       </section>
 
       <section id="users">
         <h2>Users and permissions</h2>
         <p>Every operator should have an individual account. Permissions hide inaccessible pages and reject unauthorised server requests.</p>
         <table class="help-table"><thead><tr><th>Permission</th><th>Allows</th></tr></thead><tbody>
-          <tr><td>Dashboard</td><td>View status and use permitted immediate controls.</td></tr><tr><td>Messages</td><td>Create and edit message content.</td></tr><tr><td>Playlists</td><td>Create and order playlists.</td></tr><tr><td>Schedules</td><td>Manage schedules, conditions, brightness and emergency configuration.</td></tr><tr><td>Display setup</td><td>Change licence, layout, output and GPIO settings. This permission also grants the separate System diagnostics page.</td></tr><tr><td>Backup</td><td>Create, download, upload and restore backups.</td></tr><tr><td>Users</td><td>Create accounts and assign permissions.</td></tr>
+          <tr><td>Dashboard</td><td>View status and use permitted immediate controls.</td></tr><tr><td>Messages</td><td>Create and edit message content.</td></tr><tr><td>Playlists</td><td>Create and order playlists.</td></tr><tr><td>Schedules</td><td>Manage schedules, conditions, brightness and emergency configuration.</td></tr><tr><td>Display setup</td><td>Change licence, layout, output and GPIO settings. This permission also grants the separate System diagnostics page and System support package.</td></tr><tr><td>Backup</td><td>Create, download, upload and restore backups.</td></tr><tr><td>Users</td><td>Create accounts and assign permissions.</td></tr>
         </tbody></table>
         <p>The cogwheel only appears if the current user can access at least one of Display setup/System diagnostics, Backup &amp; restore or Users. Password changes and Sign out remain available in the top bar.</p>
       </section>
