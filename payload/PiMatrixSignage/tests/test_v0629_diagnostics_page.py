@@ -22,8 +22,8 @@ def test_diagnostics_polling_follows_dedicated_page():
     assert "btn.dataset.tab === 'diagnostics') loadDiagnostics(true)" in js
     assert "function diagnosticsTabVisible()" in js
     assert "if(diagnosticsTabVisible())loadDiagnostics(false)" in js
-    assert "if (btn.dataset.tab === 'setup') { loadFppSetup(); loadLicence(); loadHardwareProfiles(); detectColorlightInterfaces(true); }" in js
-    assert "if(setupTabVisible()&&can('display_setup'))loadGpioControls(false)" in js
+    assert "if (btn.dataset.tab === 'setup') setSetupSubtab" in js
+    assert "if(setupControlsVisible()&&can('display_setup'))loadGpioControls(false)" in js
 
 
 def test_help_documents_new_diagnostics_location():

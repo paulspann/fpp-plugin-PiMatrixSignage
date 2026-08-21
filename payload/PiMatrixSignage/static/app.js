@@ -180,6 +180,22 @@
   }
   async function refreshAuth(){state.auth=await api('/api/auth/me');applyPermissions();return state.auth;}
 
+  const SETUP_SUBTAB_KEY='pimatrixSetupSection';
+  const SETUP_SUBTABS=new Set(['display','profiles','testing','controls','controller']);
+  function setSetupSubtab(name,{persist=true,refresh=true}={}){
+    if(!SETUP_SUBTABS.has(name))name='display';
+    $$('[data-setup-tab]').forEach(btn=>{const active=btn.dataset.setupTab===name;btn.classList.toggle('active',active);btn.setAttribute('aria-selected',active?'true':'false');btn.tabIndex=active?0:-1;});
+    $$('[data-setup-pane]').forEach(pane=>pane.classList.toggle('active',pane.dataset.setupPane===name));
+    if(persist)localStorage.setItem(SETUP_SUBTAB_KEY,name);
+    if(!refresh||!can('display_setup'))return;
+    if(name==='profiles')loadHardwareProfiles();
+    if(name==='testing')detectColorlightInterfaces(true);
+    if(name==='controls')loadGpioControls(true);
+    if(name==='controller'){loadLicence();loadFppSetup();}
+  }
+  function currentSetupSubtab(){return document.querySelector('[data-setup-tab].active')?.dataset.setupTab||'display';}
+  $$('[data-setup-tab]').forEach(btn=>{btn.addEventListener('click',()=>setSetupSubtab(btn.dataset.setupTab));btn.addEventListener('keydown',ev=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(ev.key))return;ev.preventDefault();const tabs=$$('[data-setup-tab]'),i=tabs.indexOf(btn);let next=i;if(ev.key==='ArrowLeft')next=(i-1+tabs.length)%tabs.length;if(ev.key==='ArrowRight')next=(i+1)%tabs.length;if(ev.key==='Home')next=0;if(ev.key==='End')next=tabs.length-1;setSetupSubtab(tabs[next].dataset.setupTab);tabs[next].focus();});});
+
   function setSettingsMenu(open){
     $('settingsMenuPanel').classList.toggle('hidden',!open);
     $('settingsMenuToggle').setAttribute('aria-expanded',open?'true':'false');
@@ -191,7 +207,7 @@
   $$('.tab').forEach(btn => btn.addEventListener('click', () => {
     $$('.tab').forEach(x=>x.classList.remove('active')); btn.classList.add('active');
     $$('.page').forEach(x=>x.classList.remove('active')); $(`page-${btn.dataset.tab}`).classList.add('active');
-    if (btn.dataset.tab === 'setup') { loadFppSetup(); loadLicence(); loadHardwareProfiles(); detectColorlightInterfaces(true); }
+    if (btn.dataset.tab === 'setup') setSetupSubtab(localStorage.getItem(SETUP_SUBTAB_KEY)||currentSetupSubtab(),{persist:false,refresh:true});
     if (btn.dataset.tab === 'diagnostics') loadDiagnostics(true);
     if (btn.dataset.tab === 'upgrade') loadUpgradeStatus();
     if (btn.dataset.tab === 'backup') loadBackups(true);
@@ -913,7 +929,7 @@
   async function activateLicence(){const key=String($('licenceKey')?.value||'').trim();if(!key){toast('Enter a licence key',true);return;}try{state.license=await api('/api/license/activate',{method:'POST',body:{license_key:key}});$('licenceKey').value='';renderLicence();toast('Licence activated');}catch(e){await loadLicence();toast(e.message,true);}}
   async function checkLicence(){try{state.license=await api('/api/license/check',{method:'POST',body:{}});renderLicence();toast('Licence checked');}catch(e){await loadLicence();toast(e.message,true);}}
   async function clearLocalLicence(){if(!confirm('Clear the licence key and signed entitlement stored on this Pi?\n\nThis does not reissue the licence in WHMCS.'))return;try{state.license=await api('/api/license/deactivate-local',{method:'POST',body:{}});renderLicence();toast('Local licence cleared');}catch(e){toast(e.message,true);}}
-  function openLicenceSetup(){const tab=document.querySelector('[data-tab="setup"]');if(tab){tab.click();setTimeout(()=>$('licenceCard')?.scrollIntoView({behavior:'smooth',block:'start'}),60);}}
+  function openLicenceSetup(){const tab=document.querySelector('[data-tab="setup"]');if(tab){tab.click();setSetupSubtab('controller');setTimeout(()=>$('licenceCard')?.scrollIntoView({behavior:'smooth',block:'start'}),60);}}
 
   // Settings
   function renderHardwareDetection(){
@@ -1049,7 +1065,7 @@
   function formatUptime(seconds){
     let s=Math.max(0,Math.floor(Number(seconds)||0)),d=Math.floor(s/86400);s%=86400;const h=Math.floor(s/3600),m=Math.floor((s%3600)/60);return d?`${d}d ${h}h ${m}m`:`${h}h ${m}m`;
   }
-  function setupTabVisible(){return document.querySelector('.tab.active')?.dataset.tab==='setup';}
+  function setupControlsVisible(){return document.querySelector('.tab.active')?.dataset.tab==='setup'&&currentSetupSubtab()==='controls';}
   function diagnosticsTabVisible(){return document.querySelector('.tab.active')?.dataset.tab==='diagnostics';}
   function renderDiagnostics(d,syncControls=false){
     if(!d||d.error){$('diagOverall').textContent=d?.error||'Diagnostics unavailable';$('diagOverall').className='health-badge error';return;}
@@ -1343,7 +1359,8 @@
   $('logoutButton').addEventListener('click',async()=>{try{await api('/api/auth/logout',{method:'POST'});}finally{location.href='/login';}});
 
   setupMessageEditorWorkspace();
+  setSetupSubtab(localStorage.getItem(SETUP_SUBTAB_KEY)||'display',{persist:false,refresh:false});
   enhanceColourPickers();
   initDesignerPanelPreferences();
-  loadAll().then(()=>{refreshStatus();setInterval(refreshStatus,1600);setInterval(()=>{if(diagnosticsTabVisible())loadDiagnostics(false);},3000);setInterval(()=>{if(setupTabVisible()&&can('display_setup'))loadGpioControls(false);},900);const saved=localStorage.getItem('pimatrixLivePreview');const rate=localStorage.getItem('pimatrixLivePreviewRate');if(rate&&[...$('livePreviewRate').options].some(o=>o.value===rate))$('livePreviewRate').value=rate;const liveMode=localStorage.getItem('pimatrixPreviewMode:live')||'p5',designerMode=localStorage.getItem('pimatrixPreviewMode:designer')||'p5';if([...$('livePreviewMode').options].some(o=>o.value===liveMode))$('livePreviewMode').value=liveMode;if([...$('designerPreviewMode').options].some(o=>o.value===designerMode))$('designerPreviewMode').value=designerMode;setLivePreviewEnabled(saved!=='0');updateHistoryButtons();updateClipboardButton();refreshPreviewSimulation();});
+  loadAll().then(()=>{refreshStatus();setInterval(refreshStatus,1600);setInterval(()=>{if(diagnosticsTabVisible())loadDiagnostics(false);},3000);setInterval(()=>{if(setupControlsVisible()&&can('display_setup'))loadGpioControls(false);},900);const saved=localStorage.getItem('pimatrixLivePreview');const rate=localStorage.getItem('pimatrixLivePreviewRate');if(rate&&[...$('livePreviewRate').options].some(o=>o.value===rate))$('livePreviewRate').value=rate;const liveMode=localStorage.getItem('pimatrixPreviewMode:live')||'p5',designerMode=localStorage.getItem('pimatrixPreviewMode:designer')||'p5';if([...$('livePreviewMode').options].some(o=>o.value===liveMode))$('livePreviewMode').value=liveMode;if([...$('designerPreviewMode').options].some(o=>o.value===designerMode))$('designerPreviewMode').value=designerMode;setLivePreviewEnabled(saved!=='0');updateHistoryButtons();updateClipboardButton();refreshPreviewSimulation();});
 })();

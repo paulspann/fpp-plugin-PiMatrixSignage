@@ -210,3 +210,13 @@ label{display:flex;flex-direction:column;gap:6px;color:#d9dfeb;font-size:13px;ma
 .next-schedule-summary{display:grid;grid-template-columns:minmax(220px,.7fr) minmax(0,1.6fr);gap:14px;align-items:stretch}.next-schedule-lead{border:1px solid #36506c;border-radius:11px;background:#0c1725;padding:15px;display:flex;flex-direction:column;justify-content:center;min-width:0}.next-schedule-lead>span{font-size:9px;font-weight:800;letter-spacing:.12em;color:#8dc4ff;margin-bottom:6px}.next-schedule-lead>strong{font-size:18px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.next-schedule-lead>small{color:var(--muted);margin-top:5px}.next-schedule-details{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.next-schedule-details>div{border:1px solid var(--line);border-radius:9px;background:rgba(0,0,0,.15);padding:12px;min-width:0}.next-schedule-details span,.next-schedule-details strong{display:block}.next-schedule-details span{font-size:10px;color:var(--muted);margin-bottom:5px}.next-schedule-details strong{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.next-schedule-empty{border:1px dashed var(--line);border-radius:10px;padding:17px;text-align:center;background:#0c1119}.next-schedule-empty strong,.next-schedule-empty span{display:block}.next-schedule-empty span{color:var(--muted);font-size:11px;margin-top:4px}.next-schedule-note{font-size:10px;margin:10px 0 0}
 @media(max-width:850px){.next-schedule-summary{grid-template-columns:1fr}.next-schedule-details{grid-template-columns:1fr 1fr 1fr}}
 @media(max-width:650px){.next-schedule-details{grid-template-columns:1fr}.next-schedule-lead>strong{white-space:normal}}
+
+/* v0.6.42 Display Setup task-based sub-tabs */
+.setup-subtabs{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 20px;padding:6px;border:1px solid var(--line);border-radius:12px;background:#0d1118;box-shadow:0 8px 20px rgba(0,0,0,.12);position:sticky;top:132px;z-index:12}
+.setup-subtab{border:1px solid transparent;border-radius:8px;background:transparent;color:var(--muted);padding:9px 13px;font-size:12px;font-weight:700;white-space:nowrap}
+.setup-subtab:hover{color:var(--text);background:#141d2a;border-color:#29384d}
+.setup-subtab.active{color:#fff;background:#17304f;border-color:#365f8d}
+.setup-pane{display:none}
+.setup-pane.active{display:block}
+.setup-pane>.setup-grid{align-items:start}
+@media(max-width:650px){.setup-subtabs{top:108px;overflow-x:auto;flex-wrap:nowrap;padding:5px;margin-bottom:14px}.setup-subtab{padding:8px 10px;flex:0 0 auto}}

@@ -691,116 +691,140 @@
     </section>
 
     <section class="page" id="page-setup">
-      <div class="grid setup-grid">
-        <article class="card full-span licence-card" id="licenceCard">
-          <div class="card-head">
-            <div><h2>Software licence</h2><p>WHMCS licence status and the unique controller identity used to bind this installation.</p></div>
-            <span class="health-badge" id="licenceStatusBadge">Checking…</span>
-          </div>
-          <div class="licence-summary">
-            <div><span>Status</span><strong id="licenceStatus">Checking…</strong><small id="licenceMessage">Loading licence state.</small></div>
-            <div><span>Device ID</span><strong class="mono" id="licenceDeviceId">—</strong><small id="licenceDeviceSource">—</small></div>
-            <div><span>Licence key</span><strong id="licenceKeyMasked">—</strong><small id="licenceCustomer">—</small></div>
-            <div><span>Verification</span><strong id="licenceVerifiedUntil">—</strong><small id="licenceGraceUntil">—</small></div>
-          </div>
-          <div class="form-grid cols-2 licence-actions">
-            <label>Licence key<input id="licenceKey" autocomplete="off" spellcheck="false" placeholder="PMS-…"></label>
-            <div class="toolbar align-end">
-              <button class="btn primary" id="activateLicence" type="button">Activate / update licence</button>
-              <button class="btn secondary" id="checkLicence" type="button">Check now</button>
-              <button class="btn danger ghost" id="clearLocalLicence" type="button">Clear local licence</button>
-            </div>
-          </div>
-          <div class="callout compact-callout" id="licenceHelp"><strong>Device locking:</strong> one WHMCS licence is bound to this controller's Device ID. Use WHMCS Reissue before moving the licence to replacement hardware.</div>
-          <div class="licence-support-row" id="licenceSupportLink"><strong>To buy a licence, reissue a licence or get licensing support:</strong> visit <a href="https://www.issl.co.uk/support" target="_blank" rel="noopener noreferrer">www.issl.co.uk/support</a>.</div>
-        </article>
-        <article class="card">
-          <div class="card-head"><div><h2>Panel layout</h2><p>Tell the app the pixel size and arrangement of the physical panels.</p></div></div>
-          <label>Panel model / description<input id="panelModel" maxlength="100" placeholder="For example: P5 outdoor 64×32 1/8 scan"></label>
-          <div class="form-grid cols-3"><label>Pixels per panel – width<input type="number" id="panelWidth" min="8" max="512"></label><label>Pixels per panel – height<input type="number" id="panelHeight" min="8" max="512"></label><label>Panel scan rate<select id="panelScan"><option value="1/4">1/4 scan</option><option value="1/8">1/8 scan</option><option value="1/16">1/16 scan</option><option value="1/32">1/32 scan</option><option value="1/64">1/64 scan</option></select></label></div>
-          <div class="form-grid cols-2"><label>Panels across<input type="number" id="panelsAcross" min="1" max="32"></label><label>Panels down<input type="number" id="panelsDown" min="1" max="32"></label></div>
-          <label>Whole-display rotation<select id="displayRotation"><option value="0">0° – normal</option><option value="90">90° clockwise</option><option value="180">180°</option><option value="270">270° clockwise</option></select></label>
-          <div class="layout-summary" id="layoutSummary"></div>
-          <div class="callout warn" id="panelHardwareWarning"></div>
-        </article>
+      <nav class="setup-subtabs" role="tablist" aria-label="Display setup sections">
+        <button class="setup-subtab active" data-setup-tab="display" type="button" role="tab" aria-selected="true" aria-controls="setup-pane-display">Display</button>
+        <button class="setup-subtab" data-setup-tab="profiles" type="button" role="tab" aria-selected="false" aria-controls="setup-pane-profiles">Profiles</button>
+        <button class="setup-subtab" data-setup-tab="testing" type="button" role="tab" aria-selected="false" aria-controls="setup-pane-testing">Testing &amp; commissioning</button>
+        <button class="setup-subtab" data-setup-tab="controls" type="button" role="tab" aria-selected="false" aria-controls="setup-pane-controls">Physical controls</button>
+        <button class="setup-subtab" data-setup-tab="controller" type="button" role="tab" aria-selected="false" aria-controls="setup-pane-controller">Controller &amp; FPP</button>
+      </nav>
 
-        <article class="card">
-          <div class="card-head"><div><h2>Display output</h2><p>Choose the hardware FPP uses to drive the panels. Pi Matrix Signage sends frames to FPP over localhost DDP for every supported output type.</p></div></div>
-          <label>Panel output hardware<select id="panelOutputType"><option value="colorlight">Colorlight receiver card</option><option value="adafruit_hat">Adafruit RGB Matrix HAT / Bonnet</option><option value="adafruit_triple">Adafruit Triple Matrix Bonnet</option></select></label>
-          <div class="callout compact-callout" id="hardwareDetectionStatus">Detecting connected panel hardware…</div>
-          <div id="colorlightSettings" class="hidden">
-            <div class="form-grid cols-2"><label>Receiver model<select id="colorlightReceiverModel"><option value="5a-75b">Colorlight 5A-75B</option><option value="5a-75e">Colorlight 5A-75E</option></select></label><label>Dedicated Ethernet interface<input id="colorlightInterface" value="eth1" placeholder="eth1"></label></div>
-            <div class="callout warn compact-callout"><strong>Dedicated connection required:</strong> connect the receiver directly to this Ethernet interface and do not use it for the Pi's normal network connection. Program the receiver's driver IC, scan and cabinet mapping with Colorlight LEDVISION/LEDSetting before enabling the FPP output.</div>
-          </div>
-          <div id="adafruitSettings" class="hidden">
-            <div class="callout compact-callout" id="adafruitOutputHelp"><strong>Adafruit direct-HUB75 output:</strong> save the selected adapter, then use the FPP setup helper below for the exact RGBMatrix wiring pinout and parallel-output settings.</div>
-            <div class="callout warn compact-callout"><strong>Manual hardware selection:</strong> Adafruit HAT/Bonnet revisions do not expose one reliable hardware identity that Pi Matrix Signage can safely auto-detect. Select the physically fitted adapter here. Shut the Pi down before fitting or removing any GPIO/HUB75 adapter.</div>
-          </div>
-          <div class="form-grid cols-2"><label>Brightness <span class="inline-value" id="brightnessValue">60%</span><input type="range" id="brightness" min="0" max="100"></label><label>Frame rate<input type="number" id="frameRate" min="1" max="60"></label></div>
-          <div class="form-grid cols-2"><label>Colour order<select id="colorOrder"><option>RGB</option><option>RBG</option><option>GRB</option><option>GBR</option><option>BRG</option><option>BGR</option></select></label><label>Time zone<input id="timezone" value="Europe/London"></label></div>
-          <details><summary>Advanced DDP settings</summary><div class="form-grid cols-3"><label>Host<input id="ddpHost"></label><label>UDP port<input type="number" id="ddpPort"></label><label>Channel offset<input type="number" id="ddpOffset"></label></div></details>
-          <label>Default message<select id="defaultMessage"></select></label>
-          <div class="callout compact-callout"><strong>Access control:</strong> usernames, passwords and tab permissions are managed from the Users tab.</div>
-          <div class="toolbar"><button class="btn primary" id="saveSettings">Save display settings</button></div>
-        </article>
+      <div class="setup-pane active" id="setup-pane-display" data-setup-pane="display" role="tabpanel">
+        <div class="grid setup-grid">
+          <article class="card">
+                    <div class="card-head"><div><h2>Panel layout</h2><p>Tell the app the pixel size and arrangement of the physical panels.</p></div></div>
+                    <label>Panel model / description<input id="panelModel" maxlength="100" placeholder="For example: P5 outdoor 64×32 1/8 scan"></label>
+                    <div class="form-grid cols-3"><label>Pixels per panel – width<input type="number" id="panelWidth" min="8" max="512"></label><label>Pixels per panel – height<input type="number" id="panelHeight" min="8" max="512"></label><label>Panel scan rate<select id="panelScan"><option value="1/4">1/4 scan</option><option value="1/8">1/8 scan</option><option value="1/16">1/16 scan</option><option value="1/32">1/32 scan</option><option value="1/64">1/64 scan</option></select></label></div>
+                    <div class="form-grid cols-2"><label>Panels across<input type="number" id="panelsAcross" min="1" max="32"></label><label>Panels down<input type="number" id="panelsDown" min="1" max="32"></label></div>
+                    <label>Whole-display rotation<select id="displayRotation"><option value="0">0° – normal</option><option value="90">90° clockwise</option><option value="180">180°</option><option value="270">270° clockwise</option></select></label>
+                    <div class="layout-summary" id="layoutSummary"></div>
+                    <div class="callout warn" id="panelHardwareWarning"></div>
+                  </article>
 
-        <article class="card full-span" id="panelTestCard">
-          <div class="card-head"><div><h2>Panel test</h2><p>Check panel order, colour order, orientation, brightness and dead pixels while setting up the physical display.</p></div></div>
-          <div class="button-grid">
-            <button class="btn secondary test-pattern" data-pattern="grid" type="button">Grid</button>
-            <button class="btn secondary test-pattern" data-pattern="checker" type="button">Checker</button>
-            <button class="btn red test-pattern" data-pattern="red" type="button">Red</button>
-            <button class="btn green test-pattern" data-pattern="green" type="button">Green</button>
-            <button class="btn blue test-pattern" data-pattern="blue" type="button">Blue</button>
-            <button class="btn secondary test-pattern" data-pattern="white" type="button">White</button>
-          </div>
-          <p class="muted">Each test runs for 30 seconds, then normal playback resumes automatically. Grid and Checker are best for confirming panel order and rotation; solid colours are useful for colour-order and pixel faults.</p>
-        </article>
+          <article class="card">
+                    <div class="card-head"><div><h2>Display output</h2><p>Choose the hardware FPP uses to drive the panels. Pi Matrix Signage sends frames to FPP over localhost DDP for every supported output type.</p></div></div>
+                    <label>Panel output hardware<select id="panelOutputType"><option value="colorlight">Colorlight receiver card</option><option value="adafruit_hat">Adafruit RGB Matrix HAT / Bonnet</option><option value="adafruit_triple">Adafruit Triple Matrix Bonnet</option></select></label>
+                    <div class="callout compact-callout" id="hardwareDetectionStatus">Detecting connected panel hardware…</div>
+                    <div id="colorlightSettings" class="hidden">
+                      <div class="form-grid cols-2"><label>Receiver model<select id="colorlightReceiverModel"><option value="5a-75b">Colorlight 5A-75B</option><option value="5a-75e">Colorlight 5A-75E</option></select></label><label>Dedicated Ethernet interface<input id="colorlightInterface" value="eth1" placeholder="eth1"></label></div>
+                      <div class="callout warn compact-callout"><strong>Dedicated connection required:</strong> connect the receiver directly to this Ethernet interface and do not use it for the Pi's normal network connection. Program the receiver's driver IC, scan and cabinet mapping with Colorlight LEDVISION/LEDSetting before enabling the FPP output.</div>
+                    </div>
+                    <div id="adafruitSettings" class="hidden">
+                      <div class="callout compact-callout" id="adafruitOutputHelp"><strong>Adafruit direct-HUB75 output:</strong> save the selected adapter, then open the Controller &amp; FPP tab for the exact RGBMatrix wiring pinout and parallel-output settings.</div>
+                      <div class="callout warn compact-callout"><strong>Manual hardware selection:</strong> Adafruit HAT/Bonnet revisions do not expose one reliable hardware identity that Pi Matrix Signage can safely auto-detect. Select the physically fitted adapter here. Shut the Pi down before fitting or removing any GPIO/HUB75 adapter.</div>
+                    </div>
+                    <div class="form-grid cols-2"><label>Brightness <span class="inline-value" id="brightnessValue">60%</span><input type="range" id="brightness" min="0" max="100"></label><label>Frame rate<input type="number" id="frameRate" min="1" max="60"></label></div>
+                    <div class="form-grid cols-2"><label>Colour order<select id="colorOrder"><option>RGB</option><option>RBG</option><option>GRB</option><option>GBR</option><option>BRG</option><option>BGR</option></select></label><label>Time zone<input id="timezone" value="Europe/London"></label></div>
+                    <details><summary>Advanced DDP settings</summary><div class="form-grid cols-3"><label>Host<input id="ddpHost"></label><label>UDP port<input type="number" id="ddpPort"></label><label>Channel offset<input type="number" id="ddpOffset"></label></div></details>
+                    <label>Default message<select id="defaultMessage"></select></label>
+                    <div class="callout compact-callout"><strong>Access control:</strong> usernames, passwords and tab permissions are managed from the Users tab.</div>
+                    <div class="toolbar"><button class="btn primary" id="saveSettings">Save display settings</button></div>
+                  </article>
+        </div>
+      </div>
 
-        <article class="card full-span" id="hardwareProfilesCard">
-          <div class="card-head"><div><h2>Hardware profiles &amp; sample configurations</h2><p>Start from a built-in sample or save a known-good site configuration for reuse. Hanson samples appear only when an rPi-MFC is physically detected.</p></div><div class="toolbar compact"><input id="hardwareProfileName" maxlength="80" placeholder="Profile name, e.g. Shop window 2×2"><button class="btn primary" id="saveHardwareProfile" type="button">Save current</button></div></div>
-          <div class="callout compact-callout warn"><strong>16 built-in sample configurations are included.</strong> They cover common P5/P10 layouts for Hanson, Colorlight and Adafruit. <strong>Starter profiles are not electrical specifications.</strong> Verify scan rate, driver mapping and colour order against the actual panel before commissioning.</div>
-          <div id="hardwareProfileList" class="backup-list"><p class="muted">No hardware profiles saved yet.</p></div>
-        </article>
+      <div class="setup-pane" id="setup-pane-profiles" data-setup-pane="profiles" role="tabpanel">
+        <div class="grid setup-grid">
+          <article class="card full-span" id="hardwareProfilesCard">
+                    <div class="card-head"><div><h2>Hardware profiles &amp; sample configurations</h2><p>Start from a built-in sample or save a known-good site configuration for reuse. Hanson samples appear only when an rPi-MFC is physically detected.</p></div><div class="toolbar compact"><input id="hardwareProfileName" maxlength="80" placeholder="Profile name, e.g. Shop window 2×2"><button class="btn primary" id="saveHardwareProfile" type="button">Save current</button></div></div>
+                    <div class="callout compact-callout warn"><strong>16 built-in sample configurations are included.</strong> They cover common P5/P10 layouts for Hanson, Colorlight and Adafruit. <strong>Starter profiles are not electrical specifications.</strong> Verify scan rate, driver mapping and colour order against the actual panel before commissioning.</div>
+                    <div id="hardwareProfileList" class="backup-list"><p class="muted">No hardware profiles saved yet.</p></div>
+                  </article>
+        </div>
+      </div>
 
-        <article class="card full-span" id="colorlightWizardCard">
-          <div class="card-head"><div><h2>Colorlight setup &amp; commissioning</h2><p>Follow each step in order, test the physical display, then record the installation as commissioned.</p></div><span class="health-badge" id="commissioningBadge">Not commissioned</span></div>
-          <ol class="commissioning-steps">
-            <li><strong>Choose the dedicated interface</strong><p>Refresh the detected interfaces, select one that is not carrying the normal LAN, then save Display settings.</p><div class="toolbar compact"><select id="detectedColorlightInterface"></select><button class="btn secondary" id="detectInterfaces" type="button">Detect interfaces</button><button class="btn secondary" id="useDetectedInterface" type="button">Use selected</button></div><div class="callout compact-callout" id="interfaceWarning">Interfaces have not been checked yet.</div></li>
-            <li><strong>Test the FPP output</strong><p>Checks that FPPD is active and its saved ColorLight 5A-75 output references the selected interface.</p><div class="toolbar compact"><button class="btn secondary" id="testColorlightFpp" type="button">Test FPP configuration</button><label class="checkline"><input type="checkbox" id="commissionFpp" disabled> FPP check passed</label></div><div class="callout compact-callout" id="colorlightFppResult">Not tested.</div></li>
-            <li><strong>Verify the panel tests</strong><p>Run each pattern and confirm the complete physical display is correct.</p><div class="commission-tests"><label><button class="btn secondary wizard-pattern" data-pattern="grid" type="button">Show Grid</button><input type="checkbox" id="commissionGrid"> Correct</label><label><button class="btn secondary wizard-pattern" data-pattern="checker" type="button">Show Checker</button><input type="checkbox" id="commissionChecker"> Correct</label><label><button class="btn red wizard-pattern" data-pattern="red" type="button">Red</button><input type="checkbox" id="commissionRed"> Correct</label><label><button class="btn green wizard-pattern" data-pattern="green" type="button">Green</button><input type="checkbox" id="commissionGreen"> Correct</label><label><button class="btn blue wizard-pattern" data-pattern="blue" type="button">Blue</button><input type="checkbox" id="commissionBlue"> Correct</label><label><button class="btn secondary wizard-pattern" data-pattern="white" type="button">Full white</button><input type="checkbox" id="commissionWhite"> Correct</label></div></li>
-            <li><strong>Complete commissioning</strong><p>This records who passed the installation and when. Changing or applying hardware settings clears the commissioning state.</p><button class="btn primary" id="completeCommissioning" type="button">Mark installation commissioned</button><small id="commissioningDetail" class="muted"></small></li>
-          </ol>
-        </article>
+      <div class="setup-pane" id="setup-pane-testing" data-setup-pane="testing" role="tabpanel">
+        <div class="grid setup-grid">
+          <article class="card full-span" id="panelTestCard">
+                    <div class="card-head"><div><h2>Panel test</h2><p>Check panel order, colour order, orientation, brightness and dead pixels while setting up the physical display.</p></div></div>
+                    <div class="button-grid">
+                      <button class="btn secondary test-pattern" data-pattern="grid" type="button">Grid</button>
+                      <button class="btn secondary test-pattern" data-pattern="checker" type="button">Checker</button>
+                      <button class="btn red test-pattern" data-pattern="red" type="button">Red</button>
+                      <button class="btn green test-pattern" data-pattern="green" type="button">Green</button>
+                      <button class="btn blue test-pattern" data-pattern="blue" type="button">Blue</button>
+                      <button class="btn secondary test-pattern" data-pattern="white" type="button">White</button>
+                    </div>
+                    <p class="muted">Each test runs for 30 seconds, then normal playback resumes automatically. Grid and Checker are best for confirming panel order and rotation; solid colours are useful for colour-order and pixel faults.</p>
+                  </article>
 
+          <article class="card full-span" id="colorlightWizardCard">
+                    <div class="card-head"><div><h2>Colorlight setup &amp; commissioning</h2><p>Follow each step in order, test the physical display, then record the installation as commissioned.</p></div><span class="health-badge" id="commissioningBadge">Not commissioned</span></div>
+                    <ol class="commissioning-steps">
+                      <li><strong>Choose the dedicated interface</strong><p>Refresh the detected interfaces, select one that is not carrying the normal LAN, then save Display settings.</p><div class="toolbar compact"><select id="detectedColorlightInterface"></select><button class="btn secondary" id="detectInterfaces" type="button">Detect interfaces</button><button class="btn secondary" id="useDetectedInterface" type="button">Use selected</button></div><div class="callout compact-callout" id="interfaceWarning">Interfaces have not been checked yet.</div></li>
+                      <li><strong>Test the FPP output</strong><p>Checks that FPPD is active and its saved ColorLight 5A-75 output references the selected interface.</p><div class="toolbar compact"><button class="btn secondary" id="testColorlightFpp" type="button">Test FPP configuration</button><label class="checkline"><input type="checkbox" id="commissionFpp" disabled> FPP check passed</label></div><div class="callout compact-callout" id="colorlightFppResult">Not tested.</div></li>
+                      <li><strong>Verify the panel tests</strong><p>Run each pattern and confirm the complete physical display is correct.</p><div class="commission-tests"><label><button class="btn secondary wizard-pattern" data-pattern="grid" type="button">Show Grid</button><input type="checkbox" id="commissionGrid"> Correct</label><label><button class="btn secondary wizard-pattern" data-pattern="checker" type="button">Show Checker</button><input type="checkbox" id="commissionChecker"> Correct</label><label><button class="btn red wizard-pattern" data-pattern="red" type="button">Red</button><input type="checkbox" id="commissionRed"> Correct</label><label><button class="btn green wizard-pattern" data-pattern="green" type="button">Green</button><input type="checkbox" id="commissionGreen"> Correct</label><label><button class="btn blue wizard-pattern" data-pattern="blue" type="button">Blue</button><input type="checkbox" id="commissionBlue"> Correct</label><label><button class="btn secondary wizard-pattern" data-pattern="white" type="button">Full white</button><input type="checkbox" id="commissionWhite"> Correct</label></div></li>
+                      <li><strong>Complete commissioning</strong><p>This records who passed the installation and when. Changing or applying hardware settings clears the commissioning state.</p><button class="btn primary" id="completeCommissioning" type="button">Mark installation commissioned</button><small id="commissioningDetail" class="muted"></small></li>
+                    </ol>
+                  </article>
+        </div>
+      </div>
 
+      <div class="setup-pane" id="setup-pane-controls" data-setup-pane="controls" role="tabpanel">
+        <div class="grid setup-grid">
+          <article class="card full-span gpio-controls-card" id="gpioControlsCard">
+                    <div class="card-head">
+                      <div><h2>GPIO / physical controls</h2><p id="gpioControlsIntro">Use the three dedicated Hanson rPi-MFC user-input connectors for physical buttons or voltage-free relay contacts.</p></div>
+                      <label class="switchline"><input type="checkbox" id="gpioControlsEnabled"> Enable physical controls</label>
+                    </div>
+                    <div class="callout compact-callout" id="gpioWiringHelp"><strong>rPi-MFC inputs:</strong> A = CN2 / GPIO6 / header pin 31, B = CN3 / GPIO13 / header pin 33, C = CN4 / GPIO26 / header pin 37. The board is designed to use pull-ups, so use a voltage-free switch/relay contact to ground; never feed 5V/12V into a GPIO input.</div>
+                    <div class="gpio-input-grid" id="gpioInputGrid">
+                      <div class="gpio-input-row" data-gpio-input="A"><div class="gpio-identity"><strong>Input A</strong><small data-gpio-wiring="A">CN2 · GPIO6 · Pin 31</small><span class="gpio-state" data-gpio-state="A">Disabled</span></div><label>Enabled<input type="checkbox" data-gpio-field="enabled"></label><label>Action<select data-gpio-field="action"><option value="none">No action</option><option value="emergency">Activate Emergency</option><option value="end_emergency">End Emergency</option><option value="next_message">Next message</option><option value="previous_message">Previous message</option><option value="blank">Blank display</option><option value="automatic">Return to Auto</option><option value="brightness_cycle">Cycle brightness</option></select></label><label>Contact<select data-gpio-field="contact_type"><option value="normally_open">Normally open</option><option value="normally_closed">Normally closed / fail-safe</option></select></label><label class="gpio-emergency-behaviour">Emergency behaviour<select data-gpio-field="emergency_behaviour"><option value="latch">Latch until cleared</option><option value="while_active">Only while input active</option></select></label><label>Debounce (ms)<input type="number" data-gpio-field="debounce_ms" min="20" max="2000" step="10"></label><button class="btn secondary gpio-test" data-gpio-test="A">Test action</button></div>
+                      <div class="gpio-input-row" data-gpio-input="B"><div class="gpio-identity"><strong>Input B</strong><small data-gpio-wiring="B">CN3 · GPIO13 · Pin 33</small><span class="gpio-state" data-gpio-state="B">Disabled</span></div><label>Enabled<input type="checkbox" data-gpio-field="enabled"></label><label>Action<select data-gpio-field="action"><option value="none">No action</option><option value="emergency">Activate Emergency</option><option value="end_emergency">End Emergency</option><option value="next_message">Next message</option><option value="previous_message">Previous message</option><option value="blank">Blank display</option><option value="automatic">Return to Auto</option><option value="brightness_cycle">Cycle brightness</option></select></label><label>Contact<select data-gpio-field="contact_type"><option value="normally_open">Normally open</option><option value="normally_closed">Normally closed / fail-safe</option></select></label><label class="gpio-emergency-behaviour">Emergency behaviour<select data-gpio-field="emergency_behaviour"><option value="latch">Latch until cleared</option><option value="while_active">Only while input active</option></select></label><label>Debounce (ms)<input type="number" data-gpio-field="debounce_ms" min="20" max="2000" step="10"></label><button class="btn secondary gpio-test" data-gpio-test="B">Test action</button></div>
+                      <div class="gpio-input-row" data-gpio-input="C"><div class="gpio-identity"><strong>Input C</strong><small data-gpio-wiring="C">CN4 · GPIO26 · Pin 37</small><span class="gpio-state" data-gpio-state="C">Disabled</span></div><label>Enabled<input type="checkbox" data-gpio-field="enabled"></label><label>Action<select data-gpio-field="action"><option value="none">No action</option><option value="emergency">Activate Emergency</option><option value="end_emergency">End Emergency</option><option value="next_message">Next message</option><option value="previous_message">Previous message</option><option value="blank">Blank display</option><option value="automatic">Return to Auto</option><option value="brightness_cycle">Cycle brightness</option></select></label><label>Contact<select data-gpio-field="contact_type"><option value="normally_open">Normally open</option><option value="normally_closed">Normally closed / fail-safe</option></select></label><label class="gpio-emergency-behaviour">Emergency behaviour<select data-gpio-field="emergency_behaviour"><option value="latch">Latch until cleared</option><option value="while_active">Only while input active</option></select></label><label>Debounce (ms)<input type="number" data-gpio-field="debounce_ms" min="20" max="2000" step="10"></label><button class="btn secondary gpio-test" data-gpio-test="C">Test action</button></div>
+                    </div>
+                    <div class="toolbar"><button class="btn primary" id="saveGpioControls">Save physical controls</button><span class="muted" id="gpioBackendStatus">GPIO monitor not checked yet.</span></div>
+                    <div class="callout warn"><strong>Emergency recommendation:</strong> use a normally-open momentary button with <em>Latch until cleared</em>. One press activates the configured Emergency message; releasing the button cannot accidentally cancel it. For a fail-safe wired loop, choose Normally closed.</div>
+                  </article>
+        </div>
+      </div>
 
-        <article class="card full-span gpio-controls-card" id="gpioControlsCard">
-          <div class="card-head">
-            <div><h2>GPIO / physical controls</h2><p id="gpioControlsIntro">Use the three dedicated Hanson rPi-MFC user-input connectors for physical buttons or voltage-free relay contacts.</p></div>
-            <label class="switchline"><input type="checkbox" id="gpioControlsEnabled"> Enable physical controls</label>
-          </div>
-          <div class="callout compact-callout" id="gpioWiringHelp"><strong>rPi-MFC inputs:</strong> A = CN2 / GPIO6 / header pin 31, B = CN3 / GPIO13 / header pin 33, C = CN4 / GPIO26 / header pin 37. The board is designed to use pull-ups, so use a voltage-free switch/relay contact to ground; never feed 5V/12V into a GPIO input.</div>
-          <div class="gpio-input-grid" id="gpioInputGrid">
-            <div class="gpio-input-row" data-gpio-input="A"><div class="gpio-identity"><strong>Input A</strong><small data-gpio-wiring="A">CN2 · GPIO6 · Pin 31</small><span class="gpio-state" data-gpio-state="A">Disabled</span></div><label>Enabled<input type="checkbox" data-gpio-field="enabled"></label><label>Action<select data-gpio-field="action"><option value="none">No action</option><option value="emergency">Activate Emergency</option><option value="end_emergency">End Emergency</option><option value="next_message">Next message</option><option value="previous_message">Previous message</option><option value="blank">Blank display</option><option value="automatic">Return to Auto</option><option value="brightness_cycle">Cycle brightness</option></select></label><label>Contact<select data-gpio-field="contact_type"><option value="normally_open">Normally open</option><option value="normally_closed">Normally closed / fail-safe</option></select></label><label class="gpio-emergency-behaviour">Emergency behaviour<select data-gpio-field="emergency_behaviour"><option value="latch">Latch until cleared</option><option value="while_active">Only while input active</option></select></label><label>Debounce (ms)<input type="number" data-gpio-field="debounce_ms" min="20" max="2000" step="10"></label><button class="btn secondary gpio-test" data-gpio-test="A">Test action</button></div>
-            <div class="gpio-input-row" data-gpio-input="B"><div class="gpio-identity"><strong>Input B</strong><small data-gpio-wiring="B">CN3 · GPIO13 · Pin 33</small><span class="gpio-state" data-gpio-state="B">Disabled</span></div><label>Enabled<input type="checkbox" data-gpio-field="enabled"></label><label>Action<select data-gpio-field="action"><option value="none">No action</option><option value="emergency">Activate Emergency</option><option value="end_emergency">End Emergency</option><option value="next_message">Next message</option><option value="previous_message">Previous message</option><option value="blank">Blank display</option><option value="automatic">Return to Auto</option><option value="brightness_cycle">Cycle brightness</option></select></label><label>Contact<select data-gpio-field="contact_type"><option value="normally_open">Normally open</option><option value="normally_closed">Normally closed / fail-safe</option></select></label><label class="gpio-emergency-behaviour">Emergency behaviour<select data-gpio-field="emergency_behaviour"><option value="latch">Latch until cleared</option><option value="while_active">Only while input active</option></select></label><label>Debounce (ms)<input type="number" data-gpio-field="debounce_ms" min="20" max="2000" step="10"></label><button class="btn secondary gpio-test" data-gpio-test="B">Test action</button></div>
-            <div class="gpio-input-row" data-gpio-input="C"><div class="gpio-identity"><strong>Input C</strong><small data-gpio-wiring="C">CN4 · GPIO26 · Pin 37</small><span class="gpio-state" data-gpio-state="C">Disabled</span></div><label>Enabled<input type="checkbox" data-gpio-field="enabled"></label><label>Action<select data-gpio-field="action"><option value="none">No action</option><option value="emergency">Activate Emergency</option><option value="end_emergency">End Emergency</option><option value="next_message">Next message</option><option value="previous_message">Previous message</option><option value="blank">Blank display</option><option value="automatic">Return to Auto</option><option value="brightness_cycle">Cycle brightness</option></select></label><label>Contact<select data-gpio-field="contact_type"><option value="normally_open">Normally open</option><option value="normally_closed">Normally closed / fail-safe</option></select></label><label class="gpio-emergency-behaviour">Emergency behaviour<select data-gpio-field="emergency_behaviour"><option value="latch">Latch until cleared</option><option value="while_active">Only while input active</option></select></label><label>Debounce (ms)<input type="number" data-gpio-field="debounce_ms" min="20" max="2000" step="10"></label><button class="btn secondary gpio-test" data-gpio-test="C">Test action</button></div>
-          </div>
-          <div class="toolbar"><button class="btn primary" id="saveGpioControls">Save physical controls</button><span class="muted" id="gpioBackendStatus">GPIO monitor not checked yet.</span></div>
-          <div class="callout warn"><strong>Emergency recommendation:</strong> use a normally-open momentary button with <em>Latch until cleared</em>. One press activates the configured Emergency message; releasing the button cannot accidentally cancel it. For a fail-safe wired loop, choose Normally closed.</div>
-        </article>
+      <div class="setup-pane" id="setup-pane-controller" data-setup-pane="controller" role="tabpanel">
+        <div class="grid setup-grid">
+          <article class="card full-span licence-card" id="licenceCard">
+                    <div class="card-head">
+                      <div><h2>Software licence</h2><p>WHMCS licence status and the unique controller identity used to bind this installation.</p></div>
+                      <span class="health-badge" id="licenceStatusBadge">Checking…</span>
+                    </div>
+                    <div class="licence-summary">
+                      <div><span>Status</span><strong id="licenceStatus">Checking…</strong><small id="licenceMessage">Loading licence state.</small></div>
+                      <div><span>Device ID</span><strong class="mono" id="licenceDeviceId">—</strong><small id="licenceDeviceSource">—</small></div>
+                      <div><span>Licence key</span><strong id="licenceKeyMasked">—</strong><small id="licenceCustomer">—</small></div>
+                      <div><span>Verification</span><strong id="licenceVerifiedUntil">—</strong><small id="licenceGraceUntil">—</small></div>
+                    </div>
+                    <div class="form-grid cols-2 licence-actions">
+                      <label>Licence key<input id="licenceKey" autocomplete="off" spellcheck="false" placeholder="PMS-…"></label>
+                      <div class="toolbar align-end">
+                        <button class="btn primary" id="activateLicence" type="button">Activate / update licence</button>
+                        <button class="btn secondary" id="checkLicence" type="button">Check now</button>
+                        <button class="btn danger ghost" id="clearLocalLicence" type="button">Clear local licence</button>
+                      </div>
+                    </div>
+                    <div class="callout compact-callout" id="licenceHelp"><strong>Device locking:</strong> one WHMCS licence is bound to this controller's Device ID. Use WHMCS Reissue before moving the licence to replacement hardware.</div>
+                    <div class="licence-support-row" id="licenceSupportLink"><strong>To buy a licence, reissue a licence or get licensing support:</strong> visit <a href="https://www.issl.co.uk/support" target="_blank" rel="noopener noreferrer">www.issl.co.uk/support</a>.</div>
+                  </article>
 
+          <article class="card full-span">
+                    <div class="card-head"><div><h2>FPP setup helper</h2><p>Use these hardware-specific values in Falcon Player after saving Display Setup.</p></div><button class="btn secondary" id="refreshFpp">Refresh</button></div>
+                    <div id="fppSetup" class="fpp-setup"></div>
+                    <div class="callout"><strong>Important:</strong> FPP owns the physical output and timing. Pi Matrix Signage sends the finished RGB frame to FPP, which drives the selected Hanson, Colorlight or Adafruit panel hardware.</div>
+                  </article>
 
-        <article class="card full-span danger-zone">
-          <div class="card-head"><div><h2>Raspberry Pi power</h2><p>Safely halt the Pi before removing power.</p></div><button class="btn danger" id="shutdownPi">Shut down Pi…</button></div>
-          <div class="callout warn"><strong>Safe shutdown:</strong> the display and web interface will go offline. Wait until the Pi activity LED has stopped before removing power. Only users with Display setup permission can request a shutdown.</div>
-        </article>
-
-        <article class="card full-span">
-          <div class="card-head"><div><h2>FPP setup helper</h2><p>Use these hardware-specific values in Falcon Player after saving Display Setup.</p></div><button class="btn secondary" id="refreshFpp">Refresh</button></div>
-          <div id="fppSetup" class="fpp-setup"></div>
-          <div class="callout"><strong>Important:</strong> FPP owns the physical output and timing. Pi Matrix Signage sends the finished RGB frame to FPP, which drives the selected Hanson, Colorlight or Adafruit panel hardware.</div>
-        </article>
+          <article class="card full-span danger-zone">
+                    <div class="card-head"><div><h2>Raspberry Pi power</h2><p>Safely halt the Pi before removing power.</p></div><button class="btn danger" id="shutdownPi">Shut down Pi…</button></div>
+                    <div class="callout warn"><strong>Safe shutdown:</strong> the display and web interface will go offline. Wait until the Pi activity LED has stopped before removing power. Only users with Display setup permission can request a shutdown.</div>
+                  </article>
+        </div>
       </div>
     </section>
 

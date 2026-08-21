@@ -1,4 +1,14 @@
-# Pi Matrix Signage v0.6.41
+# Pi Matrix Signage v0.6.42
+
+## v0.6.42 – task-based Display Setup sub-tabs
+
+- Reorganises the increasingly long Display Setup page into five task-based sub-tabs: **Display**, **Profiles**, **Testing & commissioning**, **Physical controls**, and **Controller & FPP**.
+- Keeps the core panel layout and output settings on the first tab so normal configuration no longer requires scrolling past profiles, tests, GPIO, licensing and FPP details.
+- Moves hardware sample/saved profiles to their own Profiles tab; panel tests and Colorlight commissioning to Testing & commissioning; GPIO inputs to Physical controls; and software licensing, FPP setup guidance and safe Pi shutdown to Controller & FPP.
+- Remembers the last Display Setup sub-tab across browser reloads and supports keyboard Left/Right/Home/End navigation between sub-tabs.
+- The licence banner now opens Display Setup directly on Controller & FPP so the licence card is never hidden behind another sub-tab.
+- Live GPIO status polling now runs only while the Physical controls sub-tab is visible.
+- Updates Adafruit guidance and the built-in Help manual for the new locations.
 
 ## v0.6.41 – panel test moved to Display Setup
 
