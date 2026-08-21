@@ -1,26 +1,27 @@
-# Pi Matrix Signage v0.6.42 – Install / Upgrade
+# Pi Matrix Signage v0.6.44 – Install / Upgrade
 
-Pi Matrix Signage is intended to be installed and updated through the **FPP Plugin Manager** on FPP 10+. The old customer-facing browser Upgrade tab has been removed; the underlying health-check and rollback machinery remains installed for safe application replacement.
+Pi Matrix Signage uses FPP 10+ for plugin installation/update and the underlying panel drivers. From v0.6.44 the controller interface is selectable: **FPP + Pi Matrix Signage add-on** is the safe default for new installs, while **Pi Matrix Signage appliance** mode is opt-in for dedicated signage controllers.
 
-## Normal FPP Plugin installation / upgrade
+## Initial FPP Plugin installation
 
-1. Open **FPP → Content Setup → Plugin Manager**.
-2. Install **Pi Matrix Signage**, or choose **Update** when a newer plugin release is offered.
-3. FPP runs the Pi Matrix plugin installer without SSH, preserves persistent Pi Matrix data, starts the service and verifies `http://127.0.0.1:8090/health`.
-4. Open **Content Setup → Pi Matrix Signage** to return directly to the application.
+1. During provisioning, open **FPP → Content Setup → Plugin Manager** and install **Pi Matrix Signage**.
+2. FPP runs the bootstrap installer without SSH, preserves persistent Pi Matrix data, starts the service and verifies `http://127.0.0.1:8090/health`.
+3. A fresh install leaves FPP as the normal controller home page. Open Pi Matrix Signage from the FPP Plugins menu or directly on port `8090`.
+4. In Pi Matrix Signage, **Display setup → Controller & FPP → Controller interface** can switch to dedicated appliance mode at any time without reinstalling. Upgrades preserve the selected mode; a v0.6.43 appliance installation remains in appliance mode when upgraded.
+5. Future approved Pi Matrix Signage updates can be checked/installed from **Display setup → Controller & FPP → Controller software** or from FPP Plugin Manager.
 
-The FPP-managed upgrade preserves the Pi Matrix database, media, uploaded shaders, users, messages, scenes, schedules, playlists, backups and licensing data.
+The managed upgrade preserves the Pi Matrix database, media, uploaded shaders, users, messages, scenes, schedules, playlists, backups and licensing data. Controller-platform/OS updates are separate and should only be installed after ISSL certification.
 
 ## Manual / fresh install
 
 ```bash
 cd /home/fpp/media/upload
-unzip -o PiMatrixSignage-v0.6.42.zip
+unzip -o PiMatrixSignage-v0.6.44.zip
 cd PiMatrixSignage
 sudo ./install.sh
 ```
 
-On a fresh install open `http://fpp.local:8090` (or the Pi's IP address on port 8090). The initial login is `admin / pimatrix`; the UI requires that default password to be changed.
+On a fresh install the Pi's normal IP/hostname URL continues to open FPP. Open Pi Matrix Signage from the FPP Plugins menu or at `http://<controller>:8090/`. The initial login is `admin / pimatrix`; the UI requires that default password to be changed. Use **Controller & FPP → Controller interface** if you want the bare controller URL to open Pi Matrix Signage instead.
 
 ## WHMCS licensing
 
@@ -57,11 +58,11 @@ Some older/unprogrammed rPi-MFC boards may not expose a usable EEPROM identity. 
 
 ## Adafruit direct-HUB75 outputs
 
-**Adafruit RGB Matrix HAT / Bonnet:** on Raspberry Pi 4-class hardware, configure FPP LED Panels/RGBMatrix with the `adafruit-hat` wiring pinout and one parallel output. Do not use `adafruit-hat-pwm` unless the documented GPIO4-to-GPIO18 hardware modification is physically present. 64×64 panels may require the board's Address-E jumper configuration.
+**Adafruit RGB Matrix HAT / Bonnet:** on Raspberry Pi 4-class hardware, select the Adafruit HAT/Bonnet in Display Setup. Pi Matrix Signage configures the internal RGBMatrix driver with the `adafruit-hat` mapping and one parallel output. Do not use the PWM hardware modification unless the documented GPIO4-to-GPIO18 change is physically present. 64×64 panels may require the board's Address-E jumper configuration.
 
-**Adafruit Triple Matrix Bonnet:** configure FPP LED Panels/RGBMatrix with the `regular` wiring pinout and **3 parallel outputs** (Active3). Each IDC socket is a separate parallel HUB75 string. Power the LED panels independently from a correctly-sized 5V supply/distribution system.
+**Adafruit Triple Matrix Bonnet:** select the Triple Matrix Bonnet in Display Setup. Pi Matrix Signage configures the standard RGBMatrix mapping with **3 parallel outputs** (Active3). Each IDC socket is a separate parallel HUB75 string. Power the LED panels independently from a correctly-sized 5V supply/distribution system.
 
-Current FPP RGBMatrix direct-panel output is not supported on Raspberry Pi 5, so these Pi Matrix Signage options are intended for Raspberry Pi 4-class controllers.
+The current underlying RGBMatrix direct-panel driver is not supported on Raspberry Pi 5, so these Pi Matrix Signage options are intended for Raspberry Pi 4-class controllers.
 
 ## GPIO / physical controls
 

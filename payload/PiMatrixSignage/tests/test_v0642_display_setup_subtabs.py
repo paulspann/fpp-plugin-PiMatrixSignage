@@ -22,7 +22,7 @@ def test_display_setup_has_five_task_based_subtabs():
         "profiles": "Profiles",
         "testing": "Testing &amp; commissioning",
         "controls": "Physical controls",
-        "controller": "Controller &amp; FPP",
+        "controller": "Controller",
     }
     for key, label in expected.items():
         assert f'data-setup-tab="{key}"' in setup
@@ -45,12 +45,12 @@ def test_cards_are_grouped_by_task_in_the_expected_panes():
     assert "Hardware profiles &amp; sample configurations" in profiles
     assert "Panel test" in testing and "Colorlight setup &amp; commissioning" in testing
     assert "GPIO / physical controls" in controls
-    for title in ("Software licence", "FPP setup helper", "Raspberry Pi power"):
+    for title in ("Software licence", "Panel controller configuration", "Controller software", "Raspberry Pi power"):
         assert title in controller
 
     assert "Software licence" not in display
     assert "GPIO / physical controls" not in display
-    assert "FPP setup helper" not in display
+    assert "Panel controller configuration" not in display
 
 
 def test_subtab_state_is_remembered_and_keyboard_accessible():
@@ -81,7 +81,7 @@ def test_gpio_live_polling_only_runs_on_physical_controls_subtab():
 def test_help_documents_new_display_setup_structure():
     help_html = (ROOT / "templates" / "help.html").read_text(encoding="utf-8")
     assert "Display Setup is split into five task-based sub-tabs" in help_html
-    for label in ("Display", "Profiles", "Testing &amp; commissioning", "Physical controls", "Controller &amp; FPP"):
+    for label in ("Display", "Profiles", "Testing &amp; commissioning", "Physical controls", "Controller"):
         assert label in help_html
     assert "Open Display setup → <strong>Testing &amp; commissioning</strong>" in help_html
 

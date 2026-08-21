@@ -1,4 +1,4 @@
-# Pi Matrix Signage FPP Plugin v0.1.14
+# Pi Matrix Signage FPP Plugin v0.1.15
 
 10+ bootstrap/integration plugin for Pi Matrix Signage on Raspberry Pi.
 
@@ -27,7 +27,7 @@ For beta testing, open FPP's Plugin Manager, paste that raw `pluginInfo.json` UR
 
 ## Current bootstrap payload
 
-This test bootstrap contains Pi Matrix Signage v0.6.42. The next commercial-hardening stage should move the application payload out of the public bootstrap repository and retrieve a signed, licence-authorised release package from the ISSL/WHMCS licensing service.
+This test bootstrap contains Pi Matrix Signage v0.6.44. The next commercial-hardening stage should move the application payload out of the public bootstrap repository and retrieve a signed, licence-authorised release package from the ISSL/WHMCS licensing service.
 
 
 ## v0.1.2
@@ -104,3 +104,12 @@ FPP Plugin Manager updates intentionally do **not** ship `scripts/fpp_upgrade.sh
 - Bundles Pi Matrix Signage **v0.6.37**.
 - Fixes Hanson rPi-MFC detection on current FPP by using FPP's recorded physical EEPROM origin/cache after FPP removes its temporary sysfs EEPROM node.
 - Keeps virtual rPi-MFC cape selections from being mistaken for physically fitted Hanson hardware.
+
+
+## v0.1.15
+
+- Bundles Pi Matrix Signage **v0.6.44** selectable FPP-first / appliance interface mode.
+- Keeps FPP as the internal bootstrap/update/hardware platform while making Pi Matrix Signage the normal customer-facing controller UI.
+- Enables the bare controller URL to open Pi Matrix Signage without intercepting FPP APIs or explicit engineering pages.
+- Installs the narrow managed-update helper used by Pi Matrix Signage's Controller software panel.
+- Uninstall removes the appliance Apache entry point and restores the normal FPP root behaviour.

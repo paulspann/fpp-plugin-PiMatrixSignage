@@ -33,7 +33,8 @@ for executable in \
   payload/PiMatrixSignage/install.sh \
   payload/PiMatrixSignage/uninstall.sh \
   payload/PiMatrixSignage/start-local.sh \
-  payload/PiMatrixSignage/systemd/pi-matrix-signage-reset; do
+  payload/PiMatrixSignage/systemd/pi-matrix-signage-reset \
+  payload/PiMatrixSignage/systemd/pi-matrix-signage-platform; do
   zipinfo -l "$TEMP_ZIP" | grep -E "^-rwx[^ ]* .* ${executable}$" > /dev/null || {
     echo "Release validation failed: $executable is not executable in the ZIP" >&2
     exit 1

@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+STATUS="/home/fpp/media/pi-matrix-signage-data/platform-update.json"
+LOG="/home/fpp/media/logs/pi-matrix-signage-platform-update.log"
+PLUGIN="fpp-plugin-PiMatrixSignage"
+UPGRADER="/opt/fpp/scripts/upgrade_plugin"
+UNIT="pi-matrix-signage-plugin-upgrade"
+SELF="/usr/local/sbin/pi-matrix-signage-platform"
+MODE_FILE="/home/fpp/media/pi-matrix-signage-data/interface-mode"
+APP_DIR="/home/fpp/media/pi-matrix-signage"
+APPLIANCE_CONF="/etc/apache2/conf-available/pi-matrix-signage-appliance.conf"
+APPLIANCE_ENTRY="/opt/fpp/www/pimatrix-appliance.php"
+
+write_status() {
+  local state="$1" message="$2" completed="${3:-false}" version=""
+  if [[ -f /home/fpp/media/pi-matrix-signage/VERSION ]]; then
+    version="$(tr -d '\r\n' </home/fpp/media/pi-matrix-signage/VERSION)"
+  fi
+  mkdir -p "$(dirname "$STATUS")"
+  python3 - "$STATUS" "$state" "$message" "$completed" "$version" <<'PY'
+import json, sys
+from datetime import datetime
+path,state,message,completed,version=sys.argv[1:]
+data={
+  "state":state,
+  "message":message,
+  "updated_at":datetime.now().astimezone().isoformat(timespec="seconds"),
+  "completed":completed.lower()=="true",
+  "version":version,
+}
+with open(path+".tmp","w",encoding="utf-8") as f:
+    json.dump(data,f,indent=2)
+    f.write("\n")
+import os
+os.replace(path+".tmp",path)
+PY
+  chown fpp:fpp "$STATUS" 2>/dev/null || true
+}
+
+
+set_interface_mode() {
+  local mode="$1"
+  case "$mode" in
+    fpp|appliance) ;;
+    *) echo "Interface mode must be 'fpp' or 'appliance'" >&2; exit 64 ;;
+  esac
+  if ! command -v a2enconf >/dev/null 2>&1 || ! command -v a2disconf >/dev/null 2>&1; then
+    echo "Apache configuration tools are not available" >&2
+    exit 1
+  fi
+  mkdir -p "$(dirname "$MODE_FILE")"
+  local previous="fpp"
+  if [[ -f "$MODE_FILE" ]]; then
+    previous="$(tr -d '\r\n' <"$MODE_FILE")"
+    [[ "$previous" == "appliance" ]] || previous="fpp"
+  elif [[ -e /etc/apache2/conf-enabled/pi-matrix-signage-appliance.conf ]]; then
+    previous="appliance"
+  fi
+
+  if [[ "$mode" == "appliance" ]]; then
+    [[ -f "$APP_DIR/systemd/pi-matrix-signage-appliance.conf" && -f "$APP_DIR/systemd/pimatrix-appliance.php" ]] || {
+      echo "Pi Matrix Signage appliance files are not installed" >&2; exit 1;
+    }
+    install -o root -g root -m 0644 "$APP_DIR/systemd/pi-matrix-signage-appliance.conf" "$APPLIANCE_CONF"
+    install -o root -g root -m 0644 "$APP_DIR/systemd/pimatrix-appliance.php" "$APPLIANCE_ENTRY"
+    a2enconf pi-matrix-signage-appliance >/dev/null
+  else
+    a2disconf pi-matrix-signage-appliance >/dev/null 2>&1 || true
+  fi
+
+  if ! apache2ctl configtest >/dev/null 2>&1; then
+    echo "Apache configuration validation failed; restoring previous interface mode" >&2
+    if [[ "$previous" == "appliance" ]]; then
+      a2enconf pi-matrix-signage-appliance >/dev/null 2>&1 || true
+    else
+      a2disconf pi-matrix-signage-appliance >/dev/null 2>&1 || true
+    fi
+    apache2ctl configtest >/dev/null 2>&1 || true
+    exit 1
+  fi
+  systemctl reload apache2
+  printf '%s\n' "$mode" >"$MODE_FILE.tmp"
+  chmod 0644 "$MODE_FILE.tmp"
+  chown fpp:fpp "$MODE_FILE.tmp" 2>/dev/null || true
+  mv "$MODE_FILE.tmp" "$MODE_FILE"
+  if [[ "$mode" == "appliance" ]]; then
+    echo "Pi Matrix Signage appliance mode enabled. The controller root now opens Pi Matrix Signage."
+  else
+    echo "FPP-first mode enabled. The controller root now opens FPP; Pi Matrix Signage remains installed as an add-on."
+  fi
+}
+
+case "${1:-}" in
+  --interface-mode)
+    set_interface_mode "${2:-}"
+    ;;
+  --upgrade-plugin)
+    if [[ ! -x "$UPGRADER" ]]; then
+      echo "FPP plugin updater is not available" >&2
+      exit 1
+    fi
+    if systemctl is-active --quiet "$UNIT.service" 2>/dev/null; then
+      echo "A Pi Matrix Signage update is already running" >&2
+      exit 2
+    fi
+    write_status queued "Software update queued" false
+    systemd-run --quiet --collect --unit="$UNIT" "$SELF" --run-upgrade
+    echo "Software update queued. Pi Matrix Signage will restart automatically if an update is installed."
+    ;;
+  --run-upgrade)
+    mkdir -p "$(dirname "$LOG")"
+    touch "$LOG"
+    chown fpp:fpp "$LOG" 2>/dev/null || true
+    write_status installing "Downloading and installing Pi Matrix Signage update" false
+    {
+      echo "[$(date --iso-8601=seconds)] Starting managed Pi Matrix Signage plugin update"
+      if "$UPGRADER" "$PLUGIN"; then
+        echo "[$(date --iso-8601=seconds)] Managed update completed"
+        write_status completed "Pi Matrix Signage update completed" true
+        exit 0
+      fi
+      rc=$?
+      echo "[$(date --iso-8601=seconds)] Managed update failed with exit code $rc"
+      write_status failed "Pi Matrix Signage update failed; see the support package or platform update log" true
+      exit "$rc"
+    } >>"$LOG" 2>&1
+    ;;
+  *)
+    echo "Usage: $0 --upgrade-plugin | --interface-mode fpp|appliance" >&2
+    exit 64
+    ;;
+esac

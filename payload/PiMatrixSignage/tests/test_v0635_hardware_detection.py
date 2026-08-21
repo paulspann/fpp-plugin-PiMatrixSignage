@@ -93,7 +93,7 @@ def test_hanson_profiles_are_filtered_when_board_is_absent():
 
 def test_help_documents_auto_detection_and_legacy_board_caveat():
     manual = (ROOT / "templates" / "help.html").read_text(encoding="utf-8")
-    assert "checks FPP's detected cape identity" in manual
-    assert "A physically-confirmed Hanson rPi-MFC is offered automatically" in manual
+    assert "uses the controller platform's physical cape detection data" in manual
+    assert "A physically confirmed Hanson board is offered automatically" in manual
     assert "Adafruit RGB Matrix HAT / Bonnet" in manual
     assert "old or unprogrammed board may not expose a usable EEPROM identity" in manual

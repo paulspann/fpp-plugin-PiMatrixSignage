@@ -1,4 +1,27 @@
-# Pi Matrix Signage v0.6.42
+# Pi Matrix Signage v0.6.44
+
+## v0.6.44 – Selectable FPP-first / appliance interface
+
+- Makes **FPP + Pi Matrix Signage add-on** the safe default for genuinely fresh installs, so installing the plugin does not unexpectedly replace an existing FPP home page.
+- Adds **Display setup → Controller & FPP → Controller interface** with two persistent modes: FPP-first add-on and dedicated Pi Matrix Signage appliance.
+- Switching modes is immediate and reversible without reinstalling either FPP or Pi Matrix Signage.
+- Preserves upgrades from v0.6.43 correctly: if appliance mode was already enabled before a persistent choice existed, the installer records and retains appliance mode instead of silently switching back to FPP.
+- Keeps appliance routing files installed while disabled so appliance mode can be enabled later with a validated Apache reload.
+- Adds a privileged, narrowly-scoped interface-mode action to the existing controller-platform helper; changing mode requires Display setup plus Users permission.
+- Keeps **Open FPP** available from Pi Matrix Signage in either mode, while `/index.php` remains the direct recovery URL.
+
+## v0.6.43 – Phase 1 appliance mode
+
+- Turns Falcon Player into an internal controller platform rather than a normal customer-facing interface while deliberately retaining it for hardware drivers, installation, plugin updates, backup/recovery and engineering support.
+- Installs a validated Apache DirectoryIndex appliance entry point so the controller's bare root URL opens Pi Matrix Signage; explicit controller-platform URLs and APIs remain untouched underneath.
+- Adds managed panel-controller configuration. Saving Display settings and applying a hardware profile now update the underlying LED-panel output and enable local DDP frame input automatically, while preserving unrelated outputs and a compatible existing physical panel mapping.
+- Adds a Controller → **Panel controller configuration** status/re-apply workflow with low-level driver/channel details contained under an Engineering details disclosure.
+- Adds Controller → **Controller software** so approved Pi Matrix Signage plugin updates can be checked and installed without leaving Pi Matrix Signage. The update runs in a detached privileged service so the web application can safely restart during its own update.
+- Keeps controller-platform/OS upgrades separate from Pi Matrix Signage application updates and labels them as ISSL-certified maintenance rather than automatically upgrading upstream FPP.
+- Adds password-gated **Engineering access** under System diagnostics for administrators with both Display setup and Users permissions.
+- Removes normal customer instructions to open FPP for Hanson, Colorlight or Adafruit panel-output configuration; Colorlight receiver-card programming remains a separate hardware step.
+- Renames customer-facing FPP/FPPD terminology to controller platform / panel output service while retaining the real FPP names internally in logs, backups and engineering implementation.
+
 
 ## v0.6.42 – task-based Display Setup sub-tabs
 

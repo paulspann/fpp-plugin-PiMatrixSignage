@@ -21,13 +21,14 @@ def test_adafruit_outputs_are_first_class_display_choices():
     assert "adafruit_hat" in js and "adafruit_triple" in js
 
 
-def test_fpp_setup_uses_documented_adafruit_mappings():
-    app = (ROOT / "app.py").read_text(encoding="utf-8")
-    assert "hardware mapping adafruit-hat" in app
-    assert "Regular wiring pinout (hardware mapping regular)" in app
-    assert "Configure 3 parallel outputs for the Triple Matrix Bonnet / Active3 wiring" in app
-    assert "adafruit-hat-pwm" in app
-    assert "Raspberry Pi 5" in app
+def test_managed_controller_uses_documented_adafruit_mappings():
+    platform = (ROOT / "controller_platform.py").read_text(encoding="utf-8")
+    js = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
+    assert 'matrix["wiringPinout"] = "adafruit-hat"' in platform
+    assert 'matrix["wiringPinout"] = "regular"' in platform
+    assert 'matrix["ledPanelsOutputs"] = 3' in platform
+    assert "PWM hardware modification" in js
+    assert "Raspberry Pi 4-class controllers, not Pi 5" in js
 
 
 def test_adafruit_starter_profiles_are_packaged():

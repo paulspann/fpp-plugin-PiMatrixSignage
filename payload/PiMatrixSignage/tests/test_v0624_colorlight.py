@@ -24,8 +24,11 @@ def test_colorlight_validation_and_fpp_setup_are_hardware_specific():
     assert 'output_type not in PANEL_OUTPUT_LABELS' in app
     assert '("5a-75b", "5a-75e")' in app
     assert 'Path("/sys/class/net") / interface' in app
-    assert 'f"Colorlight {receiver_model}" if colorlight else PANEL_OUTPUT_LABELS.get(output_type, output_type)' in app
-    assert 'enable ColorLight 5A-75 and select {interface}' in app
+    assert '@app.get("/api/controller-output")' in app
+    assert 'f"Colorlight {receiver_model}" if output_type == "colorlight" else PANEL_OUTPUT_LABELS.get(output_type, output_type)' in app
+    platform = (ROOT / "controller_platform.py").read_text(encoding="utf-8")
+    assert '"subType": "ColorLight5a75"' in platform
+    assert '"interface": str(settings.get("colorlight_interface") or "eth1")' in platform
 
 
 def test_help_explains_colorlight_receiver_programming_boundary():

@@ -113,3 +113,34 @@ def test_plugin_manager_sees_install_errors_while_logging_them():
     uninstall=(ROOT/'scripts'/'fpp_uninstall.sh').read_text(encoding='utf-8')
     assert 'tee -a "$LOG_FILE"' in install
     assert 'tee -a "$LOG_FILE"' in uninstall
+
+
+def test_phase1_appliance_bootstrap_and_update_helper_are_packaged():
+    install = (ROOT / 'payload' / 'PiMatrixSignage' / 'install.sh').read_text(encoding='utf-8')
+    uninstall = (ROOT / 'scripts' / 'fpp_uninstall.sh').read_text(encoding='utf-8')
+    conf = (ROOT / 'payload' / 'PiMatrixSignage' / 'systemd' / 'pi-matrix-signage-appliance.conf').read_text(encoding='utf-8')
+    entry = (ROOT / 'payload' / 'PiMatrixSignage' / 'systemd' / 'pimatrix-appliance.php').read_text(encoding='utf-8')
+    helper = (ROOT / 'payload' / 'PiMatrixSignage' / 'systemd' / 'pi-matrix-signage-platform').read_text(encoding='utf-8')
+    builder = (ROOT / 'scripts' / 'build_release.sh').read_text(encoding='utf-8')
+
+    assert 'a2enconf pi-matrix-signage-appliance' in install
+    assert 'apache2ctl configtest' in install
+    assert 'DirectoryIndex pimatrix-appliance.php index.php index.html' in conf
+    assert "header('Location: http://' . $host . ':8090/'" in entry
+    assert '/opt/fpp/scripts/upgrade_plugin' in helper
+    assert 'fpp-plugin-PiMatrixSignage' in helper
+    assert 'a2disconf pi-matrix-signage-appliance' in uninstall
+    assert 'payload/PiMatrixSignage/systemd/pi-matrix-signage-platform' in builder
+
+
+def test_v0644_controller_interface_mode_is_optional_and_fpp_first_by_default():
+    install = (ROOT / 'payload' / 'PiMatrixSignage' / 'install.sh').read_text(encoding='utf-8')
+    helper = (ROOT / 'payload' / 'PiMatrixSignage' / 'systemd' / 'pi-matrix-signage-platform').read_text(encoding='utf-8')
+    ui = (ROOT / 'payload' / 'PiMatrixSignage' / 'templates' / 'index.html').read_text(encoding='utf-8')
+    assert 'Defaulting controller interface to FPP-first add-on mode' in install
+    assert '/etc/apache2/conf-enabled/pi-matrix-signage-appliance.conf' in install
+    assert 'Preserving existing Pi Matrix Signage appliance mode' in install
+    assert '--interface-mode' in helper
+    assert 'Controller &amp; FPP</button>' in ui
+    assert 'FPP + Pi Matrix Signage add-on' in ui
+    assert 'Pi Matrix Signage appliance' in ui

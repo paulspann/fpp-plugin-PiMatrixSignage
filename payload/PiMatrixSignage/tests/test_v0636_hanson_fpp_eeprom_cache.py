@@ -85,6 +85,6 @@ def test_ui_and_help_explain_fpp_post_startup_detection():
     help_html = (root / "templates" / "help.html").read_text(encoding="utf-8")
     install = (root / "INSTALL.md").read_text(encoding="utf-8")
     assert "rPi-MFC configured but not physically confirmed" in js
-    assert "FPP has confirmed the Hanson cape hardware" in js
-    assert "recorded physical location" in help_html
+    assert "The controller platform has confirmed the Hanson cape hardware" in js
+    assert "controller platform's physical cape detection data" in help_html
     assert "does not require that temporary sysfs node to remain present" in install

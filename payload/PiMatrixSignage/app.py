@@ -39,6 +39,7 @@ from shader_support import SHADER_EXTENSIONS, list_shader_assets, shader_asset_f
 from gpio_controls import GPIOControlManager, normalise_gpio_inputs
 from licensing import LicenseError, LicenseManager
 from hardware_detection import detect_panel_hardware
+from controller_platform import output_status as controller_output_status, apply_output as apply_controller_output, software_update_status, start_software_update, interface_mode_status, set_interface_mode
 
 BASE_DIR = Path(__file__).resolve().parent
 APP_VERSION = (BASE_DIR / "VERSION").read_text(encoding="utf-8").strip() if (BASE_DIR / "VERSION").exists() else "dev"
@@ -2633,65 +2634,49 @@ def diagnostics_action_api():
     return jsonify({"error": "Unknown diagnostics action"}), 400
 
 
-@app.get("/api/fpp-setup")
+@app.get("/api/interface-mode")
 @permission_required("display_setup")
-def fpp_setup_api():
+def interface_mode_api():
+    return jsonify(interface_mode_status())
+
+
+@app.put("/api/interface-mode")
+@permission_required("display_setup")
+def interface_mode_update_api():
+    if not bool(g.current_user.get("can_users")):
+        return jsonify({"error": "Users permission is also required to change the controller interface mode"}), 403
+    data = request.get_json(silent=True) or {}
+    mode = str(data.get("mode") or "").strip().lower()
+    try:
+        result = set_interface_mode(mode)
+        LOG.warning("Controller interface mode changed to %s by %s", mode, g.current_user.get("username"))
+        return jsonify(result)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        LOG.exception("Unable to change controller interface mode")
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.get("/api/controller-output")
+@permission_required("display_setup")
+def controller_output_api():
     s = db.get_settings()
+    detection = detect_panel_hardware()
+    status = controller_output_status(s, detection, int(s.get("ddp_port") or 4048))
     w = int(s["panel_width"]) * int(s["panels_across"])
     h = int(s["panel_height"]) * int(s["panels_down"])
     output_type = str(s.get("panel_output_type") or "rpi_mfc")
-    detection = detect_panel_hardware()
     if output_type == "rpi_mfc" and not detection.get("rpi_mfc_detected"):
         output_type = "colorlight"
-    colorlight = output_type == "colorlight"
-    interface = str(s.get("colorlight_interface") or "eth1")
     receiver_model = str(s.get("colorlight_receiver_model") or "5a-75b").upper()
-    interface_path = Path("/sys/class/net") / interface
-    common = [
-        "Leave FPP in Player or Remote mode; FPP 9.x no longer has a separate Bridge mode.",
-        "Under Channel Inputs, enable E1.31/ArtNet/DDP input. DDP does not require a universe row.",
-    ]
-    if colorlight:
-        notes = common + [
-            f"Configure the Colorlight {receiver_model} receiver first with Colorlight LEDVISION/LEDSetting, including driver IC, scan rate and cabinet mapping, then save that configuration to the card.",
-            f"Connect the receiver directly to the dedicated {interface} Ethernet interface. Do not share this interface with the normal LAN.",
-            f"In FPP Channel Outputs, enable ColorLight 5A-75 and select {interface}.",
-            f"Set the Colorlight output canvas to {w}x{h}, with FPP start channel 1 and the channel count shown here.",
-            "The signage app continues to send DDP RGB data to FPP on localhost; FPP converts it to Colorlight Ethernet frames.",
-            "If brightness control is inconsistent, update the receiver firmware and verify the saved receiver configuration with Colorlight's setup tool.",
-        ]
-    elif output_type == "adafruit_hat":
-        notes = common + [
-            "In FPP Channel Outputs → LED Panels, use the RGBMatrix/librgbmatrix output and select the Adafruit HAT wiring pinout (hardware mapping adafruit-hat).",
-            "Use one parallel HUB75 output. Current FPP limits its Adafruit HAT mapping to one chain, so start with one directly-connected panel for an ISSL-supported configuration.",
-            f"Choose the panel definition matching {int(s['panel_width'])}x{int(s['panel_height'])} pixels and {s.get('panel_scan', '1/16')} scan, then match the FPP panel layout/orientation to the physical sign.",
-            "Do not select adafruit-hat-pwm unless the documented GPIO4-to-GPIO18 hardware modification has actually been made.",
-            "For 64x64 panels, follow the Adafruit Address-E jumper instructions for the exact HAT/Bonnet revision.",
-            "The Adafruit direct-HUB75 path uses Raspberry Pi GPIO lines needed by Pi Matrix physical controls, so GPIO / physical controls are unavailable in this mode.",
-            "Current FPP RGBMatrix direct-panel output is intended for Raspberry Pi 4-class controllers; do not use this path on Raspberry Pi 5.",
-        ]
-    elif output_type == "adafruit_triple":
-        notes = common + [
-            "In FPP Channel Outputs → LED Panels, use the RGBMatrix/librgbmatrix output with the Regular wiring pinout (hardware mapping regular).",
-            "Configure 3 parallel outputs for the Triple Matrix Bonnet / Active3 wiring. Each HUB75 socket is a separate parallel string and panels may be daisy-chained within each string as the refresh-rate budget allows.",
-            f"Choose the panel definition matching {int(s['panel_width'])}x{int(s['panel_height'])} pixels and {s.get('panel_scan', '1/16')} scan, then map the three outputs into the required {int(s['panels_across'])}×{int(s['panels_down'])} logical layout in FPP.",
-            "Power the LED panels from a separate correctly-sized 5V supply/distribution system; the Triple Matrix Bonnet does not provide panel power.",
-            "The Active3 mapping uses Raspberry Pi GPIO6/GPIO13/GPIO26 among its panel data lines, so Pi Matrix GPIO / physical controls are unavailable in this mode.",
-            "Current FPP RGBMatrix direct-panel output is intended for Raspberry Pi 4-class controllers; do not use this path on Raspberry Pi 5.",
-        ]
-    else:
-        notes = common + [
-            "Enable the LED Panel output and choose Hat/Cap/Cape for the rPI-MFC.",
-            f"Choose the FPP single-panel definition matching {int(s['panel_width'])}x{int(s['panel_height'])} pixels and {s.get('panel_scan', '1/16')} scan.",
-            "Set the FPP panel layout and each physical panel orientation to match your wiring.",
-            "Use FPP start channel 1 and the channel count shown here.",
-            "The signage app sends DDP RGB data to FPP on localhost.",
-        ]
+    interface = str(s.get("colorlight_interface") or "eth1")
     return jsonify({
+        **status,
         "output_type": output_type,
-        "output_label": (f"Colorlight {receiver_model}" if colorlight else PANEL_OUTPUT_LABELS.get(output_type, output_type)),
-        "network_interface": interface if colorlight else None,
-        "interface_present": interface_path.exists() if colorlight else None,
+        "output_label": (f"Colorlight {receiver_model}" if output_type == "colorlight" else PANEL_OUTPUT_LABELS.get(output_type, output_type)),
+        "network_interface": interface if output_type == "colorlight" else None,
+        "interface_present": (Path("/sys/class/net") / interface).exists() if output_type == "colorlight" else None,
         "panels_across": int(s["panels_across"]),
         "panels_down": int(s["panels_down"]),
         "panel_size": f"{int(s['panel_width'])}x{int(s['panel_height'])}",
@@ -2699,8 +2684,73 @@ def fpp_setup_api():
         "display_size": f"{w}x{h}",
         "start_channel": 1,
         "channel_count": w * h * 3,
-        "ddp_port": int(s["ddp_port"]),
-        "notes": notes,
+        "ddp_port": int(s.get("ddp_port") or 4048),
+    })
+
+
+@app.post("/api/controller-output/apply")
+@permission_required("display_setup")
+def controller_output_apply_api():
+    s = db.get_settings()
+    detection = detect_panel_hardware()
+    try:
+        result = apply_controller_output(s, detection, int(s.get("ddp_port") or 4048))
+        LOG.warning("Managed panel-controller configuration applied by %s", g.current_user.get("username"))
+        return jsonify(result)
+    except Exception as exc:
+        LOG.exception("Unable to apply managed panel-controller configuration")
+        return jsonify({"error": str(exc)}), 500
+
+
+# Backward-compatible route for older cached browsers and support tooling.
+@app.get("/api/fpp-setup")
+@permission_required("display_setup")
+def fpp_setup_api():
+    return controller_output_api()
+
+
+@app.get("/api/controller-update")
+@permission_required("display_setup")
+def controller_update_api():
+    check = str(request.args.get("check") or "").lower() in {"1", "true", "yes"}
+    return jsonify(software_update_status(APP_VERSION, check=check))
+
+
+@app.post("/api/controller-update/install")
+@permission_required("display_setup")
+def controller_update_install_api():
+    if not bool(g.current_user.get("can_users")):
+        return jsonify({"error": "Users permission is also required to install controller software updates"}), 403
+    try:
+        return jsonify(start_software_update()), 202
+    except Exception as exc:
+        LOG.exception("Unable to start controller software update")
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.post("/api/engineering-access")
+@permission_required("display_setup")
+def engineering_access_api():
+    if not bool(g.current_user.get("can_users")):
+        return jsonify({"error": "Users permission is also required for engineering access"}), 403
+    data = request.get_json(silent=True) or {}
+    password = str(data.get("password") or "")
+    user = db.get_user(int(g.current_user["id"]))
+    if not user or not _verify_password(str(user.get("password_hash") or ""), password):
+        return jsonify({"error": "Current password is incorrect"}), 403
+    host = request.host or "fpp.local:8090"
+    try:
+        parsed = urllib.parse.urlsplit("//" + host)
+        hostname = parsed.hostname or "fpp.local"
+    except Exception:
+        hostname = host.split(":", 1)[0] or "fpp.local"
+    if ":" in hostname and not hostname.startswith("["):
+        hostname = f"[{hostname}]"
+    LOG.warning("Underlying controller engineering interface opened by %s from %s", g.current_user.get("username"), request.remote_addr)
+    return jsonify({
+        "ok": True,
+        "url": f"http://{hostname}/index.php",
+        "message": "Engineering interface enabled for this support session",
     })
 
 

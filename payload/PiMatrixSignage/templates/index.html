@@ -712,15 +712,15 @@
                   </article>
 
           <article class="card">
-                    <div class="card-head"><div><h2>Display output</h2><p>Choose the hardware FPP uses to drive the panels. Pi Matrix Signage sends frames to FPP over localhost DDP for every supported output type.</p></div></div>
+                    <div class="card-head"><div><h2>Display output</h2><p>Choose the hardware that drives the panels. Pi Matrix Signage automatically configures the underlying panel-output service for the selected controller.</p></div></div>
                     <label>Panel output hardware<select id="panelOutputType"><option value="colorlight">Colorlight receiver card</option><option value="adafruit_hat">Adafruit RGB Matrix HAT / Bonnet</option><option value="adafruit_triple">Adafruit Triple Matrix Bonnet</option></select></label>
                     <div class="callout compact-callout" id="hardwareDetectionStatus">Detecting connected panel hardware…</div>
                     <div id="colorlightSettings" class="hidden">
                       <div class="form-grid cols-2"><label>Receiver model<select id="colorlightReceiverModel"><option value="5a-75b">Colorlight 5A-75B</option><option value="5a-75e">Colorlight 5A-75E</option></select></label><label>Dedicated Ethernet interface<input id="colorlightInterface" value="eth1" placeholder="eth1"></label></div>
-                      <div class="callout warn compact-callout"><strong>Dedicated connection required:</strong> connect the receiver directly to this Ethernet interface and do not use it for the Pi's normal network connection. Program the receiver's driver IC, scan and cabinet mapping with Colorlight LEDVISION/LEDSetting before enabling the FPP output.</div>
+                      <div class="callout warn compact-callout"><strong>Dedicated connection required:</strong> connect the receiver directly to this Ethernet interface and do not use it for the Pi's normal network connection. Program the receiver's driver IC, scan and cabinet mapping with Colorlight LEDVISION/LEDSetting before applying the panel-controller configuration.</div>
                     </div>
                     <div id="adafruitSettings" class="hidden">
-                      <div class="callout compact-callout" id="adafruitOutputHelp"><strong>Adafruit direct-HUB75 output:</strong> save the selected adapter, then open the Controller &amp; FPP tab for the exact RGBMatrix wiring pinout and parallel-output settings.</div>
+                      <div class="callout compact-callout" id="adafruitOutputHelp"><strong>Adafruit direct-HUB75 output:</strong> save the selected adapter, then open the Controller tab for the exact RGBMatrix wiring pinout and parallel-output settings.</div>
                       <div class="callout warn compact-callout"><strong>Manual hardware selection:</strong> Adafruit HAT/Bonnet revisions do not expose one reliable hardware identity that Pi Matrix Signage can safely auto-detect. Select the physically fitted adapter here. Shut the Pi down before fitting or removing any GPIO/HUB75 adapter.</div>
                     </div>
                     <div class="form-grid cols-2"><label>Brightness <span class="inline-value" id="brightnessValue">60%</span><input type="range" id="brightness" min="0" max="100"></label><label>Frame rate<input type="number" id="frameRate" min="1" max="60"></label></div>
@@ -762,7 +762,7 @@
                     <div class="card-head"><div><h2>Colorlight setup &amp; commissioning</h2><p>Follow each step in order, test the physical display, then record the installation as commissioned.</p></div><span class="health-badge" id="commissioningBadge">Not commissioned</span></div>
                     <ol class="commissioning-steps">
                       <li><strong>Choose the dedicated interface</strong><p>Refresh the detected interfaces, select one that is not carrying the normal LAN, then save Display settings.</p><div class="toolbar compact"><select id="detectedColorlightInterface"></select><button class="btn secondary" id="detectInterfaces" type="button">Detect interfaces</button><button class="btn secondary" id="useDetectedInterface" type="button">Use selected</button></div><div class="callout compact-callout" id="interfaceWarning">Interfaces have not been checked yet.</div></li>
-                      <li><strong>Test the FPP output</strong><p>Checks that FPPD is active and its saved ColorLight 5A-75 output references the selected interface.</p><div class="toolbar compact"><button class="btn secondary" id="testColorlightFpp" type="button">Test FPP configuration</button><label class="checkline"><input type="checkbox" id="commissionFpp" disabled> FPP check passed</label></div><div class="callout compact-callout" id="colorlightFppResult">Not tested.</div></li>
+                      <li><strong>Test the panel output service</strong><p>Checks that the controller output service is active and its saved Colorlight output references the selected interface.</p><div class="toolbar compact"><button class="btn secondary" id="testColorlightFpp" type="button">Test controller configuration</button><label class="checkline"><input type="checkbox" id="commissionFpp" disabled> Controller check passed</label></div><div class="callout compact-callout" id="colorlightFppResult">Not tested.</div></li>
                       <li><strong>Verify the panel tests</strong><p>Run each pattern and confirm the complete physical display is correct.</p><div class="commission-tests"><label><button class="btn secondary wizard-pattern" data-pattern="grid" type="button">Show Grid</button><input type="checkbox" id="commissionGrid"> Correct</label><label><button class="btn secondary wizard-pattern" data-pattern="checker" type="button">Show Checker</button><input type="checkbox" id="commissionChecker"> Correct</label><label><button class="btn red wizard-pattern" data-pattern="red" type="button">Red</button><input type="checkbox" id="commissionRed"> Correct</label><label><button class="btn green wizard-pattern" data-pattern="green" type="button">Green</button><input type="checkbox" id="commissionGreen"> Correct</label><label><button class="btn blue wizard-pattern" data-pattern="blue" type="button">Blue</button><input type="checkbox" id="commissionBlue"> Correct</label><label><button class="btn secondary wizard-pattern" data-pattern="white" type="button">Full white</button><input type="checkbox" id="commissionWhite"> Correct</label></div></li>
                       <li><strong>Complete commissioning</strong><p>This records who passed the installation and when. Changing or applying hardware settings clears the commissioning state.</p><button class="btn primary" id="completeCommissioning" type="button">Mark installation commissioned</button><small id="commissioningDetail" class="muted"></small></li>
                     </ol>
@@ -791,6 +791,21 @@
 
       <div class="setup-pane" id="setup-pane-controller" data-setup-pane="controller" role="tabpanel">
         <div class="grid setup-grid">
+          <article class="card full-span" id="controllerInterfaceCard">
+            <div class="card-head"><div><h2>Controller interface</h2><p>Choose whether FPP stays as the main controller interface or Pi Matrix Signage behaves as a dedicated signage appliance.</p></div><span class="health-badge" id="interfaceModeBadge">Checking…</span></div>
+            <div class="interface-mode-options">
+              <label class="interface-mode-option">
+                <span><input type="radio" name="controllerInterfaceMode" value="fpp" id="interfaceModeFpp"> <strong>FPP + Pi Matrix Signage add-on</strong> <span class="backup-pill">Recommended default</span></span>
+                <small>The controller's normal IP/hostname opens FPP. Pi Matrix Signage remains available from the FPP Plugins menu and directly on port 8090. Best for existing FPP users and multi-purpose controllers.</small>
+              </label>
+              <label class="interface-mode-option">
+                <span><input type="radio" name="controllerInterfaceMode" value="appliance" id="interfaceModeAppliance"> <strong>Pi Matrix Signage appliance</strong></span>
+                <small>The controller's normal IP/hostname opens Pi Matrix Signage. FPP stays installed underneath for drivers, updates and recovery, and remains available through engineering access or <code>/index.php</code>.</small>
+              </label>
+            </div>
+            <div class="toolbar"><button class="btn primary" id="saveInterfaceMode" type="button">Save interface mode</button><button class="btn secondary" id="openFppInterface" type="button">Open FPP</button><span class="muted" id="interfaceModeMessage">Checking current controller interface…</span></div>
+            <div class="callout compact-callout"><strong>Safe default:</strong> a fresh Pi Matrix Signage installation does not take over the FPP home page. Appliance mode is opt-in and can be changed back here without reinstalling either system.</div>
+          </article>
           <article class="card full-span licence-card" id="licenceCard">
                     <div class="card-head">
                       <div><h2>Software licence</h2><p>WHMCS licence status and the unique controller identity used to bind this installation.</p></div>
@@ -814,10 +829,22 @@
                     <div class="licence-support-row" id="licenceSupportLink"><strong>To buy a licence, reissue a licence or get licensing support:</strong> visit <a href="https://www.issl.co.uk/support" target="_blank" rel="noopener noreferrer">www.issl.co.uk/support</a>.</div>
                   </article>
 
-          <article class="card full-span">
-                    <div class="card-head"><div><h2>FPP setup helper</h2><p>Use these hardware-specific values in Falcon Player after saving Display Setup.</p></div><button class="btn secondary" id="refreshFpp">Refresh</button></div>
+          <article class="card full-span" id="controllerOutputCard">
+                    <div class="card-head"><div><h2>Panel controller configuration</h2><p>Pi Matrix Signage manages the underlying panel-output service for the hardware selected on the Display tab.</p></div><div class="toolbar compact"><span class="health-badge" id="controllerOutputBadge">Checking…</span><button class="btn secondary" id="refreshFpp" type="button">Refresh</button><button class="btn primary" id="applyControllerOutput" type="button">Apply configuration</button></div></div>
                     <div id="fppSetup" class="fpp-setup"></div>
-                    <div class="callout"><strong>Important:</strong> FPP owns the physical output and timing. Pi Matrix Signage sends the finished RGB frame to FPP, which drives the selected Hanson, Colorlight or Adafruit panel hardware.</div>
+                    <div class="callout compact-callout" id="controllerOutputMessage">Checking the panel controller configuration…</div>
+                    <details class="engineering-details"><summary>Engineering details</summary><div id="controllerOutputEngineering" class="fpp-setup"><p class="muted">Loading underlying platform details…</p></div><p class="muted">The controller platform remains installed underneath Pi Matrix Signage for hardware drivers, plugin installation and recovery. Normal operation does not require opening it directly.</p></details>
+                  </article>
+
+          <article class="card full-span" id="controllerSoftwareCard">
+                    <div class="card-head"><div><h2>Controller software</h2><p>Check for and install approved Pi Matrix Signage updates without leaving this interface.</p></div><div class="toolbar compact"><button class="btn secondary" id="checkControllerUpdate" type="button">Check for updates</button><button class="btn primary hidden" id="installControllerUpdate" type="button">Install update</button></div></div>
+                    <div class="backup-status-grid">
+                      <div><span>Installed version</span><strong id="controllerUpdateCurrent">v{{ app_version }}</strong></div>
+                      <div><span>Update status</span><strong id="controllerUpdateStatus">Not checked</strong></div>
+                      <div><span>Installation</span><strong id="controllerUpdateInstallState">Ready</strong></div>
+                    </div>
+                    <div class="callout compact-callout" id="controllerUpdateMessage">Updates are delivered through the controller platform and installed as a managed Pi Matrix Signage release.</div>
+                    <div class="callout warn compact-callout"><strong>Controller platform updates:</strong> the underlying operating/platform layer is maintained separately and should only be upgraded to an ISSL-certified version. Pi Matrix Signage updates shown here do not automatically upgrade that platform.</div>
                   </article>
 
           <article class="card full-span danger-zone">
@@ -832,7 +859,7 @@
       <div class="grid diagnostics-grid">
         <article class="card full-span diagnostics-card">
           <div class="card-head">
-            <div><h2>System diagnostics &amp; recovery</h2><p>Live health of the Pi, renderer, FPP and network. Automatic recovery is deliberately limited to safe service/renderer restarts.</p></div>
+            <div><h2>System diagnostics &amp; recovery</h2><p>Live health of the Pi, renderer, panel output service and network. Automatic recovery is deliberately limited to safe service/renderer restarts.</p></div>
             <div class="toolbar compact"><span class="health-badge" id="diagOverall">Checking…</span><button class="btn secondary" id="refreshDiagnostics">Refresh</button></div>
           </div>
           <div id="diagChecks" class="diagnostic-checks"></div>
@@ -843,7 +870,7 @@
             <div><span>Storage</span><strong id="diagDisk">—</strong><small id="diagDiskUsed">—</small></div>
             <div><span>Uptime</span><strong id="diagUptime">—</strong><small id="diagIps">IP —</small></div>
             <div><span>Renderer</span><strong id="diagRenderer">—</strong><small id="diagRendererDetail">—</small></div>
-            <div><span>FPPD / DDP</span><strong id="diagFppd">—</strong><small id="diagDdp">—</small></div>
+            <div><span>Panel output / DDP</span><strong id="diagFppd">—</strong><small id="diagDdp">—</small></div>
             <div><span>Internet / widgets</span><strong id="diagInternet">—</strong><small id="diagWidgets">—</small></div>
           </div>
 
@@ -852,7 +879,7 @@
             <div class="form-grid cols-3">
               <label class="checkline"><input type="checkbox" id="autoRecoveryEnabled"> Automatic recovery enabled</label>
               <label class="checkline"><input type="checkbox" id="autoRecoverRenderer"> Recover stalled LED renderer</label>
-              <label class="checkline"><input type="checkbox" id="autoRecoverFppd"> Restart FPPD if it stops</label>
+              <label class="checkline"><input type="checkbox" id="autoRecoverFppd"> Restart panel output service if it stops</label>
             </div>
             <div class="form-grid cols-2">
               <label>Renderer stall threshold (s)<input type="number" id="rendererStallSeconds" min="3" max="60" step="1"></label>
@@ -861,9 +888,9 @@
             <div class="toolbar">
               <button class="btn primary" id="saveRecoverySettings">Save recovery settings</button>
               <button class="btn secondary" id="restartRenderer">Restart renderer now</button>
-              <button class="btn secondary" id="restartFppd">Restart FPPD now</button>
+              <button class="btn secondary" id="restartFppd">Restart panel output service now</button>
             </div>
-            <div class="callout compact-callout"><strong>Safe recovery policy:</strong> Pi Matrix Signage will restart its renderer if frame output stalls and can restart <code>fppd.service</code> if FPPD is actually inactive. The systemd service also restarts Pi Matrix Signage if the application process exits unexpectedly. It will never reboot or power off the Pi automatically.</div>
+            <div class="callout compact-callout"><strong>Safe recovery policy:</strong> Pi Matrix Signage will restart its renderer if frame output stalls and can restart the underlying panel-output service if it is inactive. The system service also restarts Pi Matrix Signage if the application process exits unexpectedly. It will never reboot or power off the Pi automatically.</div>
           </details>
 
           <details class="diagnostic-history">
@@ -873,11 +900,20 @@
           </details>
         </article>
 
+        <article class="card full-span" id="engineeringAccessCard">
+          <details>
+            <summary><strong>Engineering access</strong> <span class="muted">ISSL/support use</span></summary>
+            <p>The underlying controller platform is intentionally hidden during normal use. Administrators can open it temporarily for advanced diagnostics or support without changing appliance mode.</p>
+            <div class="form-grid cols-2"><label>Current password<input type="password" id="engineeringPassword" autocomplete="current-password" placeholder="Required"></label><div class="toolbar align-end"><button class="btn secondary" id="openEngineeringAccess" type="button">Open engineering interface</button></div></div>
+            <div class="callout warn compact-callout"><strong>Advanced settings:</strong> changes made in the engineering interface can conflict with Pi Matrix Signage managed settings. Use it for diagnostics/support unless specifically instructed otherwise.</div>
+          </details>
+        </article>
+
         <article class="card full-span" id="systemSupportPackageCard">
           <div class="card-head"><div><h2>System support package</h2><p>Create a privacy-safe diagnostic ZIP to send to ISSL Support without including passwords or the licence key.</p></div><button class="btn primary" id="createSupportPackage" type="button">Create support package</button></div>
           <div class="callout compact-callout"><strong>Requesting support:</strong> email <a href="mailto:support@issl.co.uk?subject=Pi%20Matrix%20Signage%20support">support@issl.co.uk</a> and describe the issue, what you were doing when it happened, what you expected to happen, what actually happened and any steps that reproduce the problem. If possible, include the approximate date/time of the fault and a screenshot or photo. Create the support package as soon as practical after the issue occurs and attach the generated ZIP to your email. Please send the ZIP as generated rather than extracting or editing its contents.</div>
           <label class="checkline"><input type="checkbox" id="supportIncludePreview"> Include the current display preview/test-pattern image</label>
-          <div class="backup-includes"><div><strong>Commissioning certificate</strong><span>Human-readable hardware, software, Device ID, commissioning date and recorded panel-test results.</span></div><div><strong>Versions and health</strong><span>Application, FPP service state, diagnostics and recent warnings/errors.</span></div><div><strong>Hardware</strong><span>Selected profile/output, network interfaces, hardware detection and commissioning result.</span></div><div><strong>Sanitised FPP output</strong><span>Channel-output configuration with known passwords, keys, tokens and secrets removed.</span></div><div><strong>Licence status</strong><span>Status and verification dates only; the licence key is excluded.</span></div></div>
+          <div class="backup-includes"><div><strong>Commissioning certificate</strong><span>Human-readable hardware, software, Device ID, commissioning date and recorded panel-test results.</span></div><div><strong>Versions and health</strong><span>Application, controller-platform service state, diagnostics and recent warnings/errors.</span></div><div><strong>Hardware</strong><span>Selected profile/output, network interfaces, hardware detection and commissioning result.</span></div><div><strong>Sanitised panel output</strong><span>Underlying channel-output configuration with known passwords, keys, tokens and secrets removed.</span></div><div><strong>Licence status</strong><span>Status and verification dates only; the licence key is excluded.</span></div></div>
           <div class="callout compact-callout warn"><strong>Review before sharing:</strong> automatic redaction removes known secret fields, but the package can still identify the controller, network interface names and IP addresses.</div>
         </article>
 
@@ -888,32 +924,32 @@
       <div class="grid backup-grid">
         <article class="card full-span">
           <div class="card-head">
-            <div><h2>Backup &amp; restore</h2><p>Create a complete portable backup of Pi Matrix Signage and the FPP configuration that drives the panels.</p></div>
+            <div><h2>Backup &amp; restore</h2><p>Create a complete portable backup of Pi Matrix Signage and the underlying controller configuration that drives the panels.</p></div>
             <button class="btn primary" id="createBackup">Create backup</button>
           </div>
           <div class="backup-includes">
             <div><strong>Pi Matrix Signage</strong><span>Messages, scenes, users, permissions, playlists, schedules, components and all settings.</span></div>
             <div><strong>Media</strong><span>Uploaded images, fonts, source videos and processed LED video frames.</span></div>
-            <div><strong>FPP configuration</strong><span>FPP's own full configuration backup, including LED panel/channel output settings and sensitive configuration.</span></div>
-            <div><strong>Recovery snapshot</strong><span>A raw FPP config snapshot is included as a diagnostic fallback; normal restore uses FPP's supported restore format.</span></div>
+            <div><strong>Controller platform configuration</strong><span>The underlying platform backup, including LED panel/channel output settings and sensitive controller configuration.</span></div>
+            <div><strong>Recovery snapshot</strong><span>A raw controller-platform snapshot is included as a diagnostic fallback; normal restore uses the platform's supported restore format.</span></div>
           </div>
-          <div class="callout warn compact-callout"><strong>Keep backup files secure.</strong> A complete backup can contain usernames/password hashes and sensitive FPP settings such as Wi-Fi or email credentials.</div>
+          <div class="callout warn compact-callout"><strong>Keep backup files secure.</strong> A complete backup can contain usernames/password hashes and sensitive controller settings such as Wi-Fi or email credentials.</div>
         </article>
 
         <article class="card full-span portable-config-card">
-          <div class="card-head"><div><h2>Portable configuration</h2><p>Move the complete Pi Matrix Signage creative configuration between signs without copying user accounts or FPP.</p></div><div class="toolbar compact"><button class="btn secondary" id="exportConfiguration">Export configuration</button><label class="btn secondary file-btn compact-file-btn">Import configuration<input type="file" id="importConfigurationFile" accept=".zip,application/zip"></label></div></div>
+          <div class="card-head"><div><h2>Portable configuration</h2><p>Move the complete Pi Matrix Signage creative configuration between signs without copying user accounts or the controller platform.</p></div><div class="toolbar compact"><button class="btn secondary" id="exportConfiguration">Export configuration</button><label class="btn secondary file-btn compact-file-btn">Import configuration<input type="file" id="importConfigurationFile" accept=".zip,application/zip"></label></div></div>
           <div class="portable-config-includes"><span>Messages &amp; assets</span><span>Components</span><span>Playlists</span><span>Schedules &amp; rules</span><span>Brightness profiles</span><span>Display settings</span></div>
-          <div class="callout compact-callout warn"><strong>Import replaces the current creative configuration.</strong> User accounts/passwords and FPP configuration are deliberately left untouched. Use Backup &amp; restore for full disaster recovery.</div>
+          <div class="callout compact-callout warn"><strong>Import replaces the current creative configuration.</strong> User accounts/passwords and controller-platform configuration are deliberately left untouched. Use Backup &amp; restore for full disaster recovery.</div>
         </article>
 
         <article class="card full-span">
-          <div class="card-head"><div><h2>Factory reset / transfer ownership</h2><p>Permanently erase customer data and return this controller to a clean Pi Matrix Signage setup without reinstalling FPP or the application.</p></div></div>
-          <div class="callout warn"><strong>Destructive action:</strong> this erases messages, playlists, schedules, users, uploaded media, saved hardware profiles, local licence key/entitlement, backups/rollback copies and FPP site/output configuration. It cannot be undone. Download any backup you need first.</div>
+          <div class="card-head"><div><h2>Factory reset / transfer ownership</h2><p>Permanently erase customer data and return this controller to a clean Pi Matrix Signage setup without reinstalling the controller platform or the application.</p></div></div>
+          <div class="callout warn"><strong>Destructive action:</strong> this erases messages, playlists, schedules, users, uploaded media, saved hardware profiles, local licence key/entitlement, backups/rollback copies and underlying controller site/output configuration. It cannot be undone. Download any backup you need first.</div>
           <div class="form-grid cols-2">
             <label>Current password<input type="password" id="factoryResetPassword" autocomplete="current-password" placeholder="Required"></label>
             <label>Type RESET THIS CONTROLLER<input id="factoryResetConfirmation" autocomplete="off" spellcheck="false" placeholder="RESET THIS CONTROLLER"></label>
           </div>
-          <label class="checkline"><input type="checkbox" id="factoryResetClearNetwork" checked> Erase FPP network/Wi-Fi settings too (recommended when transferring ownership; this connection will be lost and the Pi will reboot)</label>
+          <label class="checkline"><input type="checkbox" id="factoryResetClearNetwork" checked> Erase controller network/Wi-Fi settings too (recommended when transferring ownership; this connection will be lost and the Pi will reboot)</label>
           <label class="checkline"><input type="checkbox" id="factoryResetAcknowledge"> I understand this permanently erases the controller data and I have downloaded any backup I need.</label>
           <div class="toolbar"><button class="btn danger" id="factoryResetController" type="button">Factory reset controller…</button></div>
           <div class="callout compact-callout"><strong>Licence transfer:</strong> the local licence key and signed entitlement are erased. WHMCS remains authoritative, so use WHMCS Reissue/transfer before activating that licence on replacement hardware.</div>
@@ -939,8 +975,8 @@
         <article class="card full-span">
           <div class="card-head"><div><h2>Restore from file</h2><p>Upload a backup ZIP previously downloaded from this system or another Pi Matrix Signage unit.</p></div></div>
           <div class="form-grid cols-2 backup-restore-options">
-            <label class="checkline"><input type="checkbox" id="backupKeepNetwork" checked> Keep this Pi's current FPP network settings <small>Recommended so the Pi remains reachable after restore.</small></label>
-            <label class="checkline"><input type="checkbox" id="backupKeepMode" checked> Keep this Pi's current FPP Player/Remote mode <small>Other FPP settings are restored normally.</small></label>
+            <label class="checkline"><input type="checkbox" id="backupKeepNetwork" checked> Keep this Pi's current controller network settings <small>Recommended so the Pi remains reachable after restore.</small></label>
+            <label class="checkline"><input type="checkbox" id="backupKeepMode" checked> Keep this Pi's current controller operating mode <small>Other underlying controller settings are restored normally.</small></label>
           </div>
           <label class="upgrade-dropzone" id="backupDropZone">
             <input type="file" id="backupRestoreFile" accept=".zip,application/zip">
@@ -954,7 +990,7 @@
             <div class="upload-progress-track"><div id="backupUploadBar"></div></div>
             <small id="backupUploadDetail"></small>
           </div>
-          <div class="callout warn compact-callout"><strong>Restore replaces the current Pi Matrix Signage database and media.</strong> FPP configuration is restored using FPP's supported backup/restore mechanism. The signage service and FPPD restart during restore, and you may need to sign in again afterwards.</div>
+          <div class="callout warn compact-callout"><strong>Restore replaces the current Pi Matrix Signage database and media.</strong> Controller-platform configuration is restored using its supported backup/restore mechanism. The signage and panel-output services restart during restore, and you may need to sign in again afterwards.</div>
         </article>
       </div>
     </section>

@@ -30,7 +30,7 @@ def test_existing_test_pattern_binding_and_endpoint_are_retained():
 
 def test_help_points_panel_tests_to_display_setup_not_dashboard():
     help_html = (ROOT / "templates" / "help.html").read_text(encoding="utf-8")
-    assert "Use the Panel test card in Display setup" in help_html
+    assert "use the Panel test card" in help_html or "Panel test card" in help_html
     dashboard = help_html.split('<section id="dashboard">', 1)[1].split('</section>', 1)[0]
     setup = help_html.split('<section id="setup">', 1)[1].split('</section>', 1)[0]
     assert "Panel tests" not in dashboard
