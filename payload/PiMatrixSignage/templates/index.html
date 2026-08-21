@@ -98,6 +98,27 @@
             <button class="btn secondary test-pattern" data-pattern="white">White</button>
           </div>
         </article>
+
+        <article class="card full-span next-schedule-card" id="nextScheduleCard">
+          <div class="card-head">
+            <div><h2>Next timed schedule</h2><p>See what is due to start next on this controller.</p></div>
+            <button class="btn secondary permission-gated" data-permission="schedules" id="openSchedulesFromDashboard" type="button">View schedules</button>
+          </div>
+          <div class="next-schedule-summary" id="nextScheduleSummary">
+            <div class="next-schedule-lead">
+              <span>UP NEXT</span>
+              <strong id="nextScheduleName">—</strong>
+              <small id="nextScheduleCountdown">Checking schedule…</small>
+            </div>
+            <div class="next-schedule-details">
+              <div><span>Content</span><strong id="nextScheduleContent">—</strong></div>
+              <div><span>Starts</span><strong id="nextScheduleStarts">—</strong></div>
+              <div><span>Schedule window</span><strong id="nextScheduleWindow">—</strong></div>
+            </div>
+          </div>
+          <div class="next-schedule-empty hidden" id="nextScheduleEmpty"><strong>No upcoming timed schedules</strong><span>Create or enable a schedule to see what is coming up here.</span></div>
+          <p class="muted next-schedule-note">Manual overrides, Emergency mode and higher-priority conditional rules can still take precedence over timed schedules.</p>
+        </article>
       </div>
     </section>
 

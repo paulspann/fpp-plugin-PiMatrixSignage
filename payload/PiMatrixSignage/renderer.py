@@ -17,7 +17,7 @@ from collections import deque
 import threading
 import time
 from dataclasses import dataclass
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -3025,6 +3025,60 @@ def _schedule_matches(s: dict, now: datetime) -> bool:
     return current >= start or current <= end  # overnight window
 
 
+def _schedule_next_start(s: dict, now: datetime) -> datetime | None:
+    """Return the next configured start for a timed schedule after ``now``.
+
+    This uses the same weekday/date fields as :func:`_schedule_matches`.  The
+    search jumps straight to a future start_date when one exists, then needs
+    at most one week to find the next enabled weekday.
+    """
+    if not s.get("enabled"):
+        return None
+    try:
+        days = {int(v) for v in str(s.get("days", "0,1,2,3,4,5,6")).split(",") if v != ""}
+        days = {v for v in days if 0 <= v <= 6}
+    except Exception:
+        days = set(range(7))
+    if not days:
+        return None
+    try:
+        start_clock = datetime.strptime(str(s.get("start_time") or "00:00"), "%H:%M").time()
+        first_day = now.date()
+        if s.get("start_date"):
+            first_day = max(first_day, date.fromisoformat(str(s["start_date"])))
+        last_day = date.fromisoformat(str(s["end_date"])) if s.get("end_date") else None
+    except Exception:
+        return None
+    if last_day is not None and first_day > last_day:
+        return None
+    for offset in range(8):
+        day = first_day + timedelta(days=offset)
+        if last_day is not None and day > last_day:
+            return None
+        if day.weekday() not in days:
+            continue
+        candidate = datetime.combine(day, start_clock)
+        if now.tzinfo is not None:
+            candidate = candidate.replace(tzinfo=now.tzinfo)
+        if candidate > now:
+            return candidate
+    return None
+
+
+def _schedule_occurrence_end(s: dict, start_at: datetime) -> datetime:
+    """Return the configured end clock for a schedule occurrence."""
+    try:
+        end_clock = datetime.strptime(str(s.get("end_time") or "23:59"), "%H:%M").time()
+    except Exception:
+        end_clock = datetime.strptime("23:59", "%H:%M").time()
+    end_at = datetime.combine(start_at.date(), end_clock)
+    if start_at.tzinfo is not None:
+        end_at = end_at.replace(tzinfo=start_at.tzinfo)
+    if str(s.get("end_time") or "23:59") < str(s.get("start_time") or "00:00"):
+        end_at += timedelta(days=1)
+    return end_at
+
+
 @dataclass
 class ActiveTarget:
     target_type: str
@@ -3300,6 +3354,38 @@ class RendererEngine:
             return ActiveTarget(key[0],key[1],key[2],mono)
         return None
 
+    def _next_timed_schedule(self, now: datetime) -> dict | None:
+        candidates: list[tuple[datetime, int, int, dict]] = []
+        for schedule in self.db.list_schedules():
+            start_at = _schedule_next_start(schedule, now)
+            if start_at is None:
+                continue
+            candidates.append((start_at, -int(schedule.get("priority", 0)), -int(schedule.get("id", 0)), schedule))
+        if not candidates:
+            return None
+        start_at, _priority_key, _id_key, schedule = min(candidates, key=lambda item: (item[0], item[1], item[2]))
+        target_type = str(schedule.get("target_type") or "message")
+        target_id = int(schedule.get("target_id") or 0)
+        target = self.db.get_playlist(target_id) if target_type == "playlist" else self.db.get_message(target_id)
+        end_at = _schedule_occurrence_end(schedule, start_at)
+        delta_days = (start_at.date() - now.date()).days
+        day_label = "Today" if delta_days == 0 else "Tomorrow" if delta_days == 1 else start_at.strftime("%a %d %b")
+        overnight = end_at.date() != start_at.date()
+        return {
+            "id": int(schedule.get("id") or 0),
+            "name": str(schedule.get("name") or "Schedule"),
+            "target_type": target_type,
+            "target_id": target_id,
+            "target_name": str((target or {}).get("name") or f"{target_type.title()} #{target_id}"),
+            "target_available": bool(target),
+            "priority": int(schedule.get("priority") or 0),
+            "start_at": start_at.isoformat(),
+            "end_at": end_at.isoformat(),
+            "start_label": f"{day_label} at {start_at.strftime('%H:%M')}",
+            "window_label": f"{start_at.strftime('%H:%M')}–{end_at.strftime('%H:%M')}{' next day' if overnight else ''}",
+            "timezone": str(getattr(now.tzinfo, "key", "") or self._settings.get("timezone") or "Europe/London"),
+        }
+
     def _effective_brightness(self, now: datetime, mono: float) -> tuple[int,str]:
         if self._brightness_override is not None:
             result=(int(self._brightness_override),"remote override")
@@ -3344,6 +3430,12 @@ class RendererEngine:
             active = self._active
             manual = self._manual
             width, height = self._physical_size()
+            try:
+                tz = ZoneInfo(str(self._settings.get("timezone") or "Europe/London"))
+            except Exception:
+                tz = ZoneInfo("Europe/London")
+            now = datetime.now(tz)
+            next_schedule = self._next_timed_schedule(now)
             return {
                 "running": self._running,
                 "width": width,
@@ -3354,6 +3446,7 @@ class RendererEngine:
                 "manual": None if not manual else {"type": manual.target_type, "id": manual.target_id},
                 "emergency": None if not self._emergency else {"type": self._emergency.target_type, "id": self._emergency.target_id, "source": self._emergency.source},
                 "brightness": {"effective": self._effective_brightness_value, "source": self._effective_brightness_source, "override": self._brightness_override},
+                "next_schedule": next_schedule,
                 "transition": None if not self._transition else {
                     "outgoing_message_id": self._transition.outgoing_message.get("id"),
                     "duration": self._transition.duration,

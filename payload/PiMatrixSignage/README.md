@@ -1,12 +1,20 @@
-# Pi Matrix Signage v0.6.39
+# Pi Matrix Signage v0.6.40
 
-## v0.6.39 – hardware sample profile renderer fix
+## v0.6.40 – dashboard next schedule
+
+- Dashboard now shows the next enabled timed schedule, including schedule name, message/playlist name, start time, configured window and a live countdown.
+- The next occurrence follows the same weekday, start-date and end-date rules as the renderer schedule engine.
+- Users with Schedule permission get a direct **View schedules** button; all Dashboard users can see what is coming up.
+- The panel notes that manual overrides, Emergency mode and conditional rules can still take precedence.
+
+
+## v0.6.40 – hardware sample profile renderer fix
 
 - Restores the missing browser loader for Hardware profiles & sample configurations so the built-in sample library is fetched from `/api/hardware-profiles` and rendered on Display Setup.
 - Keeps built-in samples grouped by controller and user-created profiles in their own section.
 - Adds a regression test covering the API fetch → state → render path so backend-only sample definitions cannot silently pass while the UI remains empty.
 
-## v0.6.39 – expanded hardware sample configurations
+## v0.6.40 – expanded hardware sample configurations
 
 - Expands the built-in hardware profile library from 6 to 16 sample configurations covering common P5/P10 layouts for Hanson rPi-MFC, Colorlight 5A-75B/5A-75E, Adafruit RGB Matrix HAT/Bonnet and Adafruit Triple Matrix Bonnet.
 - Adds common narrow-sign examples including 128×32 and 256×32 canvases, plus larger 128×64/256×64 examples where appropriate.
