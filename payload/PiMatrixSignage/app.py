@@ -39,7 +39,7 @@ from shader_support import SHADER_EXTENSIONS, list_shader_assets, shader_asset_f
 from gpio_controls import GPIOControlManager, normalise_gpio_inputs
 from licensing import LicenseError, LicenseManager
 from hardware_detection import detect_panel_hardware
-from controller_platform import output_status as controller_output_status, apply_output as apply_controller_output, software_update_status, start_software_update, interface_mode_status, set_interface_mode
+from controller_platform import output_status as controller_output_status, apply_output as apply_controller_output, software_update_status, software_update_cached_status, start_software_update, start_software_update_monitor, stop_software_update_monitor, interface_mode_status, set_interface_mode
 
 BASE_DIR = Path(__file__).resolve().parent
 APP_VERSION = (BASE_DIR / "VERSION").read_text(encoding="utf-8").strip() if (BASE_DIR / "VERSION").exists() else "dev"
@@ -832,7 +832,12 @@ def health():
 
 @app.get("/api/status")
 def api_status():
-    return jsonify(engine.status())
+    status = engine.status()
+    # This is a local cached value only. The normal 1.6-second status poll must
+    # never perform an Internet/FPP update check or it would put update latency
+    # on the main UI path. The background monitor refreshes this cache.
+    status["software_update"] = software_update_cached_status(APP_VERSION)
+    return jsonify(status)
 
 
 @app.get("/api/content-options")
@@ -2774,9 +2779,11 @@ def main():
     engine.start()
     diagnostics.start()
     gpio_controls.start()
+    start_software_update_monitor(APP_VERSION, LOG)
     LOG.info("Pi Matrix Signage v%s starting on %s:%s", APP_VERSION, args.host, args.port)
 
     def stop_handler(*_):
+        stop_software_update_monitor()
         gpio_controls.stop()
         license_manager.stop()
         diagnostics.stop()
@@ -2788,6 +2795,7 @@ def main():
     try:
         app.run(host=args.host, port=args.port, threaded=True, use_reloader=False)
     finally:
+        stop_software_update_monitor()
         gpio_controls.stop()
         license_manager.stop()
         diagnostics.stop()

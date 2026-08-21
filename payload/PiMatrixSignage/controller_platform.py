@@ -3,10 +3,12 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +27,21 @@ APPLIANCE_ENABLED_CONF = Path(os.environ.get(
     "PIMATRIX_APPLIANCE_ENABLED_CONF",
     "/etc/apache2/conf-enabled/pi-matrix-signage-appliance.conf",
 ))
+SOFTWARE_UPDATE_CACHE = Path(os.environ.get(
+    "PIMATRIX_SOFTWARE_UPDATE_CACHE",
+    "/home/fpp/media/pi-matrix-signage-data/software-update-cache.json",
+))
+PLUGIN_DIR = Path(os.environ.get(
+    "PIMATRIX_FPP_PLUGIN_DIR",
+    f"/home/fpp/media/plugins/{PLUGIN_REPO}",
+))
+UPDATE_CHECK_INTERVAL_SECONDS = max(900, int(os.environ.get("PIMATRIX_UPDATE_CHECK_INTERVAL", "21600")))
+UPDATE_CHECK_INITIAL_DELAY_SECONDS = max(0, int(os.environ.get("PIMATRIX_UPDATE_CHECK_INITIAL_DELAY", "8")))
+
+_update_cache_lock = threading.RLock()
+_update_cache_memory: dict[str, Any] | None = None
+_update_monitor_thread: threading.Thread | None = None
+_update_monitor_stop = threading.Event()
 
 
 def _request_json(path: str, method: str = "GET", payload: Any | None = None, timeout: float = 5.0) -> Any:
@@ -127,33 +144,170 @@ def _read_platform_update_status() -> dict:
         return {}
 
 
-def software_update_status(current_version: str, check: bool = False) -> dict:
-    result = {
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _read_software_update_cache() -> dict:
+    global _update_cache_memory
+    with _update_cache_lock:
+        if isinstance(_update_cache_memory, dict):
+            return dict(_update_cache_memory)
+        try:
+            data = json.loads(SOFTWARE_UPDATE_CACHE.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                _update_cache_memory = dict(data)
+                return dict(data)
+        except Exception:
+            pass
+        _update_cache_memory = {}
+        return {}
+
+
+def _write_software_update_cache(data: dict) -> None:
+    global _update_cache_memory
+    clean = dict(data or {})
+    with _update_cache_lock:
+        _update_cache_memory = clean
+        try:
+            SOFTWARE_UPDATE_CACHE.parent.mkdir(parents=True, exist_ok=True)
+            temp = SOFTWARE_UPDATE_CACHE.with_name(SOFTWARE_UPDATE_CACHE.name + ".tmp")
+            temp.write_text(json.dumps(clean, indent=2, sort_keys=True), encoding="utf-8")
+            temp.replace(SOFTWARE_UPDATE_CACHE)
+        except Exception:
+            # The in-memory cache remains useful even on development/test hosts
+            # where /home/fpp does not exist or is intentionally read-only.
+            pass
+
+
+def _remote_plugin_version(branch: str) -> str:
+    branch = str(branch or "").strip()
+    if not branch or not PLUGIN_DIR.is_dir():
+        return ""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(PLUGIN_DIR), "show", f"origin/{branch}:payload/PiMatrixSignage/VERSION"],
+            capture_output=True,
+            text=True,
+            timeout=4,
+        )
+        if result.returncode == 0:
+            value = (result.stdout or "").strip().splitlines()[0].strip()
+            if value and len(value) <= 32:
+                return value
+    except Exception:
+        pass
+    return ""
+
+
+def _perform_software_update_check(current_version: str) -> dict:
+    checked_at = _utc_now_iso()
+    base = {
         "current_version": current_version,
         "available": False,
         "platform_ready": False,
         "helper_ready": PLATFORM_UPDATE_HELPER.is_file(),
-        "status": _read_platform_update_status(),
-        "message": "Controller platform not checked",
+        "checked_at": checked_at,
+        "latest_version": "",
+        "message": "Unable to check for Pi Matrix Signage updates",
     }
     try:
-        if check:
-            plugin = _request_json(f"/api/plugin/{PLUGIN_REPO}/updates", method="POST", payload={}, timeout=20)
-        else:
-            plugin = _request_json(f"/api/plugin/{PLUGIN_REPO}", timeout=4)
+        plugin = _request_json(f"/api/plugin/{PLUGIN_REPO}/updates", method="POST", payload={}, timeout=20)
         status = str(plugin.get("Status") or plugin.get("status") or "OK")
         if status.lower() not in {"ok", "success"}:
             raise RuntimeError(str(plugin.get("Message") or plugin.get("message") or status))
-        result["platform_ready"] = True
-        result["available"] = bool(int(plugin.get("updatesAvailable") or 0))
-        result["message"] = "Update available" if result["available"] else "Pi Matrix Signage is up to date"
-        result["plugin"] = {
+        versions = plugin.get("versions") if isinstance(plugin.get("versions"), list) else []
+        branch = str((versions or [{}])[0].get("branch") or "") if versions else ""
+        base["platform_ready"] = True
+        base["available"] = bool(int(plugin.get("updatesAvailable") or 0))
+        base["latest_version"] = _remote_plugin_version(branch) if base["available"] else current_version
+        if base["available"]:
+            suffix = f" v{base['latest_version']}" if base["latest_version"] else ""
+            base["message"] = f"Pi Matrix Signage{suffix} is available"
+        else:
+            base["message"] = "Pi Matrix Signage is up to date"
+        base["plugin"] = {
             "name": str(plugin.get("name") or "Pi Matrix Signage"),
-            "branch": str((plugin.get("versions") or [{}])[0].get("branch") or "") if isinstance(plugin.get("versions"), list) else "",
+            "branch": branch,
         }
     except Exception as exc:
-        result["message"] = str(exc)
+        base["message"] = str(exc)
+    _write_software_update_cache(base)
+    return base
+
+
+def software_update_cached_status(current_version: str) -> dict:
+    cached = _read_software_update_cache()
+    result = {
+        "current_version": current_version,
+        "available": bool(cached.get("available")),
+        "platform_ready": bool(cached.get("platform_ready")),
+        "helper_ready": PLATFORM_UPDATE_HELPER.is_file(),
+        "checked_at": str(cached.get("checked_at") or ""),
+        "latest_version": str(cached.get("latest_version") or ""),
+        "message": str(cached.get("message") or "Update check pending"),
+        "status": _read_platform_update_status(),
+    }
+    if isinstance(cached.get("plugin"), dict):
+        result["plugin"] = dict(cached["plugin"])
+    # A cache written by an older installed version is safe as a freshness hint,
+    # but its 'up to date' conclusion must not be presented as belonging to a
+    # newly upgraded application before the background worker checks again.
+    if cached.get("current_version") and str(cached.get("current_version")) != str(current_version):
+        result["available"] = False
+        result["platform_ready"] = False
+        result["message"] = "Update check pending for this version"
     return result
+
+
+def software_update_status(current_version: str, check: bool = False) -> dict:
+    if check:
+        checked = _perform_software_update_check(current_version)
+        result = dict(checked)
+        result["helper_ready"] = PLATFORM_UPDATE_HELPER.is_file()
+        result["status"] = _read_platform_update_status()
+        return result
+    return software_update_cached_status(current_version)
+
+
+def start_software_update_monitor(current_version: str, logger: Any | None = None) -> None:
+    global _update_monitor_thread
+    if _update_monitor_thread and _update_monitor_thread.is_alive():
+        return
+    _update_monitor_stop.clear()
+
+    def worker() -> None:
+        if _update_monitor_stop.wait(UPDATE_CHECK_INITIAL_DELAY_SECONDS):
+            return
+        while not _update_monitor_stop.is_set():
+            result: dict[str, Any] = {}
+            try:
+                result = _perform_software_update_check(current_version)
+                if logger:
+                    if result.get("available"):
+                        logger.info("Pi Matrix Signage software update available%s", f": v{result.get('latest_version')}" if result.get("latest_version") else "")
+                    elif result.get("platform_ready"):
+                        logger.info("Pi Matrix Signage background software update check: up to date")
+                    else:
+                        logger.warning("Pi Matrix Signage background software update check failed: %s", result.get("message"))
+            except Exception as exc:
+                if logger:
+                    logger.warning("Pi Matrix Signage background software update check failed: %s", exc)
+            wait_seconds = UPDATE_CHECK_INTERVAL_SECONDS if result.get("platform_ready") else min(300, UPDATE_CHECK_INTERVAL_SECONDS)
+            if _update_monitor_stop.wait(wait_seconds):
+                break
+
+    _update_monitor_thread = threading.Thread(target=worker, name="PiMatrixUpdateCheck", daemon=True)
+    _update_monitor_thread.start()
+
+
+def stop_software_update_monitor() -> None:
+    global _update_monitor_thread
+    _update_monitor_stop.set()
+    thread = _update_monitor_thread
+    if thread and thread.is_alive():
+        thread.join(timeout=2.0)
+    _update_monitor_thread = None
 
 
 def start_software_update() -> dict:

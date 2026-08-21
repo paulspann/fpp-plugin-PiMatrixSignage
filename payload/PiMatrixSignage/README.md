@@ -1,4 +1,14 @@
-# Pi Matrix Signage v0.6.44
+# Pi Matrix Signage v0.6.45
+
+
+## v0.6.45 – background software update notification
+
+- Adds a lightweight background Pi Matrix Signage update monitor. The controller checks shortly after application startup and then every **6 hours**, with failed checks retried sooner.
+- Update checks run off the web/rendering path: normal Dashboard/status polling reads only a local cache and never waits for FPP, GitHub or the Internet.
+- Shows a slim **Software update available** top-of-screen update banner whenever a newer approved plugin release is detected, plus a small update indicator on the settings cog.
+- The banner links directly to **Display setup → Controller & FPP → Controller software**, where the existing managed installer can install the update without opening FPP.
+- Adds a **Last checked** value and preserves the existing **Check for updates** button as an explicit immediate refresh that bypasses the cached result.
+- Persists the cached update result across browser sessions/reboots, but suppresses stale conclusions after an application version changes until the new version has checked again.
 
 ## v0.6.44 – Selectable FPP-first / appliance interface
 
