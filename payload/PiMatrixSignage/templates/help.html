@@ -52,7 +52,7 @@
           <li>Sign in to Pi Matrix Signage and replace the initial password when prompted.</li>
           <li>Open the cogwheel, choose <strong>Display setup</strong>, and match the logical canvas to the FPP panel layout.</li>
           <li>Activate the software licence using the licence key supplied for this controller.</li>
-          <li>Use Dashboard panel-test patterns to verify dimensions, colour order and orientation.</li>
+          <li>Use the Panel test card in Display setup to verify dimensions, colour order and orientation.</li>
           <li>Create a message, show it manually, then add it to a playlist or schedule.</li>
         </ol>
         <div class="help-note"><strong>Autosave:</strong> form changes are previewed immediately, but content is not permanent until you use the relevant Save button.</div>
@@ -67,9 +67,6 @@
         <p>Select a saved message and an optional duration. A duration of “Until I clear it” holds the override until Return to schedule is used. Timed overrides expire automatically.</p>
         <h3>Emergency mode</h3>
         <p>Emergency mode has the highest priority. It overrides manual content, conditions, schedules and the default message until explicitly ended. Configure the emergency message under Schedules before relying on this control.</p>
-        <h3>Panel tests</h3>
-        <p>Grid and checker patterns reveal panel order or rotation errors. Solid red, green, blue and white patterns help identify colour-order, brightness and dead-pixel problems.</p>
-      
         <h3>Next timed schedule</h3>
         <p>The Dashboard shows the next enabled timed schedule, its content, start time, configured window and a live countdown. This is a timetable preview: manual overrides, Emergency mode and higher-priority conditional rules can still take precedence.</p>
 </section>
@@ -136,6 +133,8 @@
         <h3>Panel layout</h3>
         <p>Enter the width and height of one panel, the number of panels across/down, scan rate and whole-display rotation. This defines the logical canvas used by Designer.</p>
         <div class="help-note"><strong>FPP remains authoritative for hardware wiring:</strong> panel chain order, individual panel orientation and electrical mapping belong in FPP’s LED Panels configuration.</div>
+        <h3>Panel tests</h3>
+        <p>Use the Panel test card on Display setup while commissioning or diagnosing the physical display. Grid and Checker reveal panel order or rotation errors; solid red, green, blue and white help identify colour-order, brightness and dead-pixel problems. Each test runs for 30 seconds and then normal playback resumes automatically.</p>
         <h3>Output and brightness</h3>
         <p>Pi Matrix Signage checks FPP's detected cape identity and the physical EEPROM location FPP recorded during startup. Current FPP may remove the temporary Linux EEPROM device after reading it, so Pi Matrix Signage uses FPP's recorded physical location rather than requiring that temporary sysfs node to remain present. A physically-confirmed Hanson rPi-MFC is offered automatically. Colorlight, Adafruit RGB Matrix HAT / Bonnet and Adafruit Triple Matrix Bonnet are always available as manual choices because the Adafruit boards do not expose one reliable identification mechanism across all revisions. A virtual rPi-MFC cape selection in FPP does not by itself count as physical Hanson hardware. The app always sends DDP to FPP; FPP then drives the selected hardware. Brightness limits the rendered output globally.</p>
         <div class="help-note"><strong>Older rPi-MFC boards:</strong> an old or unprogrammed board may not expose a usable EEPROM identity and will therefore be treated as not detected. If a known rPi-MFC installation is hidden unexpectedly, contact ISSL Support rather than changing FPP wiring blindly.</div>

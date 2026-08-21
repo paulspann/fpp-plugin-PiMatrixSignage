@@ -86,17 +86,6 @@
             <div><h3>Emergency / priority</h3><p class="muted" id="emergencyConfigured">No emergency message configured.</p></div>
             <div class="toolbar compact"><button class="btn danger emergency-button" id="activateEmergency">ACTIVATE EMERGENCY</button><button class="btn secondary" id="clearEmergency">End emergency</button></div>
           </div>
-          <hr>
-          <h3>Panel test</h3>
-          <p class="muted">Useful while checking panel order, colour order and orientation.</p>
-          <div class="button-grid">
-            <button class="btn secondary test-pattern" data-pattern="grid">Grid</button>
-            <button class="btn secondary test-pattern" data-pattern="checker">Checker</button>
-            <button class="btn red test-pattern" data-pattern="red">Red</button>
-            <button class="btn green test-pattern" data-pattern="green">Green</button>
-            <button class="btn blue test-pattern" data-pattern="blue">Blue</button>
-            <button class="btn secondary test-pattern" data-pattern="white">White</button>
-          </div>
         </article>
 
         <article class="card full-span next-schedule-card" id="nextScheduleCard">
@@ -753,6 +742,19 @@
           <label>Default message<select id="defaultMessage"></select></label>
           <div class="callout compact-callout"><strong>Access control:</strong> usernames, passwords and tab permissions are managed from the Users tab.</div>
           <div class="toolbar"><button class="btn primary" id="saveSettings">Save display settings</button></div>
+        </article>
+
+        <article class="card full-span" id="panelTestCard">
+          <div class="card-head"><div><h2>Panel test</h2><p>Check panel order, colour order, orientation, brightness and dead pixels while setting up the physical display.</p></div></div>
+          <div class="button-grid">
+            <button class="btn secondary test-pattern" data-pattern="grid" type="button">Grid</button>
+            <button class="btn secondary test-pattern" data-pattern="checker" type="button">Checker</button>
+            <button class="btn red test-pattern" data-pattern="red" type="button">Red</button>
+            <button class="btn green test-pattern" data-pattern="green" type="button">Green</button>
+            <button class="btn blue test-pattern" data-pattern="blue" type="button">Blue</button>
+            <button class="btn secondary test-pattern" data-pattern="white" type="button">White</button>
+          </div>
+          <p class="muted">Each test runs for 30 seconds, then normal playback resumes automatically. Grid and Checker are best for confirming panel order and rotation; solid colours are useful for colour-order and pixel faults.</p>
         </article>
 
         <article class="card full-span" id="hardwareProfilesCard">

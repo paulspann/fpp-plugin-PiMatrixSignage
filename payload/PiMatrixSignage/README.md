@@ -1,4 +1,12 @@
-# Pi Matrix Signage v0.6.40
+# Pi Matrix Signage v0.6.41
+
+## v0.6.41 – panel test moved to Display Setup
+
+- Removes the Panel test controls from the Dashboard so the operational page stays focused on live status, manual content, emergency control and the next timed schedule.
+- Adds a dedicated full-width **Panel test** card to Display Setup alongside the panel layout/output configuration and hardware profiles.
+- Retains the existing Grid, Checker, Red, Green, Blue and White 30-second test patterns and automatic return to normal playback.
+- Updates the built-in Help manual so installation and troubleshooting instructions point to Display Setup for panel testing.
+
 
 ## v0.6.40 – dashboard next schedule
 
