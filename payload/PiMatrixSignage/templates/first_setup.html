@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10131a">
+  <title>Controller setup · Pi Matrix Signage</title>
+  <link rel="stylesheet" href="/static/app.css?v={{ app_version }}">
+</head>
+<body class="auth-body">
+  <main class="auth-shell first-setup-shell">
+    <section class="auth-card first-setup-card">
+      <div class="auth-brand">
+        <h1>Pi Matrix Signage</h1>
+        <p>Initial controller setup · v{{ app_version }}</p>
+      </div>
+      <h2>How will this controller be used?</h2>
+      <p class="muted">This choice only controls which interface opens at the controller's normal IP address. FPP remains installed either way and the choice can be changed later.</p>
+      {% if error %}<div class="callout warn auth-error">{{ error }}</div>{% endif %}
+      <form method="post" action="/first-setup" class="auth-form first-setup-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label class="first-setup-option">
+          <span class="first-setup-title"><input type="radio" name="interface_mode" value="fpp" {% if current_mode != 'appliance' %}checked{% endif %}> <strong>FPP + Pi Matrix Signage add-on</strong> <span class="backup-pill">Recommended default</span></span>
+          <small>Keep Falcon Player as the main controller interface. Pi Matrix Signage remains available from FPP's Plugins menu and directly on port 8090. Best for existing FPP users or controllers that do more than signage.</small>
+        </label>
+        <label class="first-setup-option">
+          <span class="first-setup-title"><input type="radio" name="interface_mode" value="appliance" {% if current_mode == 'appliance' %}checked{% endif %}> <strong>Dedicated Pi Matrix Signage appliance</strong></span>
+          <small>The controller's normal address opens Pi Matrix Signage. FPP runs underneath for panel drivers, installation, certified platform updates and recovery, but customers normally never need to open it.</small>
+        </label>
+        <div class="callout compact-callout"><strong>You can change this later:</strong> Display Setup → Controller &amp; FPP → Controller interface.</div>
+        <button class="btn primary auth-submit" type="submit">Continue</button>
+      </form>
+    </section>
+  </main>
+</body>
+</html>

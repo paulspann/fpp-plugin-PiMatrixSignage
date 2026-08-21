@@ -37,6 +37,15 @@ PLUGIN_DIR = Path(os.environ.get(
 ))
 UPDATE_CHECK_INTERVAL_SECONDS = max(900, int(os.environ.get("PIMATRIX_UPDATE_CHECK_INTERVAL", "21600")))
 UPDATE_CHECK_INITIAL_DELAY_SECONDS = max(0, int(os.environ.get("PIMATRIX_UPDATE_CHECK_INITIAL_DELAY", "8")))
+CERTIFICATION_FILE = Path(__file__).resolve().parent / "controller-platform-certification.json"
+FIRST_RUN_PENDING = Path(os.environ.get(
+    "PIMATRIX_FIRST_RUN_PENDING",
+    "/home/fpp/media/pi-matrix-signage-data/first-run-interface-choice.pending",
+))
+FIRST_RUN_COMPLETE = Path(os.environ.get(
+    "PIMATRIX_FIRST_RUN_COMPLETE",
+    "/home/fpp/media/pi-matrix-signage-data/first-run-interface-choice.complete",
+))
 
 _update_cache_lock = threading.RLock()
 _update_cache_memory: dict[str, Any] | None = None
@@ -236,6 +245,16 @@ def _perform_software_update_check(current_version: str) -> dict:
     return base
 
 
+def _perform_combined_update_check(current_version: str) -> dict:
+    base = _perform_software_update_check(current_version)
+    try:
+        base["controller_platform"] = controller_platform_update_status()
+    except Exception as exc:
+        base["controller_platform"] = {"reachable": False, "update_available": False, "message": str(exc)}
+    _write_software_update_cache(base)
+    return base
+
+
 def software_update_cached_status(current_version: str) -> dict:
     cached = _read_software_update_cache()
     result = {
@@ -250,6 +269,10 @@ def software_update_cached_status(current_version: str) -> dict:
     }
     if isinstance(cached.get("plugin"), dict):
         result["plugin"] = dict(cached["plugin"])
+    if isinstance(cached.get("controller_platform"), dict):
+        result["controller_platform"] = dict(cached["controller_platform"])
+    else:
+        result["controller_platform"] = {"update_available": False, "message": "Controller platform check pending"}
     # A cache written by an older installed version is safe as a freshness hint,
     # but its 'up to date' conclusion must not be presented as belonging to a
     # newly upgraded application before the background worker checks again.
@@ -257,12 +280,16 @@ def software_update_cached_status(current_version: str) -> dict:
         result["available"] = False
         result["platform_ready"] = False
         result["message"] = "Update check pending for this version"
+        platform = dict(result.get("controller_platform") or {})
+        platform["update_available"] = False
+        platform["message"] = "Controller platform check pending for this Pi Matrix version"
+        result["controller_platform"] = platform
     return result
 
 
 def software_update_status(current_version: str, check: bool = False) -> dict:
     if check:
-        checked = _perform_software_update_check(current_version)
+        checked = _perform_combined_update_check(current_version)
         result = dict(checked)
         result["helper_ready"] = PLATFORM_UPDATE_HELPER.is_file()
         result["status"] = _read_platform_update_status()
@@ -282,7 +309,7 @@ def start_software_update_monitor(current_version: str, logger: Any | None = Non
         while not _update_monitor_stop.is_set():
             result: dict[str, Any] = {}
             try:
-                result = _perform_software_update_check(current_version)
+                result = _perform_combined_update_check(current_version)
                 if logger:
                     if result.get("available"):
                         logger.info("Pi Matrix Signage software update available%s", f": v{result.get('latest_version')}" if result.get("latest_version") else "")
@@ -308,6 +335,228 @@ def stop_software_update_monitor() -> None:
     if thread and thread.is_alive():
         thread.join(timeout=2.0)
     _update_monitor_thread = None
+
+
+
+def first_run_interface_choice_pending() -> bool:
+    return FIRST_RUN_PENDING.exists() and not FIRST_RUN_COMPLETE.exists()
+
+
+def complete_first_run_interface_choice() -> None:
+    try:
+        FIRST_RUN_COMPLETE.parent.mkdir(parents=True, exist_ok=True)
+        FIRST_RUN_COMPLETE.write_text(_utc_now_iso() + "\n", encoding="utf-8")
+        try:
+            FIRST_RUN_PENDING.unlink()
+        except FileNotFoundError:
+            pass
+    except Exception as exc:
+        raise RuntimeError(f"Unable to record first-run setup completion: {exc}") from exc
+
+
+def _certification() -> dict:
+    try:
+        data = json.loads(CERTIFICATION_FILE.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _platform_runtime_info() -> dict:
+    info = {"reachable": False, "fppd_running": False, "version": "unknown", "raw": {}}
+    try:
+        payload = _request_json("/api/system/status", timeout=4)
+        if not isinstance(payload, dict):
+            return info
+        info["reachable"] = True
+        info["raw"] = payload
+        advanced = payload.get("advancedView") if isinstance(payload.get("advancedView"), dict) else {}
+        version = (payload.get("version") or payload.get("fppVersion") or payload.get("fpp_version")
+                   or advanced.get("Version") or advanced.get("version") or "unknown")
+        info["version"] = str(version)
+        fppd = str(payload.get("fppd") or advanced.get("fppd") or payload.get("status_name") or "").lower()
+        info["fppd_running"] = fppd in {"running", "active"} or bool(payload.get("status") is not None and fppd == "")
+    except Exception as exc:
+        info["error"] = str(exc)
+    return info
+
+
+def _version_key(value: str) -> tuple | None:
+    raw = str(value or "").strip().lower().replace("fpp", "").strip()
+    raw = raw.lstrip("v")
+    m = __import__("re").search(r"(\d+)\.(?:(\d+)|x)(?:\.(\d+))?(?:[-._]?(alpha|beta|rc)(\d*)?)?", raw)
+    if not m:
+        return None
+    major = int(m.group(1)); minor = int(m.group(2)) if m.group(2) is not None else 10**6; patch = int(m.group(3) or 0)
+    stage = {None: 3, "alpha": 0, "beta": 1, "rc": 2}.get(m.group(4), 3)
+    stage_num = int(m.group(5) or 0)
+    return (major, minor, patch, stage, stage_num)
+
+
+def _version_matches(installed: str, target: str) -> bool:
+    a = _version_key(installed); b = _version_key(target)
+    return bool(a and b and a == b)
+
+
+def _platform_release_candidate(certified_release: str) -> dict:
+    try:
+        releases = _request_json("/api/git/releases/os", timeout=20)
+    except Exception as exc:
+        return {"available": False, "error": str(exc)}
+    if not isinstance(releases, dict) or str(releases.get("status") or "").lower() != "ok":
+        return {"available": False, "error": str((releases or {}).get("message") or "Controller platform release list unavailable")}
+    target = str(certified_release or "").strip().lower().lstrip("v")
+    candidates = []
+    for row in releases.get("files") or []:
+        if not isinstance(row, dict):
+            continue
+        tag = str(row.get("tag") or "").strip().lower().lstrip("v")
+        filename = str(row.get("filename") or "")
+        # The managed updater is deliberately exact: a beta3 certification must
+        # never be satisfied by beta30, a nightly, or a merely similar filename.
+        if tag != target:
+            continue
+        url = str(row.get("url") or "")
+        if filename.lower().endswith(".fppos") and url.startswith("https://github.com/FalconChristmas/fpp/releases/download/"):
+            candidates.append(dict(row))
+    if not candidates:
+        return {"available": False, "error": f"Certified FPP {certified_release} image is not currently offered for this controller"}
+    candidates.sort(key=lambda r: (not bool(r.get("downloaded")), int(r.get("size") or 0)))
+    out = dict(candidates[0]); out["available"] = True
+    return out
+
+
+def _write_platform_update_status(data: dict) -> None:
+    current = _read_platform_update_status()
+    current.update(data)
+    try:
+        PLATFORM_UPDATE_STATUS.parent.mkdir(parents=True, exist_ok=True)
+        tmp = PLATFORM_UPDATE_STATUS.with_name(PLATFORM_UPDATE_STATUS.name + ".tmp")
+        tmp.write_text(json.dumps(current, indent=2, sort_keys=True), encoding="utf-8")
+        tmp.replace(PLATFORM_UPDATE_STATUS)
+    except Exception:
+        pass
+
+
+def _reconcile_platform_update_status(installed_version: str) -> dict:
+    status = _read_platform_update_status()
+    if str(status.get("kind") or "") != "platform":
+        return status
+    state = str(status.get("state") or "").lower()
+    target = str(status.get("target_version") or "")
+    if state in {"queued", "installing", "restarting"} and target and _version_matches(installed_version, target):
+        status.update({"state": "completed", "completed": True, "message": f"Controller platform updated to FPP {target}", "updated_at": _utc_now_iso()})
+        _write_platform_update_status(status)
+    return status
+
+
+def controller_platform_update_status() -> dict:
+    cert = _certification()
+    runtime = _platform_runtime_info()
+    installed = str(runtime.get("version") or "unknown")
+    target = str(cert.get("certified_release") or "")
+    cert_for = str(cert.get("pimatrix_version") or "")
+    certification_valid = bool(target and cert_for and cert_for == str(_read_app_version()))
+    status_file = _reconcile_platform_update_status(installed)
+    result = {
+        "platform_name": str(cert.get("platform_name") or "Falcon Player (FPP)"),
+        "installed_version": installed,
+        "certified_version": target,
+        "certification_for": cert_for,
+        "certification_valid": certification_valid,
+        "reachable": bool(runtime.get("reachable")),
+        "fppd_running": bool(runtime.get("fppd_running")),
+        "certified": bool(certification_valid and _version_matches(installed, target)),
+        "update_available": False,
+        "candidate": {},
+        "status": status_file if str(status_file.get("kind") or "") == "platform" else {},
+        "message": "Controller platform certification unavailable",
+    }
+    if not runtime.get("reachable"):
+        result["message"] = str(runtime.get("error") or "Controller platform is not reachable")
+        return result
+    if not certification_valid:
+        result["message"] = "This Pi Matrix release does not contain a matching controller-platform certification"
+        return result
+    if result["certified"]:
+        result["message"] = f"FPP {target} is the certified controller platform for this Pi Matrix release"
+        return result
+    ik = _version_key(installed); tk = _version_key(target)
+    if ik and tk and ik > tk:
+        result["message"] = f"FPP {installed} is newer than the certified target {target}; managed downgrade is disabled"
+        return result
+    candidate = _platform_release_candidate(target)
+    result["candidate"] = {k: candidate.get(k) for k in ("tag", "filename", "url", "size", "downloaded") if candidate.get(k) is not None}
+    if candidate.get("available") and ik and tk and ik < tk:
+        result["update_available"] = True
+        result["message"] = f"ISSL-certified controller platform FPP {target} is available"
+    elif candidate.get("error"):
+        result["message"] = str(candidate["error"])
+    else:
+        result["message"] = f"Installed FPP {installed} does not match certified target {target}"
+    return result
+
+
+def _read_app_version() -> str:
+    try:
+        return (Path(__file__).resolve().parent / "VERSION").read_text(encoding="utf-8").strip()
+    except Exception:
+        return ""
+
+
+def controller_health(settings: dict, detection: dict | None = None, ddp_port: int = 4048) -> dict:
+    runtime = _platform_runtime_info()
+    out = output_status(settings, detection, ddp_port)
+    mode = interface_mode_status()
+    host = str(settings.get("ddp_host") or "127.0.0.1").strip().lower()
+    port = int(settings.get("ddp_port") or 4048)
+    offset = int(settings.get("ddp_offset") or 0)
+    local_target = host in {"127.0.0.1", "localhost", "::1"} and port == 4048 and offset == 0
+    checks = [
+        {"id": "platform_api", "label": "Controller platform", "ok": bool(runtime.get("reachable")), "detail": runtime.get("version") if runtime.get("reachable") else runtime.get("error", "Not reachable"), "repairable": False},
+        {"id": "fppd", "label": "Panel output service", "ok": bool(runtime.get("fppd_running")), "detail": "Running" if runtime.get("fppd_running") else "Not confirmed running", "repairable": False},
+        {"id": "ddp_target", "label": "Pi Matrix frame target", "ok": local_target, "detail": f"{host}:{port} · offset {offset}", "repairable": True},
+        {"id": "ddp_input", "label": "Controller DDP input", "ok": bool(out.get("input_ready")), "detail": "Enabled" if out.get("input_ready") else "Missing or disabled", "repairable": True},
+        {"id": "panel_output", "label": "Panel output configuration", "ok": bool(out.get("output_ready")), "detail": "Matches Pi Matrix" if out.get("output_ready") else "Configuration drift detected", "repairable": bool(out.get("can_apply", True))},
+        {"id": "interface_mode", "label": "Controller interface mode", "ok": bool(mode.get("in_sync")), "detail": mode.get("label") if mode.get("in_sync") else f"Stored {mode.get('mode')} / active {mode.get('actual_mode')}", "repairable": bool(mode.get("helper_ready"))},
+    ]
+    critical = [c for c in checks if c["id"] != "interface_mode"]
+    healthy = all(bool(c.get("ok")) for c in critical)
+    drifted = any(not bool(c.get("ok")) and bool(c.get("repairable")) for c in checks)
+    return {
+        "healthy": healthy,
+        "drifted": drifted,
+        "repairable": drifted and bool(runtime.get("reachable")),
+        "checks": checks,
+        "output": out,
+        "interface_mode": mode,
+        "platform": software_update_cached_status(_read_app_version()).get("controller_platform", {}),
+        "message": "Controller platform and panel output are healthy" if healthy and not drifted else ("Controller configuration drift detected" if drifted else "Controller platform needs attention"),
+    }
+
+
+def start_controller_platform_update(candidate: dict, backup_filename: str) -> dict:
+    if not PLATFORM_UPDATE_HELPER.is_file():
+        raise RuntimeError("The controller platform helper is not installed yet")
+    target = str(candidate.get("tag") or "").strip()
+    url = str(candidate.get("url") or "").strip()
+    filename = str(candidate.get("filename") or "").strip()
+    cert = _certification()
+    expected = str(cert.get("certified_release") or "").strip()
+    if target.lstrip("v") != expected.lstrip("v"):
+        raise RuntimeError("The selected controller-platform image is not the certified target for this Pi Matrix release")
+    if not filename.lower().endswith(".fppos") or not url.startswith("https://github.com/FalconChristmas/fpp/releases/download/"):
+        raise RuntimeError("The certified controller-platform image URL was not recognised")
+    status = _read_platform_update_status()
+    if str(status.get("state") or "").lower() in {"queued", "checking", "installing", "restarting"}:
+        raise RuntimeError("A managed software update is already in progress")
+    result = subprocess.run(
+        ["sudo", "-n", str(PLATFORM_UPDATE_HELPER), "--upgrade-platform", expected, url, filename, str(backup_filename or "")],
+        capture_output=True, text=True, timeout=10,
+    )
+    if result.returncode != 0:
+        raise RuntimeError((result.stderr or result.stdout or "Unable to start controller-platform update").strip())
+    return {"ok": True, "target_version": expected, "backup_filename": backup_filename, "message": (result.stdout or f"Controller platform update to FPP {expected} queued").strip()}
 
 
 def start_software_update() -> dict:

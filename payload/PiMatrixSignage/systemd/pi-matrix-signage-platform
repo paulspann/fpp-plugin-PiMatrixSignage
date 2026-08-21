@@ -6,38 +6,45 @@ LOG="/home/fpp/media/logs/pi-matrix-signage-platform-update.log"
 PLUGIN="fpp-plugin-PiMatrixSignage"
 UPGRADER="/opt/fpp/scripts/upgrade_plugin"
 UNIT="pi-matrix-signage-plugin-upgrade"
+PLATFORM_UNIT="pi-matrix-signage-controller-platform-upgrade"
 SELF="/usr/local/sbin/pi-matrix-signage-platform"
 MODE_FILE="/home/fpp/media/pi-matrix-signage-data/interface-mode"
 APP_DIR="/home/fpp/media/pi-matrix-signage"
+CERT_FILE="$APP_DIR/controller-platform-certification.json"
 APPLIANCE_CONF="/etc/apache2/conf-available/pi-matrix-signage-appliance.conf"
 APPLIANCE_ENTRY="/opt/fpp/www/pimatrix-appliance.php"
 
 write_status() {
-  local state="$1" message="$2" completed="${3:-false}" version=""
+  local state="$1" message="$2" completed="${3:-false}" kind="${4:-}" target="${5:-}" backup="${6:-}" version=""
   if [[ -f /home/fpp/media/pi-matrix-signage/VERSION ]]; then
     version="$(tr -d '\r\n' </home/fpp/media/pi-matrix-signage/VERSION)"
   fi
   mkdir -p "$(dirname "$STATUS")"
-  python3 - "$STATUS" "$state" "$message" "$completed" "$version" <<'PY'
-import json, sys
+  python3 - "$STATUS" "$state" "$message" "$completed" "$version" "$kind" "$target" "$backup" <<'PY'
+import json, os, sys
 from datetime import datetime
-path,state,message,completed,version=sys.argv[1:]
-data={
+path,state,message,completed,version,kind,target,backup=sys.argv[1:]
+data={}
+try:
+    with open(path,"r",encoding="utf-8") as f: data=json.load(f)
+except Exception: pass
+data.update({
   "state":state,
   "message":message,
   "updated_at":datetime.now().astimezone().isoformat(timespec="seconds"),
   "completed":completed.lower()=="true",
   "version":version,
-}
+})
+if kind: data["kind"]=kind
+if target: data["target_version"]=target
+if backup: data["backup_filename"]=backup
 with open(path+".tmp","w",encoding="utf-8") as f:
     json.dump(data,f,indent=2)
     f.write("\n")
-import os
 os.replace(path+".tmp",path)
 PY
   chown fpp:fpp "$STATUS" 2>/dev/null || true
 }
-
 
 set_interface_mode() {
   local mode="$1"
@@ -91,6 +98,82 @@ set_interface_mode() {
   fi
 }
 
+certified_target() {
+  python3 - "$CERT_FILE" <<'PY'
+import json, sys
+try:
+    with open(sys.argv[1], "r", encoding="utf-8") as fh:
+        data = json.load(fh)
+    print(str(data.get("certified_release") or "").strip())
+except Exception:
+    pass
+PY
+}
+
+validate_backup() {
+  local backup="$1"
+  if [[ -z "$backup" || ! "$backup" =~ ^[A-Za-z0-9._-]+\.zip$ ]]; then
+    echo "A verified pre-update backup filename is required" >&2
+    exit 64
+  fi
+  [[ -f "/home/fpp/media/pi-matrix-signage-data/backups/$backup" ]] || {
+    echo "The required pre-update backup does not exist" >&2; exit 1;
+  }
+}
+
+validate_not_downgrade() {
+  local target="$1" status_json installed rc=0
+  status_json="$(curl --silent --fail --max-time 4 http://127.0.0.1/api/system/status 2>/dev/null || true)"
+  installed="$(STATUS_JSON="$status_json" python3 - "$target" <<'PY'
+import json, os, re, sys
+target=sys.argv[1]
+try:
+    d=json.loads(os.environ.get("STATUS_JSON", ""))
+except Exception:
+    raise SystemExit(3)
+a=d.get("advancedView") if isinstance(d.get("advancedView"),dict) else {}
+installed=str(d.get("version") or d.get("fppVersion") or d.get("fpp_version") or a.get("Version") or a.get("version") or "")
+def key(v):
+    m=re.search(r"(\d+)\.(?:(\d+)|x)(?:\.(\d+))?(?:[-._]?(alpha|beta|rc)(\d*)?)?", v.lower().replace("fpp","").strip().lstrip("v"))
+    if not m:return None
+    return (int(m.group(1)), int(m.group(2)) if m.group(2) is not None else 10**6, int(m.group(3) or 0), {None:3,"alpha":0,"beta":1,"rc":2}.get(m.group(4),3), int(m.group(5) or 0))
+i,t=key(installed),key(target)
+if not i or not t: raise SystemExit(3)
+print(installed)
+if i>t: raise SystemExit(2)
+PY
+)" || rc=$?
+  rc="${rc:-0}"
+  if [[ "$rc" -eq 2 ]]; then
+    echo "Installed FPP $installed is newer than certified target $target; managed downgrade is disabled" >&2
+    exit 64
+  elif [[ "$rc" -ne 0 ]]; then
+    echo "Unable to verify the installed FPP version; refusing managed platform update" >&2
+    exit 1
+  fi
+}
+
+validate_platform_update() {
+  local target="$1" url="$2" filename="$3" expected
+  [[ "$target" =~ ^[0-9]+\.[0-9x]+(\.[0-9]+)?(-(alpha|beta|rc)[0-9]*)?$ ]] || {
+    echo "Invalid certified FPP target" >&2; exit 64;
+  }
+  expected="$(certified_target)"
+  [[ -n "$expected" && "${target#v}" == "${expected#v}" ]] || {
+    echo "FPP $target is not the certified target embedded in this Pi Matrix release" >&2; exit 64;
+  }
+  [[ "$filename" =~ ^[A-Za-z0-9._-]+\.fppos$ ]] || {
+    echo "Invalid FPP OS image filename" >&2; exit 64;
+  }
+  [[ "$url" =~ ^https://github\.com/FalconChristmas/fpp/releases/download/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+\.fppos$ ]] || {
+    echo "Only official FalconChristmas FPP release images can be installed by the managed updater" >&2; exit 64;
+  }
+  [[ "${url##*/}" == "$filename" ]] || {
+    echo "FPP OS image filename does not match its download URL" >&2; exit 64;
+  }
+  validate_not_downgrade "$target"
+}
+
 case "${1:-}" in
   --interface-mode)
     set_interface_mode "${2:-}"
@@ -100,11 +183,11 @@ case "${1:-}" in
       echo "FPP plugin updater is not available" >&2
       exit 1
     fi
-    if systemctl is-active --quiet "$UNIT.service" 2>/dev/null; then
-      echo "A Pi Matrix Signage update is already running" >&2
+    if systemctl is-active --quiet "$UNIT.service" 2>/dev/null || systemctl is-active --quiet "$PLATFORM_UNIT.service" 2>/dev/null; then
+      echo "A managed software update is already running" >&2
       exit 2
     fi
-    write_status queued "Software update queued" false
+    write_status queued "Software update queued" false pimatrix
     systemd-run --quiet --collect --unit="$UNIT" "$SELF" --run-upgrade
     echo "Software update queued. Pi Matrix Signage will restart automatically if an update is installed."
     ;;
@@ -112,22 +195,74 @@ case "${1:-}" in
     mkdir -p "$(dirname "$LOG")"
     touch "$LOG"
     chown fpp:fpp "$LOG" 2>/dev/null || true
-    write_status installing "Downloading and installing Pi Matrix Signage update" false
+    write_status installing "Downloading and installing Pi Matrix Signage update" false pimatrix
     {
       echo "[$(date --iso-8601=seconds)] Starting managed Pi Matrix Signage plugin update"
       if "$UPGRADER" "$PLUGIN"; then
         echo "[$(date --iso-8601=seconds)] Managed update completed"
-        write_status completed "Pi Matrix Signage update completed" true
+        write_status completed "Pi Matrix Signage update completed" true pimatrix
         exit 0
       fi
       rc=$?
       echo "[$(date --iso-8601=seconds)] Managed update failed with exit code $rc"
-      write_status failed "Pi Matrix Signage update failed; see the support package or platform update log" true
+      write_status failed "Pi Matrix Signage update failed; see the support package or platform update log" true pimatrix
       exit "$rc"
     } >>"$LOG" 2>&1
     ;;
+  --upgrade-platform)
+    target="${2:-}"; url="${3:-}"; filename="${4:-}"; backup="${5:-}"
+    validate_platform_update "$target" "$url" "$filename"
+    validate_backup "$backup"
+    if systemctl is-active --quiet "$UNIT.service" 2>/dev/null || systemctl is-active --quiet "$PLATFORM_UNIT.service" 2>/dev/null; then
+      echo "A managed software update is already running" >&2
+      exit 2
+    fi
+    write_status queued "Certified controller platform update to FPP $target queued" false platform "$target" "$backup"
+    systemd-run --quiet --collect --unit="$PLATFORM_UNIT" "$SELF" --run-platform "$target" "$url" "$filename" "$backup"
+    echo "Certified controller platform update to FPP $target queued. The controller will reboot during installation."
+    ;;
+  --run-platform)
+    target="${2:-}"; url="${3:-}"; filename="${4:-}"; backup="${5:-}"
+    validate_platform_update "$target" "$url" "$filename"
+    validate_backup "$backup"
+    mkdir -p "$(dirname "$LOG")" /home/fpp/media/tmp
+    touch "$LOG"
+    chown fpp:fpp "$LOG" 2>/dev/null || true
+    write_status installing "Downloading and applying certified FPP $target controller platform" false platform "$target" "$backup"
+    tmp="$(mktemp /home/fpp/media/tmp/pimatrix-platform-upgrade.XXXXXX)"
+    trap 'rm -f "$tmp"' EXIT
+    {
+      echo "[$(date --iso-8601=seconds)] Starting certified controller platform update to FPP $target"
+      echo "Pre-update backup: $backup"
+      echo "Image: $filename"
+    } >>"$LOG"
+    set +e
+    curl --silent --show-error --no-buffer --max-time 7200 --get \
+      --data "wrapped=1" --data-urlencode "os=$url" \
+      http://127.0.0.1/upgradeOS.php 2>&1 | tee -a "$LOG" "$tmp"
+    rc=${PIPESTATUS[0]}
+    set -e
+    if grep -Eq 'FPP UPGRADE FAILED|===== Upgrade Failed =====|Skipping update|Invalid OS filename|File does not exist, aborting|Not enough free space' "$tmp"; then
+      write_status failed "Certified controller platform update failed; see the platform update log" true platform "$target" "$backup"
+      exit 1
+    fi
+    # A successful FPP OS replacement normally reboots the Pi from inside
+    # upgradeOS.php before this helper can return. If it does return after
+    # announcing reboot, leave a 'restarting' marker for the application to
+    # reconcile against the installed version after boot.
+    if grep -q '===== Rebooting =====' "$tmp"; then
+      write_status restarting "Controller platform installed; waiting for reboot" false platform "$target" "$backup"
+      exit 0
+    fi
+    if [[ $rc -ne 0 ]]; then
+      write_status failed "Controller platform updater exited before completion" true platform "$target" "$backup"
+      exit "$rc"
+    fi
+    write_status failed "Controller platform updater ended without confirming a reboot" true platform "$target" "$backup"
+    exit 1
+    ;;
   *)
-    echo "Usage: $0 --upgrade-plugin | --interface-mode fpp|appliance" >&2
+    echo "Usage: $0 --upgrade-plugin | --upgrade-platform VERSION URL FILE BACKUP | --interface-mode fpp|appliance" >&2
     exit 64
     ;;
 esac

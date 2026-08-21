@@ -14,6 +14,10 @@ APPLIANCE_CONF="/etc/apache2/conf-available/pi-matrix-signage-appliance.conf"
 APPLIANCE_ENTRY="/opt/fpp/www/pimatrix-appliance.php"
 MODE_FILE="$PERSIST/interface-mode"
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FIRST_RUN_PENDING="$PERSIST/first-run-interface-choice.pending"
+FIRST_RUN_COMPLETE="$PERSIST/first-run-interface-choice.complete"
+fresh_install=0
+if [[ ! -f "$PERSIST/data/signage.db" && ! -f "$FIRST_RUN_COMPLETE" ]]; then fresh_install=1; fi
 
 if [[ ${EUID} -ne 0 ]]; then
   echo "Please run this installer with sudo: sudo ./install.sh"
@@ -35,6 +39,11 @@ else
 fi
 
 mkdir -p "$DEST" "$PERSIST/data" "$PERSIST/uploads/images" "$PERSIST/uploads/fonts" "$PERSIST/uploads/videos" "$PERSIST/uploads/video-src" "$PERSIST/uploads/shaders" /home/fpp/media/logs
+if [[ "$fresh_install" == "1" ]]; then
+  printf 'pending\n' > "$FIRST_RUN_PENDING"
+  chown fpp:fpp "$FIRST_RUN_PENDING" 2>/dev/null || true
+  chmod 0644 "$FIRST_RUN_PENDING"
+fi
 
 # Commercial licensing is configured outside the replaceable application folder.
 # Existing keys, signed entitlements, endpoints and device data remain persistent.
@@ -155,7 +164,7 @@ if systemctl is-active --quiet "$SERVICE"; then
   echo "Initial login on a new/migrated user database: admin / pimatrix"
   echo "The web interface requires that default password to be changed immediately."
   echo
-  echo "Next: sign in to Pi Matrix Signage and use Display Setup. Controller → Interface lets you choose FPP-first or dedicated appliance mode at any time."
+  echo "Next: on a fresh install, Pi Matrix Signage will ask whether this is an FPP add-on or a dedicated appliance after the initial password is changed."
 else
   echo
   echo "The service did not start. Recent log output:"

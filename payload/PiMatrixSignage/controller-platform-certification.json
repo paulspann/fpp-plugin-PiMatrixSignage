@@ -1,0 +1,8 @@
+{
+  "pimatrix_version": "0.6.46",
+  "platform_name": "Falcon Player (FPP)",
+  "certified_release": "10.0-beta3",
+  "minimum_release": "10.0-beta",
+  "allow_prerelease": true,
+  "notes": "ISSL managed appliance target for Pi Matrix Signage v0.6.46. Only this exact release is offered by the in-app controller-platform updater."
+}

@@ -832,22 +832,36 @@
                   </article>
 
           <article class="card full-span" id="controllerOutputCard">
-                    <div class="card-head"><div><h2>Panel controller configuration</h2><p>Pi Matrix Signage manages the underlying panel-output service for the hardware selected on the Display tab.</p></div><div class="toolbar compact"><span class="health-badge" id="controllerOutputBadge">Checking…</span><button class="btn secondary" id="refreshFpp" type="button">Refresh</button><button class="btn primary" id="applyControllerOutput" type="button">Apply configuration</button></div></div>
+                    <div class="card-head"><div><h2>Panel controller configuration &amp; health</h2><p>Pi Matrix Signage checks the underlying platform, DDP path, panel output and interface mode for configuration drift.</p></div><div class="toolbar compact"><span class="health-badge" id="controllerHealthBadge">Checking…</span><button class="btn secondary" id="refreshFpp" type="button">Refresh</button><button class="btn primary hidden" id="repairControllerHealth" type="button">Repair controller configuration</button><button class="btn secondary" id="applyControllerOutput" type="button">Re-apply panel output</button></div></div>
+                    <div id="controllerHealthList" class="controller-health-list"><div class="controller-health-item"><strong>Checking controller…</strong><span>Reading platform and output state.</span></div></div>
                     <div id="fppSetup" class="fpp-setup"></div>
-                    <div class="callout compact-callout" id="controllerOutputMessage">Checking the panel controller configuration…</div>
-                    <details class="engineering-details"><summary>Engineering details</summary><div id="controllerOutputEngineering" class="fpp-setup"><p class="muted">Loading underlying platform details…</p></div><p class="muted">The controller platform remains installed underneath Pi Matrix Signage for hardware drivers, plugin installation and recovery. Normal operation does not require opening it directly.</p></details>
+                    <div class="callout compact-callout" id="controllerOutputMessage">Checking the controller configuration…</div>
+                    <details class="engineering-details"><summary>Engineering details</summary><div id="controllerOutputEngineering" class="fpp-setup"><p class="muted">Loading underlying platform details…</p></div><p class="muted">Repair restores the managed local DDP path (<code>127.0.0.1:4048</code>), re-applies the selected interface mode and regenerates the panel-output configuration. It does not reinstall FPP.</p></details>
                   </article>
 
           <article class="card full-span" id="controllerSoftwareCard">
-                    <div class="card-head"><div><h2>Controller software</h2><p>Check for and install approved Pi Matrix Signage updates without leaving this interface.</p></div><div class="toolbar compact"><button class="btn secondary" id="checkControllerUpdate" type="button">Check for updates</button><button class="btn primary hidden" id="installControllerUpdate" type="button">Install update</button></div></div>
-                    <div class="backup-status-grid">
-                      <div><span>Installed version</span><strong id="controllerUpdateCurrent">v{{ app_version }}</strong></div>
-                      <div><span>Update status</span><strong id="controllerUpdateStatus">Not checked</strong></div>
-                      <div><span>Installation</span><strong id="controllerUpdateInstallState">Ready</strong></div>
-                      <div><span>Last checked</span><strong id="controllerUpdateChecked">Waiting…</strong></div>
-                    </div>
-                    <div class="callout compact-callout" id="controllerUpdateMessage">Updates are delivered through the controller platform and installed as a managed Pi Matrix Signage release.</div>
-                    <div class="callout warn compact-callout"><strong>Controller platform updates:</strong> the underlying operating/platform layer is maintained separately and should only be upgraded to an ISSL-certified version. Pi Matrix Signage updates shown here do not automatically upgrade that platform.</div>
+                    <div class="card-head"><div><h2>Controller software</h2><p>Pi Matrix Signage and its underlying controller platform can both be maintained here. Platform upgrades are offered only when this Pi Matrix release contains an explicit ISSL-certified FPP target.</p></div><div class="toolbar compact"><button class="btn secondary" id="checkControllerUpdate" type="button">Check for updates</button></div></div>
+                    <section class="controller-software-section">
+                      <div class="card-head"><div><h3>Pi Matrix Signage</h3></div><button class="btn primary hidden" id="installControllerUpdate" type="button">Install Pi Matrix update</button></div>
+                      <div class="backup-status-grid">
+                        <div><span>Installed version</span><strong id="controllerUpdateCurrent">v{{ app_version }}</strong></div>
+                        <div><span>Update status</span><strong id="controllerUpdateStatus">Not checked</strong></div>
+                        <div><span>Installation</span><strong id="controllerUpdateInstallState">Ready</strong></div>
+                        <div><span>Last checked</span><strong id="controllerUpdateChecked">Waiting…</strong></div>
+                      </div>
+                      <div class="callout compact-callout" id="controllerUpdateMessage">Pi Matrix updates are delivered through the controller platform and installed without opening FPP.</div>
+                    </section>
+                    <section class="controller-software-section">
+                      <div class="card-head"><div><h3>Controller platform (FPP)</h3><p>Only the version certified for this exact Pi Matrix release can be installed here.</p></div><button class="btn primary hidden" id="installPlatformUpdate" type="button">Install certified platform update</button></div>
+                      <div class="backup-status-grid">
+                        <div><span>Installed FPP</span><strong id="platformInstalledVersion">Checking…</strong></div>
+                        <div><span>ISSL-certified FPP</span><strong id="platformCertifiedVersion">Checking…</strong></div>
+                        <div><span>Certification</span><strong id="platformCertificationStatus">Checking…</strong></div>
+                        <div><span>Platform update</span><strong id="platformUpdateStatus">Checking…</strong></div>
+                      </div>
+                      <div class="callout compact-callout platform-certification-note" id="platformUpdateMessage">Checking controller-platform certification.</div>
+                      <div class="callout warn compact-callout"><strong>Protected upgrade:</strong> Pi Matrix creates a full Pi Matrix + FPP backup first, then hands the exact certified <code>.fppos</code> image to FPP's own OS upgrader. The controller will reboot and may be unavailable for several minutes.</div>
+                    </section>
                   </article>
 
           <article class="card full-span danger-zone">

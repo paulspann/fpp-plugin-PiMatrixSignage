@@ -39,7 +39,7 @@ from shader_support import SHADER_EXTENSIONS, list_shader_assets, shader_asset_f
 from gpio_controls import GPIOControlManager, normalise_gpio_inputs
 from licensing import LicenseError, LicenseManager
 from hardware_detection import detect_panel_hardware
-from controller_platform import output_status as controller_output_status, apply_output as apply_controller_output, software_update_status, software_update_cached_status, start_software_update, start_software_update_monitor, stop_software_update_monitor, interface_mode_status, set_interface_mode
+from controller_platform import (output_status as controller_output_status, apply_output as apply_controller_output, software_update_status, software_update_cached_status, start_software_update, start_software_update_monitor, stop_software_update_monitor, interface_mode_status, set_interface_mode, controller_health as managed_controller_health, start_controller_platform_update, first_run_interface_choice_pending, complete_first_run_interface_choice)
 
 BASE_DIR = Path(__file__).resolve().parent
 APP_VERSION = (BASE_DIR / "VERSION").read_text(encoding="utf-8").strip() if (BASE_DIR / "VERSION").exists() else "dev"
@@ -163,13 +163,17 @@ UPGRADE_REQUIRED = {
     "PiMatrixSignage/hardware_detection.py",
     "PiMatrixSignage/licensing.py",
     "PiMatrixSignage/ddp.py",
+    "PiMatrixSignage/controller_platform.py",
+    "PiMatrixSignage/controller-platform-certification.json",
     "PiMatrixSignage/templates/index.html",
     "PiMatrixSignage/templates/login.html",
     "PiMatrixSignage/templates/change_password.html",
+    "PiMatrixSignage/templates/first_setup.html",
     "PiMatrixSignage/templates/remote.html",
     "PiMatrixSignage/static/app.js",
     "PiMatrixSignage/static/app.css",
     "PiMatrixSignage/systemd/pi-matrix-signage-reset",
+    "PiMatrixSignage/systemd/pi-matrix-signage-platform",
 }
 UPGRADE_MAX_FILES = 2500
 UPGRADE_MAX_UNCOMPRESSED = 300 * 1024 * 1024
@@ -784,6 +788,30 @@ def change_password():
                            forced=bool(user.get("must_change_password")))
 
 
+@app.route("/first-setup", methods=["GET", "POST"])
+def first_setup():
+    if not first_run_interface_choice_pending():
+        return redirect(url_for("index"))
+    user = g.current_user
+    if not bool(user.get("can_users")) or not bool(user.get("can_display_setup")):
+        return Response("The initial administrator account must have Users and Display setup permission.", 403)
+    error = ""
+    current = interface_mode_status()
+    if request.method == "POST":
+        mode = str(request.form.get("interface_mode") or "").strip().lower()
+        try:
+            if mode not in {"fpp", "appliance"}:
+                raise ValueError("Choose how this controller will be used.")
+            set_interface_mode(mode)
+            complete_first_run_interface_choice()
+            LOG.warning("Initial controller interface mode set to %s by %s", mode, user.get("username"))
+            return redirect(url_for("index"))
+        except Exception as exc:
+            error = str(exc)
+    return render_template("first_setup.html", app_version=APP_VERSION, csrf_token=_csrf_token(),
+                           error=error, current_mode=current.get("mode", "fpp"))
+
+
 @app.get("/api/auth/me")
 def auth_me_api():
     return jsonify({"user": _client_user(g.current_user), "csrf_token": _csrf_token()})
@@ -799,6 +827,8 @@ def auth_logout_api():
 
 @app.get("/")
 def index():
+    if first_run_interface_choice_pending():
+        return redirect(url_for("first_setup"))
     response = app.make_response(render_template("index.html", app_version=APP_VERSION))
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
@@ -2707,6 +2737,38 @@ def controller_output_apply_api():
         return jsonify({"error": str(exc)}), 500
 
 
+@app.get("/api/controller-health")
+@permission_required("display_setup")
+def controller_health_api():
+    s = db.get_settings()
+    return jsonify(managed_controller_health(s, detect_panel_hardware(), int(s.get("ddp_port") or 4048)))
+
+
+@app.post("/api/controller-health/repair")
+@permission_required("display_setup")
+def controller_health_repair_api():
+    if not bool(g.current_user.get("can_users")):
+        return jsonify({"error": "Users permission is also required to repair the managed controller configuration"}), 403
+    try:
+        # Managed appliance/add-on output is intentionally local: Pi Matrix sends
+        # DDP to the FPP service on the same controller. Repair restores that
+        # contract before re-applying FPP's input and panel-output configuration.
+        db.update_settings({"ddp_host": "127.0.0.1", "ddp_port": 4048, "ddp_offset": 0})
+        engine.reload_settings()
+        mode = interface_mode_status()
+        if not mode.get("in_sync"):
+            set_interface_mode(str(mode.get("mode") or "fpp"))
+        s = db.get_settings()
+        detection = detect_panel_hardware()
+        apply_controller_output(s, detection, 4048)
+        health = managed_controller_health(s, detection, 4048)
+        LOG.warning("Managed controller configuration repaired by %s", g.current_user.get("username"))
+        return jsonify(health)
+    except Exception as exc:
+        LOG.exception("Unable to repair managed controller configuration")
+        return jsonify({"error": str(exc)}), 500
+
+
 # Backward-compatible route for older cached browsers and support tooling.
 @app.get("/api/fpp-setup")
 @permission_required("display_setup")
@@ -2730,6 +2792,32 @@ def controller_update_install_api():
         return jsonify(start_software_update()), 202
     except Exception as exc:
         LOG.exception("Unable to start controller software update")
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.post("/api/controller-platform-update/install")
+@permission_required("display_setup")
+def controller_platform_update_install_api():
+    if not bool(g.current_user.get("can_users")):
+        return jsonify({"error": "Users permission is also required to install controller-platform updates"}), 403
+    try:
+        # Re-check immediately so a stale six-hour cache can never choose an OS
+        # image. The exact candidate is still constrained by this release's local
+        # ISSL certification file and by the root helper's independent URL checks.
+        update = software_update_status(APP_VERSION, check=True)
+        platform = update.get("controller_platform") if isinstance(update, dict) else None
+        if not isinstance(platform, dict) or not platform.get("update_available"):
+            return jsonify({"error": str((platform or {}).get("message") or "No certified controller-platform update is available")}), 409
+        candidate = platform.get("candidate") if isinstance(platform.get("candidate"), dict) else {}
+        target = str(platform.get("certified_version") or candidate.get("tag") or "certified")
+        safe_target = re.sub(r"[^A-Za-z0-9._-]+", "-", target).strip("-") or "certified"
+        filename = f"pre-controller-platform-{safe_target}-{datetime.now().strftime('%Y%m%d-%H%M%S')}.zip"
+        backup = _create_backup_archive_local(filename, "controller-platform-update")
+        result = start_controller_platform_update(candidate, backup.name)
+        LOG.warning("Certified controller platform update to %s queued by %s; backup %s", target, g.current_user.get("username"), backup.name)
+        return jsonify(result), 202
+    except Exception as exc:
+        LOG.exception("Unable to start certified controller-platform update")
         return jsonify({"error": str(exc)}), 500
 
 

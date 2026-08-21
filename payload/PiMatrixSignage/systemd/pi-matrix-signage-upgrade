@@ -28,6 +28,7 @@ SERVICE = "pi-matrix-signage.service"
 HELPER = Path("/usr/local/sbin/pi-matrix-signage-upgrade")
 POWER_HELPER = Path("/usr/local/sbin/pi-matrix-signage-poweroff")
 RESET_HELPER = Path("/usr/local/sbin/pi-matrix-signage-reset")
+PLATFORM_HELPER = Path("/usr/local/sbin/pi-matrix-signage-platform")
 SERVICE_FILE = Path("/etc/systemd/system/pi-matrix-signage.service")
 SUDOERS_FILE = Path("/etc/sudoers.d/pi-matrix-signage")
 DEST = Path("/home/fpp/media/pi-matrix-signage")
@@ -52,13 +53,17 @@ REQUIRED = {
     "PiMatrixSignage/hardware_detection.py",
     "PiMatrixSignage/licensing.py",
     "PiMatrixSignage/ddp.py",
+    "PiMatrixSignage/controller_platform.py",
+    "PiMatrixSignage/controller-platform-certification.json",
     "PiMatrixSignage/templates/index.html",
     "PiMatrixSignage/templates/login.html",
     "PiMatrixSignage/templates/change_password.html",
+    "PiMatrixSignage/templates/first_setup.html",
     "PiMatrixSignage/templates/remote.html",
     "PiMatrixSignage/static/app.js",
     "PiMatrixSignage/static/app.css",
     "PiMatrixSignage/systemd/pi-matrix-signage-reset",
+    "PiMatrixSignage/systemd/pi-matrix-signage-platform",
 }
 MAX_FILES = 2500
 MAX_UNCOMPRESSED = 300 * 1024 * 1024
@@ -228,6 +233,7 @@ def refresh_privileged_files(root: Path) -> None:
     updater_src = root / "systemd" / "pi-matrix-signage-upgrade"
     power_src = root / "systemd" / "pi-matrix-signage-poweroff"
     reset_src = root / "systemd" / "pi-matrix-signage-reset"
+    platform_src = root / "systemd" / "pi-matrix-signage-platform"
     if service_src.is_file():
         shutil.copy2(service_src, SERVICE_FILE)
         os.chmod(SERVICE_FILE, 0o644)
@@ -237,12 +243,15 @@ def refresh_privileged_files(root: Path) -> None:
     if reset_src.is_file():
         shutil.copy2(reset_src, RESET_HELPER)
         os.chown(RESET_HELPER, 0, 0); os.chmod(RESET_HELPER, 0o755)
+    if platform_src.is_file():
+        shutil.copy2(platform_src, PLATFORM_HELPER)
+        os.chown(PLATFORM_HELPER, 0, 0); os.chmod(PLATFORM_HELPER, 0o755)
     if updater_src.is_file():
         # Updating the on-disk helper while this process is running is safe;
         # this process already has its code loaded. Future upgrades use it.
         shutil.copy2(updater_src, HELPER)
         os.chown(HELPER, 0, 0); os.chmod(HELPER, 0o755)
-    SUDOERS_FILE.write_text(f"fpp ALL=(root) NOPASSWD: {HELPER}, {POWER_HELPER}, {RESET_HELPER}\n", encoding="utf-8")
+    SUDOERS_FILE.write_text(f"fpp ALL=(root) NOPASSWD: {HELPER}, {POWER_HELPER}, {RESET_HELPER}, {PLATFORM_HELPER}\n", encoding="utf-8")
     os.chown(SUDOERS_FILE, 0, 0); os.chmod(SUDOERS_FILE, 0o440)
     old_sudoers = Path("/etc/sudoers.d/pi-matrix-signage-upgrade")
     try: old_sudoers.unlink()

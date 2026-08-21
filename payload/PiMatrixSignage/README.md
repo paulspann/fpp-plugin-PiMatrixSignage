@@ -1,5 +1,15 @@
-# Pi Matrix Signage v0.6.45
+# Pi Matrix Signage v0.6.46
 
+
+## v0.6.46 – Phase 1.5 self-contained controller appliance
+
+- Adds a first-run controller-choice screen after the initial administrator password change: **FPP + Pi Matrix Signage add-on** remains the safe default, while **Dedicated Pi Matrix Signage appliance** is a one-click commissioning choice. Existing installations are not prompted again; factory reset deliberately re-enables the choice.
+- Adds live **Controller health & panel controller configuration** checks for the FPP API/service, managed local DDP target, DDP input, panel-output configuration and interface-mode drift.
+- Adds **Repair controller configuration**, which restores the managed localhost DDP path, re-applies the saved interface mode and regenerates the selected panel-output configuration without reinstalling FPP.
+- Adds per-release controller-platform certification through `controller-platform-certification.json`. v0.6.46 carries an explicit FPP **10.0-beta3** managed target; no arbitrary/latest/nightly version is offered and managed downgrades are refused.
+- Extends the six-hour background software check to include the certified FPP target while keeping normal dashboard/status polling cache-only. The top update banner now reports Pi Matrix updates, certified platform updates, or both.
+- Adds in-app **Install certified platform update**. Pi Matrix re-checks the certified candidate, creates a full Pi Matrix + FPP backup, then invokes FPP's own `.fppos` OS updater through a root-owned helper that independently validates the FalconChristmas GitHub URL, filename and certified target.
+- Persists platform-update state and reconciles it after reboot: when the controller returns on the certified FPP version, the managed update is marked complete.
 
 ## v0.6.45 – background software update notification
 

@@ -149,6 +149,16 @@ def reset_application_state() -> None:
         target = PERSIST / "uploads" / sub
         target.mkdir(parents=True, exist_ok=True)
         _chown_fpp(target)
+    # A transfer/factory reset is a genuinely new commissioning flow. The next
+    # administrator must explicitly choose FPP-first vs dedicated appliance
+    # after changing the reset default password.
+    try:
+        (PERSIST / "first-run-interface-choice.complete").unlink()
+    except FileNotFoundError:
+        pass
+    pending = PERSIST / "first-run-interface-choice.pending"
+    pending.write_text("pending\n", encoding="utf-8")
+    _chown_fpp(pending)
 
 
 def worker(clear_network: bool) -> int:
