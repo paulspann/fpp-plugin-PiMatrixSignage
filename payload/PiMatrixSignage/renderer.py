@@ -1650,6 +1650,8 @@ def _split_flap_text_layout(layer: dict, text: str, box_w: int, box_h: int, sy: 
     render_mode = str(layer.get("render_mode") or "smooth").lower()
     if render_mode not in ("smooth", "pixel") and not _is_led_mode(render_mode):
         render_mode = "smooth"
+    board_style = str(layer.get("flap_board_style") or "none").lower()
+    mechanical_cells = board_style != "none"
     letter_spacing = max(0, min(8, int(layer.get("letter_spacing", 0) or 0)))
     spacing_ratio = max(0.0, min(1.0, float(layer.get("line_spacing", 0.12) or 0.0)))
     auto_fit = bool(layer.get("auto_fit", False)) or str(layer.get("overflow") or "manual").lower() == "shrink"
@@ -1666,16 +1668,25 @@ def _split_flap_text_layout(layer: dict, text: str, box_w: int, box_h: int, sy: 
         candidates = range(8, 0, -1) if auto_fit else (requested,)
         chosen = requested
         for scale in candidates:
-            cell_w = max(1, (gw + (1 if bold else 0) + gap_units) * scale)
-            cell_h = max(1, gh * scale)
+            # Mechanical split-flap casings need real LED space around the glyph.
+            # Without this the border sits almost on top of the 5x7 character and
+            # visually disappears on P5/P10 panels.  One LED unit on each side
+            # and top/bottom gives the cell a recognisable physical face while
+            # remaining compact enough for 32-pixel-high signs.
+            case_x = scale if mechanical_cells else 0
+            case_y = scale if mechanical_cells else 0
+            cell_w = max(1, (gw + (1 if bold else 0) + gap_units) * scale + case_x * 2)
+            cell_h = max(1, gh * scale + case_y * 2)
             line_gap = line_gap_units * scale
             board_w = max_cols * cell_w
             board_h = line_count * cell_h + max(0, line_count - 1) * line_gap
             chosen = scale
             if not auto_fit or (board_w <= inner_w and board_h <= inner_h):
                 break
-        cell_w = max(1, (gw + (1 if bold else 0) + gap_units) * chosen)
-        cell_h = max(1, gh * chosen)
+        case_x = chosen if mechanical_cells else 0
+        case_y = chosen if mechanical_cells else 0
+        cell_w = max(1, (gw + (1 if bold else 0) + gap_units) * chosen + case_x * 2)
+        cell_h = max(1, gh * chosen + case_y * 2)
         line_gap = line_gap_units * chosen
         child_override.update({"render_mode": render_mode, "pixel_scale": chosen, "letter_spacing": 0})
     else:
@@ -1697,7 +1708,10 @@ def _split_flap_text_layout(layer: dict, text: str, box_w: int, box_h: int, sy: 
                                            bool(layer.get("pixel_bold", False)), 0)
                 widths.append(probe.width); heights.append(probe.height)
             gap = max(1, letter_spacing + 1)
-            return max(widths, default=max(1, size // 2)) + gap, max(heights, default=max(1, size)), max(0, int(round(size * spacing_ratio)))
+            case_pad = max(1, int(round(size * .08))) if mechanical_cells else 0
+            return (max(widths, default=max(1, size // 2)) + gap + case_pad * 2,
+                    max(heights, default=max(1, size)) + case_pad * 2,
+                    max(0, int(round(size * spacing_ratio))))
 
         cell_w, cell_h, line_gap = metrics(font, chosen_size)
         if auto_fit:
@@ -1807,6 +1821,7 @@ def _render_split_flap_text(layer: dict, box_w: int, box_h: int, sy: float, elap
             x = line_x + ci * cell_w
             source_ch = previous_line[ci] if previous_line is not None and ci < len(previous_line) else None
             board_cell = _split_flap_board_cell(layer, cell_w, cell_h)
+            board_overlay = _split_flap_board_overlay(layer, cell_w, cell_h)
             if board_cell is not None:
                 _composite_cell_clipped(out, board_cell, x, y)
 
@@ -1814,6 +1829,8 @@ def _render_split_flap_text(layer: dict, box_w: int, box_h: int, sy: float, elap
                 if source_ch == target_ch:
                     if not target_ch.isspace():
                         _composite_cell_clipped(out, render_char(target_ch), x, y)
+                    if board_overlay is not None:
+                        _composite_cell_clipped(out, board_overlay, x, y)
                     flat_index += 1
                     continue
                 seq = _split_flap_transition_sequence(layer, target, flat_index, source_ch or " ", target_ch, cycles)
@@ -1830,6 +1847,8 @@ def _render_split_flap_text(layer: dict, box_w: int, box_h: int, sy: float, elap
                     src_ch, dst_ch = seq[stage], seq[stage + 1]
             else:
                 if target_ch.isspace():
+                    if board_overlay is not None:
+                        _composite_cell_clipped(out, board_overlay, x, y)
                     flat_index += 1
                     continue
                 seq = _split_flap_sequence(layer, target, flat_index, target_ch, cycles)
@@ -1850,32 +1869,108 @@ def _render_split_flap_text(layer: dict, box_w: int, box_h: int, sy: float, elap
             src = render_char(src_ch)
             cell = src if src_ch == dst_ch else _split_flap_cell(src, render_char(dst_ch), phase, crisp)
             _composite_cell_clipped(out, cell, x, y)
+            if board_overlay is not None:
+                _composite_cell_clipped(out, board_overlay, x, y)
             flat_index += 1
     return out
 
 
 
 def _split_flap_board_cell(layer: dict, cell_w: int, cell_h: int) -> Image.Image | None:
-    """Return an optional low-resolution mechanical flap cell background."""
+    """Return a crisp low-resolution mechanical split-flap cell background.
+
+    The built-in presets deliberately use much stronger face/border contrast than
+    a desktop UI would need.  On a real P5/P10 matrix subtle charcoal-on-black
+    detail disappears, so each physical module gets a clear one-LED frame, a
+    separate upper/lower flap face and a hard centre hinge.
+    """
     style = str(layer.get("flap_board_style") or "none").lower()
     if style == "none":
         return None
+
     if style == "departure":
-        bg, border, seam = (18, 20, 18), (54, 58, 54), (0, 0, 0)
+        top, bottom = (24, 27, 24), (9, 10, 9)
+        border, seam, hinge = (92, 98, 92), (0, 0, 0), (142, 148, 138)
     elif style == "airport":
-        bg, border, seam = (9, 24, 44), (35, 69, 100), (1, 7, 14)
+        top, bottom = (12, 38, 68), (5, 19, 37)
+        border, seam, hinge = (58, 103, 143), (0, 5, 12), (111, 158, 196)
     else:
         bg = _hex_color(str(layer.get("flap_bg_color") or "#171717"), "#171717")
         border = _hex_color(str(layer.get("flap_border_color") or "#454545"), "#454545")
         seam = _hex_color(str(layer.get("flap_seam_color") or "#000000"), "#000000")
-    gap = max(0, min(3, int(layer.get("flap_cell_gap", 1) or 0)))
+        # Custom keeps the chosen colour but still gets two distinguishable flap
+        # faces.  The shift is intentionally tiny and deterministic.
+        top = tuple(min(255, c + 7) for c in bg)
+        bottom = tuple(max(0, c - 7) for c in bg)
+        hinge = border
+
+    configured_gap = max(0, min(3, int(layer.get("flap_cell_gap", 1) or 0)))
+    # The two named board presets should always read as separate modules.  A zero
+    # gap makes adjacent borders merge into one grid line on a low-resolution LED
+    # matrix, which is exactly what made the original black preset look too faint.
+    gap = max(1, configured_gap) if style in ("departure", "airport") else configured_gap
+
     im = Image.new("RGBA", (max(1, cell_w), max(1, cell_h)), (0, 0, 0, 0))
     draw = ImageDraw.Draw(im)
-    x0=y0=gap; x1=max(x0, cell_w-1-gap); y1=max(y0, cell_h-1-gap)
-    draw.rectangle((x0,y0,x1,y1), fill=(*bg,255), outline=(*border,255))
-    seam_y=(y0+y1)//2
-    if y1-y0 >= 3:
-        draw.line((x0,seam_y,x1,seam_y), fill=(*seam,255), width=1)
+    x0 = y0 = gap
+    x1 = max(x0, cell_w - 1 - gap)
+    y1 = max(y0, cell_h - 1 - gap)
+
+    # Strong one-pixel physical frame.
+    draw.rectangle((x0, y0, x1, y1), fill=(*bottom, 255), outline=(*border, 255))
+    if x1 - x0 >= 2 and y1 - y0 >= 2:
+        ix0, ix1 = x0 + 1, x1 - 1
+        iy0, iy1 = y0 + 1, y1 - 1
+        seam_y = (y0 + y1) // 2
+        # Separate upper and lower flap faces.
+        if seam_y - 1 >= iy0:
+            draw.rectangle((ix0, iy0, ix1, seam_y - 1), fill=(*top, 255))
+        if seam_y + 1 <= iy1:
+            draw.rectangle((ix0, seam_y + 1, ix1, iy1), fill=(*bottom, 255))
+        # Hard centre split plus two tiny hinge/pivot pixels.
+        draw.line((x0 + 1, seam_y, x1 - 1, seam_y), fill=(*seam, 255), width=1)
+        if x1 - x0 >= 5:
+            draw.point((x0 + 1, seam_y), fill=(*hinge, 255))
+            draw.point((x1 - 1, seam_y), fill=(*hinge, 255))
+    elif y1 - y0 >= 3:
+        seam_y = (y0 + y1) // 2
+        draw.line((x0, seam_y, x1, seam_y), fill=(*seam, 255), width=1)
+    return im
+
+
+def _split_flap_board_overlay(layer: dict, cell_w: int, cell_h: int) -> Image.Image | None:
+    """Return the centre split/hinge drawn above the flap glyph.
+
+    A real split-flap character is physically cut at the hinge, so the seam must
+    cross the illuminated glyph too.  Drawing it only into the background makes
+    it disappear behind white text and the effect reads as an ordinary boxed
+    font rather than a mechanical flap.
+    """
+    style = str(layer.get("flap_board_style") or "none").lower()
+    if style == "none":
+        return None
+    if style == "departure":
+        seam, hinge = (0, 0, 0), (142, 148, 138)
+    elif style == "airport":
+        seam, hinge = (0, 5, 12), (111, 158, 196)
+    else:
+        seam = _hex_color(str(layer.get("flap_seam_color") or "#000000"), "#000000")
+        hinge = _hex_color(str(layer.get("flap_border_color") or "#454545"), "#454545")
+    configured_gap = max(0, min(3, int(layer.get("flap_cell_gap", 1) or 0)))
+    gap = max(1, configured_gap) if style in ("departure", "airport") else configured_gap
+    x0 = y0 = gap
+    x1 = max(x0, cell_w - 1 - gap)
+    y1 = max(y0, cell_h - 1 - gap)
+    if y1 - y0 < 3:
+        return None
+    seam_y = (y0 + y1) // 2
+    im = Image.new("RGBA", (max(1, cell_w), max(1, cell_h)), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(im)
+    sx0, sx1 = min(x1, x0 + 1), max(x0, x1 - 1)
+    draw.line((sx0, seam_y, sx1, seam_y), fill=(*seam, 255), width=1)
+    if x1 - x0 >= 5:
+        draw.point((sx0, seam_y), fill=(*hinge, 255))
+        draw.point((sx1, seam_y), fill=(*hinge, 255))
     return im
 
 

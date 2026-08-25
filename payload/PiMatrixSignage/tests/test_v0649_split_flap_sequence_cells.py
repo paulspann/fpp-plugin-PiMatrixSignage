@@ -87,4 +87,4 @@ def test_designer_and_help_explain_fixed_cell_blank_transition():
 
 
 def test_release_version_is_v0649():
-    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.6.50"
+    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.6.51"

@@ -1,5 +1,13 @@
-# Pi Matrix Signage v0.6.50
+# Pi Matrix Signage v0.6.51
 
+
+
+## v0.6.51 – Stronger low-resolution departure-board cells
+
+- Reworks **Departure board – black** so each split-flap character is unmistakably a separate physical module on P5/P10 displays rather than a faint boxed glyph.
+- Mechanical casing now reserves real LED-pixel space around the glyph, with a stronger one-pixel frame, separate upper/lower flap faces and at least a one-pixel inter-cell gap for the built-in departure/airport presets.
+- The centre hinge is drawn over the illuminated glyph as well as the casing, so the letter itself is visibly split across the mechanical flap seam.
+- Blank cells remain fully drawn physical modules, including sequential multiline cells that rotate to blank. Custom casing colours remain supported.
 
 ## v0.6.50 – Low-resolution effects & shader expansion
 

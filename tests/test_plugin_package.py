@@ -166,7 +166,7 @@ def test_v0650_effects_and_shader_expansion_is_packaged():
     html = (payload / 'templates' / 'index.html').read_text(encoding='utf-8')
     renderer = (payload / 'renderer.py').read_text(encoding='utf-8')
     version = (payload / 'VERSION').read_text(encoding='utf-8').strip()
-    assert version == '0.6.50'
+    assert version == '0.6.51'
     for name in ('Fire-Embers.fs','Starfield-Warp.fs','Particle-Fall.fs','Radar-Sweep.fs','Matrix-Rain.fs','LED-Marquee.fs','Aurora.fs'):
         assert (payload / 'shaders' / name).is_file(), name
     for marker in ('pixel-assemble','pixel-dissolve','neon-flicker','glitch','character-wave','rolling-digits'):
@@ -177,3 +177,14 @@ def test_v0650_effects_and_shader_expansion_is_packaged():
         assert f'value="{marker}"' in html
     assert 'def _render_rolling_digits_text' in renderer
     assert 'def _pixel_transition_rank_mask' in renderer
+
+
+
+def test_v0651_departure_board_strengthening_is_packaged():
+    payload = ROOT / 'payload' / 'PiMatrixSignage'
+    renderer = (payload / 'renderer.py').read_text(encoding='utf-8')
+    version = (payload / 'VERSION').read_text(encoding='utf-8').strip()
+    assert version == '0.6.51'
+    assert 'def _split_flap_board_overlay' in renderer
+    assert 'Mechanical split-flap casings need real LED space around the glyph' in renderer
+    assert 'separate upper/lower flap face' in renderer

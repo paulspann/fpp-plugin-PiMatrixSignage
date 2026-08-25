@@ -27,7 +27,7 @@ For beta testing, open FPP's Plugin Manager, paste that raw `pluginInfo.json` UR
 
 ## Current bootstrap payload
 
-This test bootstrap contains Pi Matrix Signage v0.6.50. The next commercial-hardening stage should move the application payload out of the public bootstrap repository and retrieve a signed, licence-authorised release package from the ISSL/WHMCS licensing service.
+This test bootstrap contains Pi Matrix Signage v0.6.51. The next commercial-hardening stage should move the application payload out of the public bootstrap repository and retrieve a signed, licence-authorised release package from the ISSL/WHMCS licensing service.
 
 
 ## v0.1.2
@@ -143,3 +143,9 @@ FPP Plugin Manager updates intentionally do **not** ship `scripts/fpp_upgrade.sh
 
 - Bundles Pi Matrix Signage **v0.6.48**.
 - Adds optional sequential multiline text: non-empty lines can automatically share a text layer’s available scene timeline and display one after another.
+
+
+## v0.1.21
+
+- Bundles Pi Matrix Signage **v0.6.51**.
+- Strengthens the low-resolution Departure Board Black split-flap casing with larger fixed cells, clearer frames, distinct upper/lower flap faces, a visible over-glyph centre hinge and persistent blank physical modules.

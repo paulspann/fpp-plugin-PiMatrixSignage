@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_phase15_certification_matches_this_release():
     cert = json.loads((ROOT / "controller-platform-certification.json").read_text(encoding="utf-8"))
-    assert cert["pimatrix_version"] == (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.6.50"
+    assert cert["pimatrix_version"] == (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.6.51"
     assert cert["certified_release"] == "10.0-beta3"
     assert cert["platform_name"] == "Falcon Player (FPP)"
 
