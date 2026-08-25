@@ -144,3 +144,18 @@ def test_v0644_controller_interface_mode_is_optional_and_fpp_first_by_default():
     assert 'Controller &amp; FPP</button>' in ui
     assert 'FPP + Pi Matrix Signage add-on' in ui
     assert 'Pi Matrix Signage appliance' in ui
+
+
+def test_v0647_split_flap_designer_controls_are_packaged():
+    html = (ROOT / 'payload' / 'PiMatrixSignage' / 'templates' / 'index.html').read_text(encoding='utf-8')
+    js = (ROOT / 'payload' / 'PiMatrixSignage' / 'static' / 'app.js').read_text(encoding='utf-8')
+    renderer = (ROOT / 'payload' / 'PiMatrixSignage' / 'renderer.py').read_text(encoding='utf-8')
+    assert '<option value="split-flap">Split-flap display</option>' in html
+    assert 'id="splitFlapOptions"' in html
+    assert 'id="layerFlapCycles"' in html
+    assert 'id="layerFlapStagger"' in html
+    assert 'id="layerFlapOrder"' in html
+    assert "l.flap_cycles=clamp" in js
+    assert "updateAnimationFieldVisibility" in js
+    assert 'def _render_split_flap_text' in renderer
+    assert 'def _split_flap_cell' in renderer

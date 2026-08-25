@@ -1,4 +1,4 @@
-# Pi Matrix Signage FPP Plugin v0.1.16
+# Pi Matrix Signage FPP Plugin v0.1.17
 
 10+ bootstrap/integration plugin for Pi Matrix Signage on Raspberry Pi.
 
@@ -27,7 +27,7 @@ For beta testing, open FPP's Plugin Manager, paste that raw `pluginInfo.json` UR
 
 ## Current bootstrap payload
 
-This test bootstrap contains Pi Matrix Signage v0.6.46. The next commercial-hardening stage should move the application payload out of the public bootstrap repository and retrieve a signed, licence-authorised release package from the ISSL/WHMCS licensing service.
+This test bootstrap contains Pi Matrix Signage v0.6.47. The next commercial-hardening stage should move the application payload out of the public bootstrap repository and retrieve a signed, licence-authorised release package from the ISSL/WHMCS licensing service.
 
 
 ## v0.1.2
@@ -119,3 +119,9 @@ FPP Plugin Manager updates intentionally do **not** ship `scripts/fpp_upgrade.sh
 
 - Bundles Pi Matrix Signage **v0.6.46**.
 - Adds cached background application-update checking and top-of-screen update notification without putting network update checks on the renderer or normal status-request path.
+
+
+## v0.1.17
+
+- Bundles Pi Matrix Signage **v0.6.47**.
+- Adds the low-resolution Designer split-flap text animation with per-character fake flips, stagger and settle order controls.

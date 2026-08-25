@@ -1,4 +1,13 @@
-# Pi Matrix Signage v0.6.46
+# Pi Matrix Signage v0.6.47
+
+
+## v0.6.47 – Low-resolution split-flap text animation
+
+- Adds a new Designer text animation, **Split-flap display**, designed specifically for P5/P10 signage rather than high-detail 3D simulation.
+- Each character uses a fixed mechanical-style cell, cycles through stable fake letters/digits, collapses across a centre hinge line, and settles independently on the requested character.
+- Adds **Fake flips**, **Character stagger**, and **Settle order** (left-to-right, right-to-left, or stable random) controls. Existing **Effect period** controls the overall settle time.
+- Digits cycle only through digits, letters preserve case, and punctuation such as time/date separators stays stable for readability.
+- The effect uses nearest-neighbour flap motion for crisp pixel/LED fonts and remains clipped to the layer rectangle.
 
 
 ## v0.6.46 – Phase 1.5 self-contained controller appliance

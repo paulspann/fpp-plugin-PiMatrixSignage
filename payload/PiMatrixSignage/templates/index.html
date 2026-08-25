@@ -366,14 +366,19 @@
                     <summary>Motion &amp; animation</summary>
                     <div class="form-grid cols-2">
                       <label>Start delay (s)<input type="number" id="layerDelay" min="0" max="3600" step="0.1" value="0"></label>
-                      <label>Animation<select id="layerAnimation"><option value="static">Static</option><option value="auto-marquee">Auto marquee if too wide</option><option value="typewriter">Typewriter</option><option value="random-reveal">Random character reveal</option><option value="scroll-left">Scroll left</option><option value="scroll-right">Scroll right</option><option value="scroll-up">Scroll up</option><option value="scroll-down">Scroll down</option><option value="bounce-horizontal">Bounce horizontally</option><option value="bounce-vertical">Bounce vertically</option><option value="blink">Blink</option><option value="pulse">Pulse</option></select></label>
+                      <label>Animation<select id="layerAnimation"><option value="static">Static</option><option value="auto-marquee">Auto marquee if too wide</option><option value="typewriter">Typewriter</option><option value="random-reveal">Random character reveal</option><option value="split-flap">Split-flap display</option><option value="scroll-left">Scroll left</option><option value="scroll-right">Scroll right</option><option value="scroll-up">Scroll up</option><option value="scroll-down">Scroll down</option><option value="bounce-horizontal">Bounce horizontally</option><option value="bounce-vertical">Bounce vertically</option><option value="blink">Blink</option><option value="pulse">Pulse</option></select></label>
                     </div>
                     <div class="form-grid cols-3">
                       <label>Movement speed (px/s)<input type="number" id="layerSpeed" min="0" max="1000" step="0.1" value="30"></label>
                       <label>Effect period (s)<input type="number" id="layerEffectPeriod" min="0.1" max="60" step="0.1" value="1"></label>
                       <label>Blink on %<input type="number" id="layerBlinkDuty" min="5" max="95" step="1" value="50"></label>
                     </div>
-                    <p class="hint">Scroll and bounce animations stay clipped inside this layer's W × H box. For <strong>Random character reveal</strong>, use <strong>Effect period</strong> as the total reveal time.</p>
+                    <div class="form-grid cols-3 hidden" id="splitFlapOptions">
+                      <label>Fake flips<input type="number" id="layerFlapCycles" min="1" max="12" step="1" value="4"></label>
+                      <label>Character stagger (s)<input type="number" id="layerFlapStagger" min="0" max="0.5" step="0.01" value="0.06"></label>
+                      <label>Settle order<select id="layerFlapOrder"><option value="left">Left → right</option><option value="right">Right → left</option><option value="random">Random</option></select></label>
+                    </div>
+                    <p class="hint">Scroll and bounce animations stay clipped inside this layer's W × H box. <strong>Random character reveal</strong> and <strong>Split-flap display</strong> use <strong>Effect period</strong> as the overall settle time. Split-flap is optimised for crisp pixel/LED fonts; around 1.2–2.5 seconds usually reads well on P5/P10 signs.</p>
                   </details>
 
                   <details id="layerTransitionProperties" class="inspector-group inspector-transitions">

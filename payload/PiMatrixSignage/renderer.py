@@ -1466,7 +1466,243 @@ def _apply_layer_transition(viewport: Image.Image, layer: dict, elapsed: float, 
     return viewport, True
 
 
+def _split_flap_fake_char(layer: dict, text: str, index: int, target: str, cycle: int, previous: str = "") -> str:
+    """Choose a stable fake flap character matching the target's broad type."""
+    if target.isspace() or target in ("\r", "\n"):
+        return target
+    if target.isdigit():
+        pool = "0123456789"
+    elif target.isalpha():
+        pool = "ABCDEFGHIJKLMNOPQRSTUVWXYZ" if target.isupper() else "abcdefghijklmnopqrstuvwxyz"
+    else:
+        # Punctuation is much clearer if it stays put while the alphanumeric
+        # flaps around it move (especially ':' in times and '/' in dates).
+        return target
+    choices = [ch for ch in pool if ch != target and ch != previous] or [ch for ch in pool if ch != target] or [target]
+    seed = f"{layer.get('id','')}|{layer.get('name','')}|{text}|{index}|{cycle}"
+    return choices[random.Random(seed).randrange(len(choices))]
+
+
+def _split_flap_sequence(layer: dict, text: str, index: int, target: str, cycles: int) -> list[str]:
+    seq: list[str] = []
+    previous = ""
+    for cycle in range(cycles):
+        ch = _split_flap_fake_char(layer, text, index, target, cycle, previous)
+        seq.append(ch)
+        previous = ch
+    seq.append(target)
+    return seq
+
+
+def _split_flap_cell(src: Image.Image, dst: Image.Image, phase: float, crisp: bool) -> Image.Image:
+    """Approximate a mechanical split-flap rotation inside one fixed character cell.
+
+    On the first half of the turn the old top half collapses into the centre
+    seam.  On the second half the new lower half unfolds from that seam.  This
+    deliberately uses very few visual cues so it remains legible on a 16/32 px
+    high HUB75 display.
+    """
+    w, h = src.size
+    if dst.size != src.size:
+        dst = dst.resize(src.size, Image.Resampling.NEAREST if crisp else Image.Resampling.BICUBIC)
+    if w <= 0 or h <= 1:
+        return dst.copy() if phase >= 0.5 else src.copy()
+    p = max(0.0, min(1.0, float(phase)))
+    mid = max(1, h // 2)
+    lower_h = h - mid
+    resample = Image.Resampling.NEAREST if crisp else Image.Resampling.BICUBIC
+    out = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+
+    if p < 0.5:
+        # The old lower half remains visible while the upper flap rotates down.
+        if lower_h > 0:
+            out.alpha_composite(src.crop((0, mid, w, h)), (0, mid))
+        frac = 1.0 - p * 2.0
+        sh = max(0, int(round(mid * frac)))
+        if sh > 0:
+            top = src.crop((0, 0, w, mid)).resize((w, sh), resample)
+            out.alpha_composite(top, (0, mid - sh))
+    else:
+        # Once the flap crosses the centre, the new upper half is exposed and
+        # its lower half unfolds downwards.
+        out.alpha_composite(dst.crop((0, 0, w, mid)), (0, 0))
+        frac = (p - 0.5) * 2.0
+        sh = max(0, int(round(lower_h * frac)))
+        if sh > 0 and lower_h > 0:
+            bottom = dst.crop((0, mid, w, h)).resize((w, sh), resample)
+            out.alpha_composite(bottom, (0, mid))
+
+    # A one-pixel dark hinge line, but only where glyph ink exists.  It never
+    # paints a black rectangle over layers behind transparent text.
+    seam_y = min(h - 1, mid)
+    alpha = out.getchannel("A").crop((0, seam_y, w, seam_y + 1)).point(lambda a: int(a * 0.72))
+    if alpha.getbbox():
+        seam = Image.new("RGBA", (w, 1), (0, 0, 0, 0))
+        seam.putalpha(alpha)
+        out.alpha_composite(seam, (0, seam_y))
+    return out
+
+
+def _split_flap_text_layout(layer: dict, text: str, box_w: int, box_h: int, sy: float, upload_fonts_dir: str):
+    """Return fixed-cell layout data and a layer override for split-flap glyphs."""
+    pad = max(0, int(round(float(layer.get("padding", 0) or 0) * sy)))
+    inner_w, inner_h = max(1, box_w - pad * 2), max(1, box_h - pad * 2)
+    lines = str(text or " ").split("\n") or [" "]
+    max_cols = max(1, max((len(line) for line in lines), default=1))
+    line_count = max(1, len(lines))
+    align = str(layer.get("align") or "center")
+    if align not in ("left", "center", "right"):
+        align = "center"
+    valign = str(layer.get("valign") or "middle")
+    if valign not in ("top", "middle", "bottom"):
+        valign = "middle"
+    render_mode = str(layer.get("render_mode") or "smooth").lower()
+    if render_mode not in ("smooth", "pixel") and not _is_led_mode(render_mode):
+        render_mode = "smooth"
+    letter_spacing = max(0, min(8, int(layer.get("letter_spacing", 0) or 0)))
+    spacing_ratio = max(0.0, min(1.0, float(layer.get("line_spacing", 0.12) or 0.0)))
+    auto_fit = bool(layer.get("auto_fit", False)) or str(layer.get("overflow") or "manual").lower() == "shrink"
+    child_override: dict = {"auto_fit": False, "wrap": False, "overflow": "manual", "padding": 0,
+                            "align": "center", "valign": "middle", "animation": "static",
+                            "text_transform": "none"}
+
+    if _is_led_mode(render_mode):
+        gw, gh, _source = _LED_FONT_SPECS.get(render_mode, (5, 7, "5x7"))
+        bold = bool(layer.get("pixel_bold", False) or render_mode == "led-bold")
+        gap_units = max(1, 1 + letter_spacing)
+        line_gap_units = max(1, int(round(1 + spacing_ratio * 4)))
+        requested = max(1, min(8, int(layer.get("pixel_scale", 1) or 1)))
+        candidates = range(8, 0, -1) if auto_fit else (requested,)
+        chosen = requested
+        for scale in candidates:
+            cell_w = max(1, (gw + (1 if bold else 0) + gap_units) * scale)
+            cell_h = max(1, gh * scale)
+            line_gap = line_gap_units * scale
+            board_w = max_cols * cell_w
+            board_h = line_count * cell_h + max(0, line_count - 1) * line_gap
+            chosen = scale
+            if not auto_fit or (board_w <= inner_w and board_h <= inner_h):
+                break
+        cell_w = max(1, (gw + (1 if bold else 0) + gap_units) * chosen)
+        cell_h = max(1, gh * chosen)
+        line_gap = line_gap_units * chosen
+        child_override.update({"render_mode": render_mode, "pixel_scale": chosen, "letter_spacing": 0})
+    else:
+        stroke = max(0, int(round(float(layer.get("outline_width", 0) or 0) * sy)))
+        base_size = max(4, int(round(float(layer.get("font_size", 18) or 18) * sy)))
+        placeholder = "\n".join("M" * max(1, len(line)) for line in lines)
+        if auto_fit:
+            font, chosen_size = _fit_layer_font(placeholder, inner_w, inner_h, str(layer.get("font") or ""),
+                                                 upload_fonts_dir, False, "left", spacing_ratio, stroke)
+        else:
+            chosen_size = base_size
+            font = _load_font(str(layer.get("font") or ""), chosen_size, upload_fonts_dir)
+
+        def metrics(font_obj, size: int):
+            widths, heights = [], []
+            for probe_ch in ("M", "W", "8", "0"):
+                probe = _render_ttf_sprite(probe_ch, font_obj, (255,255,255), (0,0,0), stroke, 0, "center",
+                                           render_mode, max(1, min(8, int(layer.get("pixel_scale", 1) or 1))),
+                                           bool(layer.get("pixel_bold", False)), 0)
+                widths.append(probe.width); heights.append(probe.height)
+            gap = max(1, letter_spacing + 1)
+            return max(widths, default=max(1, size // 2)) + gap, max(heights, default=max(1, size)), max(0, int(round(size * spacing_ratio)))
+
+        cell_w, cell_h, line_gap = metrics(font, chosen_size)
+        if auto_fit:
+            while chosen_size > 4 and (max_cols * cell_w > inner_w or line_count * cell_h + max(0, line_count - 1) * line_gap > inner_h):
+                chosen_size -= 1
+                font = _load_font(str(layer.get("font") or ""), chosen_size, upload_fonts_dir)
+                cell_w, cell_h, line_gap = metrics(font, chosen_size)
+        child_override.update({"font_size": chosen_size / max(0.0001, sy), "render_mode": render_mode,
+                               "letter_spacing": 0})
+
+    board_h = line_count * cell_h + max(0, line_count - 1) * line_gap
+    board_y = pad + _align_pos(inner_h, board_h, valign, 0)
+    return lines, pad, inner_w, board_y, cell_w, cell_h, line_gap, align, child_override
+
+
+def _composite_cell_clipped(base: Image.Image, overlay: Image.Image, x: int, y: int) -> None:
+    bx0, by0 = max(0, x), max(0, y)
+    bx1, by1 = min(base.width, x + overlay.width), min(base.height, y + overlay.height)
+    if bx1 <= bx0 or by1 <= by0:
+        return
+    ox0, oy0 = bx0 - x, by0 - y
+    base.alpha_composite(overlay.crop((ox0, oy0, ox0 + bx1 - bx0, oy0 + by1 - by0)), (bx0, by0))
+
+
+def _render_split_flap_text(layer: dict, box_w: int, box_h: int, sy: float, elapsed: float,
+                            now: datetime, upload_fonts_dir: str) -> Image.Image:
+    target = _transform_text(_token_text(str(layer.get("text") or ""), now), str(layer.get("text_transform") or "none"))
+    delay = max(0.0, float(layer.get("delay", 0) or 0))
+    local = max(0.0, float(elapsed) - delay)
+    duration = max(0.1, float(layer.get("effect_period", 1.0) or 1.0))
+    cycles = max(1, min(12, int(layer.get("flap_cycles", 4) or 4)))
+    stagger = max(0.0, min(0.5, float(layer.get("flap_stagger", 0.06) or 0.0)))
+    order = str(layer.get("flap_order") or "left").lower()
+    if not target:
+        child = dict(layer); child.update(animation="static", text=target)
+        return _render_scene_text(child, box_w, box_h, sy, elapsed, now, upload_fonts_dir)
+
+    lines, pad, inner_w, board_y, cell_w, cell_h, line_gap, align, child_override = _split_flap_text_layout(
+        layer, target, box_w, box_h, sy, upload_fonts_dir
+    )
+    out = Image.new("RGBA", (box_w, box_h), (0, 0, 0, 0))
+    positions = [(li, ci, ch) for li, line in enumerate(lines) for ci, ch in enumerate(line)
+                 if not ch.isspace() and ch not in ("\r", "\n")]
+    if not positions:
+        child = dict(layer); child.update(animation="static", text=target)
+        return _render_scene_text(child, box_w, box_h, sy, elapsed, now, upload_fonts_dir)
+
+    ordered = list(positions)
+    if order == "right":
+        ordered.reverse()
+    elif order == "random":
+        random.Random(f"{layer.get('id','')}|{layer.get('name','')}|{target}|flap-order").shuffle(ordered)
+    rank = {(li, ci): idx for idx, (li, ci, _ch) in enumerate(ordered)}
+    max_delay = min(stagger * max(0, len(ordered) - 1), duration * 0.68)
+    actual_stagger = max_delay / max(1, len(ordered) - 1)
+    flip_window = max(0.12, duration - max_delay)
+    crisp = _is_crisp_mode(str(child_override.get("render_mode") or layer.get("render_mode") or "smooth"))
+    flat_index = 0
+
+    for li, line in enumerate(lines):
+        line_w = max(1, len(line) * cell_w)
+        line_x = pad + _align_pos(inner_w, line_w, align, 0)
+        y = board_y + li * (cell_h + line_gap)
+        for ci, target_ch in enumerate(line):
+            x = line_x + ci * cell_w
+            if target_ch.isspace():
+                flat_index += 1
+                continue
+            seq = _split_flap_sequence(layer, target, flat_index, target_ch, cycles)
+            char_local = local - rank.get((li, ci), 0) * actual_stagger
+            if char_local <= 0:
+                src_ch = dst_ch = seq[0]; phase = 0.0
+            elif char_local >= flip_window:
+                src_ch = dst_ch = target_ch; phase = 1.0
+            else:
+                scaled = max(0.0, min(float(cycles) - 1e-9, char_local / flip_window * cycles))
+                stage = min(cycles - 1, int(scaled))
+                phase = scaled - stage
+                src_ch, dst_ch = seq[stage], seq[stage + 1]
+
+            def render_char(ch: str) -> Image.Image:
+                child = dict(layer)
+                child.update(child_override)
+                child.update(text=ch, animation="static", delay=0, entrance_effect="none", exit_effect="none")
+                return _render_scene_text(child, cell_w, cell_h, sy, elapsed, now, upload_fonts_dir)
+
+            src = render_char(src_ch)
+            cell = src if src_ch == dst_ch else _split_flap_cell(src, render_char(dst_ch), phase, crisp)
+            _composite_cell_clipped(out, cell, x, y)
+            flat_index += 1
+    return out
+
+
 def _render_scene_text(layer: dict, box_w: int, box_h: int, sy: float, elapsed: float, now: datetime, upload_fonts_dir: str) -> Image.Image:
+    if str(layer.get("animation") or "static") == "split-flap" and str(layer.get("type") or "text") == "text":
+        return _render_split_flap_text(layer, box_w, box_h, sy, elapsed, now, upload_fonts_dir)
     text = _layer_text_value(layer, now, elapsed)
     cache_fields = {k: layer.get(k) for k in (
         "font", "font_size", "auto_fit", "wrap", "color", "outline_color", "outline_width",

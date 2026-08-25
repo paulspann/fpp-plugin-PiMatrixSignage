@@ -593,6 +593,44 @@ class CoreTests(unittest.TestCase):
         self.assertGreater(lit_b,lit_a)
         self.assertGreater(lit_c,lit_b)
 
+    def test_split_flap_cycles_then_settles_deterministically(self):
+        base={"version":2,"design_width":128,"design_height":32,
+              "background":{"mode":"solid","color1":"#000000","color2":"#000000"},"layers":[
+            {"id":"flap","type":"text","name":"Flap","enabled":True,"x":0,"y":0,"w":128,"h":32,"z":1,"opacity":100,
+             "delay":0,"animation":"split-flap","effect_period":1.8,"flap_cycles":4,"flap_stagger":0.06,"flap_order":"left",
+             "text":"OPEN 10:00","font":"","font_size":12,"auto_fit":True,"overflow":"manual","wrap":False,
+             "color":"#ffffff","outline_color":"#000000","outline_width":0,"padding":0,"align":"center","valign":"middle",
+             "line_spacing":0,"render_mode":"led5x7","pixel_scale":1,"pixel_bold":False,"letter_spacing":0}
+        ]}
+        msg={"editor_mode":"designer","scene_json":json.dumps(base)}
+        now=datetime(2026,8,25,9,33)
+        early=render_message(msg,128,32,.45,now,"/tmp/no")
+        early_again=render_message(msg,128,32,.45,now,"/tmp/no")
+        late=render_message(msg,128,32,2.2,now,"/tmp/no")
+        later=render_message(msg,128,32,4.0,now,"/tmp/no")
+        self.assertEqual(list(_pixels(early)), list(_pixels(early_again)))
+        self.assertNotEqual(list(_pixels(early)), list(_pixels(late)))
+        self.assertEqual(list(_pixels(late)), list(_pixels(later)))
+        self.assertGreater(sum(1 for p in _pixels(late) if max(p)>0), 50)
+
+    def test_split_flap_right_and_random_orders_produce_different_mid_animation_frames(self):
+        def message(order):
+            scene={"version":2,"design_width":96,"design_height":24,
+                   "background":{"mode":"solid","color1":"#000000","color2":"#000000"},"layers":[
+                {"id":"flap-order","type":"text","name":"Flap","enabled":True,"x":0,"y":0,"w":96,"h":24,"z":1,"opacity":100,
+                 "delay":0,"animation":"split-flap","effect_period":2.0,"flap_cycles":3,"flap_stagger":0.12,"flap_order":order,
+                 "text":"123456","font":"","font_size":10,"auto_fit":True,"overflow":"manual","wrap":False,"color":"#ffffff",
+                 "outline_color":"#000000","outline_width":0,"padding":0,"align":"center","valign":"middle","line_spacing":0,
+                 "render_mode":"led5x7","pixel_scale":1,"pixel_bold":False,"letter_spacing":0}
+            ]}
+            return {"editor_mode":"designer","scene_json":json.dumps(scene)}
+        now=datetime(2026,8,25,9,33)
+        left=render_message(message("left"),96,24,.7,now,"/tmp/no")
+        right=render_message(message("right"),96,24,.7,now,"/tmp/no")
+        random_order=render_message(message("random"),96,24,.7,now,"/tmp/no")
+        self.assertNotEqual(list(_pixels(left)), list(_pixels(right)))
+        self.assertNotEqual(list(_pixels(left)), list(_pixels(random_order)))
+
     def test_auto_marquee_only_moves_when_text_overflows(self):
         def scene_for(text):
             return {"version":2,"design_width":64,"design_height":16,
