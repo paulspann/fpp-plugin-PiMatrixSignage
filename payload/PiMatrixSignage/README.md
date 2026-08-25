@@ -1,4 +1,13 @@
-# Pi Matrix Signage v0.6.47
+# Pi Matrix Signage v0.6.48
+
+
+## v0.6.48 – Sequential multiline text
+
+- Adds a **Multiple lines** control to Designer text layers: existing **Display together** behaviour remains the compatibility default, while **Show one after another** turns each non-empty line in Text content into a timed message slot.
+- Sequential lines automatically divide the text layer’s usable timeline evenly. A 30-second scene with three lines and no layer delay/early exit shows each line for 10 seconds.
+- Start delay and **Exit after** are respected, blank lines do not consume a slot, and the Designer shows the calculated line count and seconds-per-line live.
+- Character/content animations such as typewriter, random reveal and split-flap restart when each new line begins; scrolling/bounce content also restarts from the start of its new line slot.
+- Existing saved multiline designs continue to render all lines together until the new sequential mode is explicitly selected.
 
 
 ## v0.6.47 – Low-resolution split-flap text animation

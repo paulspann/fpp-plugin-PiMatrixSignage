@@ -648,6 +648,39 @@ def _random_reveal_text(layer: dict, text: str, elapsed: float) -> str:
     return "".join(chars)
 
 
+def _sequenced_text_layer(layer: dict, elapsed: float, scene_duration: float) -> tuple[dict, float]:
+    """Select one explicit non-empty text line for this point on the scene timeline.
+
+    The sequence spans the layer's usable time: after its Start delay and, when
+    configured, up to Exit after.  Child text animations receive time relative
+    to the selected slot so typewriter/random-reveal/split-flap restart for each
+    new line. Existing multiline layers remain unchanged unless line_display is
+    explicitly set to ``sequence``.
+    """
+    if str(layer.get("type") or "text") != "text" or str(layer.get("line_display") or "together") != "sequence":
+        return layer, elapsed
+    raw = str(layer.get("text") or "")
+    lines = [line for line in raw.replace("\r\n", "\n").replace("\r", "\n").split("\n") if line.strip()]
+    if len(lines) <= 1:
+        return layer, elapsed
+    delay = max(0.0, float(layer.get("delay", 0) or 0))
+    usable = max(0.001, float(scene_duration) - delay)
+    exit_after = max(0.0, float(layer.get("exit_after", 0) or 0))
+    if exit_after > 0:
+        usable = max(0.001, min(usable, exit_after))
+    local = max(0.0, float(elapsed) - delay)
+    slot = usable / len(lines)
+    index = min(len(lines) - 1, max(0, int(local / max(0.001, slot))))
+    slot_elapsed = max(0.0, local - index * slot)
+    child = dict(layer)
+    child["text"] = lines[index]
+    child["delay"] = 0
+    child["_line_sequence_index"] = index
+    child["_line_sequence_count"] = len(lines)
+    child["_line_sequence_slot"] = slot
+    return child, slot_elapsed
+
+
 def _layer_text_value(layer: dict, now: datetime, elapsed: float) -> str:
     if str(layer.get("type") or "text") == "widget":
         text = _widget_text(layer, now)
@@ -2917,7 +2950,9 @@ def render_scene(scene: dict, width: int, height: int, elapsed: float, now: date
         w = max(1,int(round(float(layer.get("w",design_w) or design_w)*sx)))
         h = max(1,int(round(float(layer.get("h",design_h) or design_h)*sy)))
         ltype = str(layer.get("type") or "text")
-        text_render_mode = layer.get("cloud_render_mode") if ltype == "cloud-text" else layer.get("render_mode")
+        scene_duration = max(0.25, float(scene.get("duration", 10) or 10))
+        content_layer, content_elapsed = _sequenced_text_layer(layer, elapsed, scene_duration)
+        text_render_mode = content_layer.get("cloud_render_mode") if ltype == "cloud-text" else content_layer.get("render_mode")
         layer_is_crisp = (ltype == "icon") or (ltype in ("text", "cloud-text", "widget") and _is_crisp_mode(str(text_render_mode or "smooth")))
         zone_clip = _scene_zone_rect(scene, layer, sx, sy)
         animation = str(layer.get("animation") or "static")
@@ -2925,7 +2960,7 @@ def render_scene(scene: dict, width: int, height: int, elapsed: float, now: date
         # Auto marquee only moves when the natural content is too large for the
         # layer.  Short text remains static and aligned normally.
         if animation == "auto-marquee" and ltype in ("text","widget"):
-            content = _render_layer_content(layer,ltype,w,h,sy,elapsed,now,upload_fonts_dir,"x")
+            content = _render_layer_content(content_layer,ltype,w,h,sy,content_elapsed,now,upload_fonts_dir,"x")
             pad=max(0,int(round(float(layer.get("padding",0) or 0)*sy)))
             if content.width > max(1,w-pad*2):
                 animation="scroll-left"
@@ -2934,12 +2969,12 @@ def render_scene(scene: dict, width: int, height: int, elapsed: float, now: date
 
         if animation in ("scroll-left","scroll-right","scroll-up","scroll-down"):
             axis="x" if animation in ("scroll-left","scroll-right") else "y"
-            content=_render_layer_content(layer,ltype,w,h,sy,elapsed,now,upload_fonts_dir,axis)
+            content=_render_layer_content(content_layer,ltype,w,h,sy,content_elapsed,now,upload_fonts_dir,axis)
             rotation=int(round(float(layer.get("rotation",0) or 0)))%360
             if rotation:
                 crisp=layer_is_crisp
                 content=content.rotate(-rotation,expand=True,resample=Image.Resampling.NEAREST if crisp else Image.Resampling.BICUBIC)
-            viewport,visible=_render_scroll_viewport(layer,content,w,h,sy,elapsed,animation)
+            viewport,visible=_render_scroll_viewport(content_layer,content,w,h,sy,content_elapsed,animation)
             if not visible: continue
             crisp=layer_is_crisp
             viewport,visible=_apply_layer_transition(viewport,layer,elapsed,crisp,forced_exit_elapsed)
@@ -2948,12 +2983,12 @@ def render_scene(scene: dict, width: int, height: int, elapsed: float, now: date
             _alpha_composite_clipped(base,_apply_opacity(viewport,opacity),x,y,zone_clip);continue
 
         if animation in ("bounce-horizontal","bounce-vertical"):
-            content=_render_layer_content(layer,ltype,w,h,sy,elapsed,now,upload_fonts_dir)
+            content=_render_layer_content(content_layer,ltype,w,h,sy,content_elapsed,now,upload_fonts_dir)
             rotation=int(round(float(layer.get("rotation",0) or 0)))%360
             if rotation:
                 crisp=layer_is_crisp
                 content=content.rotate(-rotation,expand=True,resample=Image.Resampling.NEAREST if crisp else Image.Resampling.BICUBIC)
-            viewport,visible=_render_bounce_viewport(layer,content,w,h,sy,elapsed,animation)
+            viewport,visible=_render_bounce_viewport(content_layer,content,w,h,sy,content_elapsed,animation)
             if not visible: continue
             crisp=layer_is_crisp
             viewport,visible=_apply_layer_transition(viewport,layer,elapsed,crisp,forced_exit_elapsed)
@@ -2961,7 +2996,7 @@ def render_scene(scene: dict, width: int, height: int, elapsed: float, now: date
             opacity=max(0.0,min(1.0,float(layer.get("opacity",100) or 0)/100.0))
             _alpha_composite_clipped(base,_apply_opacity(viewport,opacity),x,y,zone_clip);continue
 
-        lim=_render_layer_content(layer,ltype,w,h,sy,elapsed,now,upload_fonts_dir)
+        lim=_render_layer_content(content_layer,ltype,w,h,sy,content_elapsed,now,upload_fonts_dir)
         rotation=int(round(float(layer.get("rotation",0) or 0)))%360
         if rotation:
             crisp=layer_is_crisp
