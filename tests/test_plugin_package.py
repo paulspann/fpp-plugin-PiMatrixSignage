@@ -159,3 +159,21 @@ def test_v0647_split_flap_designer_controls_are_packaged():
     assert "updateAnimationFieldVisibility" in js
     assert 'def _render_split_flap_text' in renderer
     assert 'def _split_flap_cell' in renderer
+
+
+def test_v0650_effects_and_shader_expansion_is_packaged():
+    payload = ROOT / 'payload' / 'PiMatrixSignage'
+    html = (payload / 'templates' / 'index.html').read_text(encoding='utf-8')
+    renderer = (payload / 'renderer.py').read_text(encoding='utf-8')
+    version = (payload / 'VERSION').read_text(encoding='utf-8').strip()
+    assert version == '0.6.50'
+    for name in ('Fire-Embers.fs','Starfield-Warp.fs','Particle-Fall.fs','Radar-Sweep.fs','Matrix-Rain.fs','LED-Marquee.fs','Aurora.fs'):
+        assert (payload / 'shaders' / name).is_file(), name
+    for marker in ('pixel-assemble','pixel-dissolve','neon-flicker','glitch','character-wave','rolling-digits'):
+        assert f'value="{marker}"' in html
+    assert 'Departure board – black' in html
+    assert 'Moving colour wave' in html
+    for marker in ('columns','rows','center-out','spiral','random-leds'):
+        assert f'value="{marker}"' in html
+    assert 'def _render_rolling_digits_text' in renderer
+    assert 'def _pixel_transition_rank_mask' in renderer

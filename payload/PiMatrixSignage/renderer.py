@@ -21,7 +21,7 @@ from datetime import datetime, date, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageSequence, ImageFilter
+from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageSequence, ImageFilter, ImageChops
 
 from ddp import DDPSender
 from shader_support import ShaderClient
@@ -1285,7 +1285,16 @@ def _apply_sprite_color_effect(sprite: Image.Image, layer: dict, elapsed: float,
             t = x / span
             col = tuple(int(round(a + (b-a)*t)) for a,b in zip(c1,c2))
             for y in range(h): px[x,y] = col
-    elif mode in ("rainbow", "cycle"):
+    elif mode == "wave":
+        # A moving two-colour sine wave remains legible on very small matrices
+        # because it changes colour without moving the glyph geometry.
+        span = max(1, w - 1)
+        phase = elapsed * speed * math.tau
+        for x in range(w):
+            t = 0.5 + 0.5 * math.sin((x / span) * math.tau * 1.35 - phase)
+            col = tuple(int(round(a + (b-a)*t)) for a,b in zip(c1,c2))
+            for y in range(h): px[x,y] = col
+    elif mode in ("rainbow", "cycle", "wave"):
         base_hue = (elapsed * speed) % 1.0
         if mode == "cycle":
             r,g,b = (v/255 for v in c1)
@@ -1492,6 +1501,9 @@ def _apply_layer_transition(viewport: Image.Image, layer: dict, elapsed: float, 
             keep = max(0, min(h, int(round(h * amount))))
             if keep: out.alpha_composite(viewport.crop((0, h - keep, w, h)), (0, h - keep))
         return out, True
+
+    if effect in ("columns","rows","spiral","center-out","random-leds"):
+        return _apply_pixel_transition_rgba(viewport, effect, amount), True
 
     if effect == "zoom":
         scale = max(0.05, amount)
@@ -1794,6 +1806,9 @@ def _render_split_flap_text(layer: dict, box_w: int, box_h: int, sy: float, elap
         for ci, target_ch in enumerate(line):
             x = line_x + ci * cell_w
             source_ch = previous_line[ci] if previous_line is not None and ci < len(previous_line) else None
+            board_cell = _split_flap_board_cell(layer, cell_w, cell_h)
+            if board_cell is not None:
+                _composite_cell_clipped(out, board_cell, x, y)
 
             if previous_line is not None:
                 if source_ch == target_ch:
@@ -1839,18 +1854,166 @@ def _render_split_flap_text(layer: dict, box_w: int, box_h: int, sy: float, elap
     return out
 
 
+
+def _split_flap_board_cell(layer: dict, cell_w: int, cell_h: int) -> Image.Image | None:
+    """Return an optional low-resolution mechanical flap cell background."""
+    style = str(layer.get("flap_board_style") or "none").lower()
+    if style == "none":
+        return None
+    if style == "departure":
+        bg, border, seam = (18, 20, 18), (54, 58, 54), (0, 0, 0)
+    elif style == "airport":
+        bg, border, seam = (9, 24, 44), (35, 69, 100), (1, 7, 14)
+    else:
+        bg = _hex_color(str(layer.get("flap_bg_color") or "#171717"), "#171717")
+        border = _hex_color(str(layer.get("flap_border_color") or "#454545"), "#454545")
+        seam = _hex_color(str(layer.get("flap_seam_color") or "#000000"), "#000000")
+    gap = max(0, min(3, int(layer.get("flap_cell_gap", 1) or 0)))
+    im = Image.new("RGBA", (max(1, cell_w), max(1, cell_h)), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(im)
+    x0=y0=gap; x1=max(x0, cell_w-1-gap); y1=max(y0, cell_h-1-gap)
+    draw.rectangle((x0,y0,x1,y1), fill=(*bg,255), outline=(*border,255))
+    seam_y=(y0+y1)//2
+    if y1-y0 >= 3:
+        draw.line((x0,seam_y,x1,seam_y), fill=(*seam,255), width=1)
+    return im
+
+
+def _animation_progress(layer: dict, elapsed: float) -> tuple[float, float, float]:
+    delay=max(0.0,float(layer.get("delay",0) or 0)); local=max(0.0,float(elapsed)-delay)
+    duration=max(0.1,float(layer.get("effect_period",1.0) or 1.0))
+    return local,duration,max(0.0,min(1.0,local/duration))
+
+
+def _stable_pixel_rank(x: int, y: int, seed: int = 0) -> int:
+    return ((x*1973 + y*9277 + x*y*26699 + seed*811) ^ (x<<5) ^ (y<<3)) & 1023
+
+
+def _apply_text_post_effect(im: Image.Image, layer: dict, elapsed: float) -> Image.Image:
+    """Cheap LED-resolution effects applied after normal text rasterisation."""
+    animation=str(layer.get("animation") or "static").lower()
+    if animation not in ("pixel-assemble","pixel-dissolve","neon-flicker","glitch"):
+        return im
+    local,duration,p=_animation_progress(layer,elapsed)
+    if animation in ("pixel-assemble","pixel-dissolve"):
+        amount=p if animation=="pixel-assemble" else abs(1.0-2.0*((local/duration)%1.0))
+        src=im.convert("RGBA"); alpha=src.getchannel("A"); a=alpha.load(); seed=int(hashlib.sha1(str(layer.get("id") or "text").encode()).hexdigest()[:4],16)
+        threshold=int(max(0.0,min(1.0,amount))*1024)
+        for y in range(src.height):
+            for x in range(src.width):
+                if a[x,y] and _stable_pixel_rank(x,y,seed)>=threshold: a[x,y]=0
+        src.putalpha(alpha); return src
+    if animation=="neon-flicker":
+        if local>=duration: return im
+        # Deliberately irregular startup sequence: failed strikes, brief full light,
+        # then a final stable ignition. Seeded so preview and live output agree.
+        seq=(0.0,.92,.12,1.0,.25,.82,.05,1.0,.42,.96,.18,1.0)
+        idx=min(len(seq)-1,int((local/duration)*len(seq)))
+        level=seq[idx]
+        seed=int(hashlib.sha1(f"{layer.get('id','')}|neon".encode()).hexdigest()[:4],16)
+        jitter=((seed+idx*37)%17)/100.0
+        return _apply_opacity(im,max(0.0,min(1.0,level-jitter)))
+    # Glitch: most of each period is stable; a short burst shifts horizontal LED
+    # bands and adds a restrained one-pixel RGB split.
+    phase=(local/duration)%1.0
+    if phase<.72: return im
+    strength=max(1,min(12,int(round(float(layer.get("effect_amount",2) or 2)))))
+    src=im.convert("RGBA"); out=Image.new("RGBA",src.size,(0,0,0,0)); band=max(1,src.height//6)
+    seed=int((local/duration)*19)+int(hashlib.sha1(str(layer.get("id") or "").encode()).hexdigest()[:4],16)
+    rng=random.Random(seed)
+    for y in range(0,src.height,band):
+        dy=min(src.height,y+band); shift=rng.randint(-strength,strength)
+        _composite_cell_clipped(out,src.crop((0,y,src.width,dy)),shift,y)
+    if strength>=2:
+        a=out.getchannel("A"); r,g,b,_=out.split()
+        ghost=Image.new("RGBA",out.size,(0,0,0,0)); ghost.putalpha(a.point(lambda v:int(v*.28)))
+        red=Image.merge("RGBA",(r,Image.new("L",out.size,0),Image.new("L",out.size,0),ghost.getchannel("A")))
+        blue=Image.merge("RGBA",(Image.new("L",out.size,0),Image.new("L",out.size,0),b,ghost.getchannel("A")))
+        _composite_cell_clipped(out,red,1,0); _composite_cell_clipped(out,blue,-1,0)
+    return out
+
+
+def _fixed_character_rows(layer: dict, text: str, box_w: int, box_h: int, sy: float, upload_fonts_dir: str):
+    return _split_flap_text_layout(layer,text or " ",box_w,box_h,sy,upload_fonts_dir)
+
+
+def _render_character_wave_text(layer: dict, box_w: int, box_h: int, sy: float, elapsed: float,
+                                now: datetime, upload_fonts_dir: str) -> Image.Image:
+    text=_layer_text_value(dict(layer,animation="static"),now,elapsed)
+    lines,pad,inner_w,board_y,cell_w,cell_h,line_gap,align,child_override=_fixed_character_rows(layer,text,box_w,box_h,sy,upload_fonts_dir)
+    out=Image.new("RGBA",(box_w,box_h),(0,0,0,0)); local,duration,_p=_animation_progress(layer,elapsed)
+    amp=max(1,min(12,int(round(float(layer.get("effect_amount",2) or 2)*sy))))
+    stagger=max(0.0,min(.5,float(layer.get("effect_stagger",.08) or .08)))
+    idx=0
+    for li,line in enumerate(lines):
+        line_w=max(1,len(line)*cell_w); line_x=pad+_align_pos(inner_w,line_w,align,0); base_y=board_y+li*(cell_h+line_gap)
+        for ci,ch in enumerate(line):
+            if not ch.isspace():
+                child=dict(layer);child.update(child_override);child.update(text=ch,animation="static",delay=0,entrance_effect="none",exit_effect="none")
+                glyph=_render_scene_text(child,cell_w,cell_h,sy,elapsed,now,upload_fonts_dir)
+                offset=int(round(math.sin((local/duration)*math.tau-idx*stagger*math.tau)*amp))
+                _composite_cell_clipped(out,glyph,line_x+ci*cell_w,base_y+offset)
+            idx+=1
+    return out
+
+
+def _render_rolling_digits_text(layer: dict, box_w: int, box_h: int, sy: float, elapsed: float,
+                                now: datetime, upload_fonts_dir: str) -> Image.Image:
+    transform=str(layer.get("text_transform") or "none")
+    is_widget=str(layer.get("type") or "text")=="widget"
+    raw_target=_widget_text(layer,now) if is_widget else _token_text(str(layer.get("text") or ""),now)
+    target=_transform_text(raw_target,transform)
+    previous_sequence=layer.get("_line_sequence_previous_text")
+    local,duration,p=_animation_progress(layer,elapsed)
+    if previous_sequence is not None:
+        source=_transform_text(_token_text(str(previous_sequence or ""),now),transform); progress=p
+    else:
+        raw_source=_widget_text(layer,now-timedelta(seconds=1)) if is_widget else _token_text(str(layer.get("text") or ""),now-timedelta(seconds=1))
+        source=_transform_text(raw_source,transform)
+        # Dynamic clocks/countdowns roll at the second boundary. Static numeric text
+        # gets one useful roll-in at layer start instead of doing nothing forever.
+        if source==target:
+            source="".join(str((int(ch)-1)%10) if ch.isdigit() else ch for ch in target); progress=p
+        else:
+            progress=min(1.0,(now.microsecond/1_000_000.0)/max(.05,min(duration,.95)))
+    cols=max(1,len(source),len(target)); align=str(layer.get("align") or "center")
+    source=_split_flap_fixed_row(source,cols,align); target=_split_flap_fixed_row(target,cols,align)
+    lines,pad,inner_w,board_y,cell_w,cell_h,line_gap,align,child_override=_fixed_character_rows(layer,target,box_w,box_h,sy,upload_fonts_dir)
+    out=Image.new("RGBA",(box_w,box_h),(0,0,0,0)); line=lines[0] if lines else target
+    line_x=pad+_align_pos(inner_w,max(1,len(line)*cell_w),align,0)
+    def glyph(ch: str)->Image.Image:
+        child=dict(layer);child.update(child_override);child.update(text=ch,animation="static",delay=0,entrance_effect="none",exit_effect="none")
+        return _render_scene_text(child,cell_w,cell_h,sy,elapsed,now,upload_fonts_dir)
+    for ci,dst in enumerate(target):
+        src=source[ci] if ci<len(source) else " "; x=line_x+ci*cell_w
+        if src==dst or not (src.isdigit() or dst.isdigit()):
+            if not dst.isspace(): _composite_cell_clipped(out,glyph(dst),x,board_y)
+            continue
+        old=glyph(src); new=glyph(dst); shift=int(round(cell_h*progress)); cell=Image.new("RGBA",(cell_w,cell_h),(0,0,0,0))
+        _composite_cell_clipped(cell,old,0,-shift); _composite_cell_clipped(cell,new,0,cell_h-shift)
+        _composite_cell_clipped(out,cell,x,board_y)
+    return out
+
+
 def _render_scene_text(layer: dict, box_w: int, box_h: int, sy: float, elapsed: float, now: datetime, upload_fonts_dir: str) -> Image.Image:
-    if str(layer.get("animation") or "static") == "split-flap" and str(layer.get("type") or "text") == "text":
+    animation = str(layer.get("animation") or "static")
+    if animation == "split-flap" and str(layer.get("type") or "text") == "text":
         return _render_split_flap_text(layer, box_w, box_h, sy, elapsed, now, upload_fonts_dir)
+    if animation == "character-wave" and str(layer.get("type") or "text") == "text":
+        return _render_character_wave_text(layer, box_w, box_h, sy, elapsed, now, upload_fonts_dir)
+    if animation == "rolling-digits" and str(layer.get("type") or "text") in ("text", "widget"):
+        return _render_rolling_digits_text(layer, box_w, box_h, sy, elapsed, now, upload_fonts_dir)
     text = _layer_text_value(layer, now, elapsed)
     cache_fields = {k: layer.get(k) for k in (
         "font", "font_size", "auto_fit", "wrap", "color", "outline_color", "outline_width",
         "padding", "align", "valign", "line_spacing", "shadow_color", "shadow_x", "shadow_y",
         "render_mode", "pixel_scale", "pixel_bold", "letter_spacing", "text_transform",
-        "overflow", "break_long_words", "color_effect", "color2", "color_speed", "color_palette", "glow", "glow_color"
+        "overflow", "break_long_words", "color_effect", "color2", "color_speed", "color_palette", "glow", "glow_color",
+        "animation", "effect_period", "effect_amount", "effect_stagger"
     )}
-    animated_color = str(layer.get("color_effect") or "none").lower() in ("rainbow", "cycle")
-    cache_key = json.dumps([box_w, box_h, round(sy, 5), text, cache_fields, round(elapsed, 2) if animated_color else 0], sort_keys=True, default=str)
+    animated_color = str(layer.get("color_effect") or "none").lower() in ("rainbow", "cycle", "wave")
+    animated_post = animation in ("pixel-assemble","pixel-dissolve","neon-flicker","glitch")
+    cache_key = json.dumps([box_w, box_h, round(sy, 5), text, cache_fields, round(elapsed, 2) if (animated_color or animated_post) else 0], sort_keys=True, default=str)
     cached = _TEXT_LAYER_CACHE.get(cache_key)
     if cached is not None:
         return cached.copy()
@@ -1931,6 +2094,7 @@ def _render_scene_text(layer: dict, box_w: int, box_h: int, sy: float, elapsed: 
         shadow.putalpha(alpha)
         im.alpha_composite(shadow, (tx + body_dx + shadow_x, ty + body_dy + shadow_y))
     im.alpha_composite(sprite, (tx,ty))
+    im = _apply_text_post_effect(im, layer, elapsed)
 
     _TEXT_LAYER_CACHE[cache_key] = im.copy()
     if len(_TEXT_LAYER_CACHE) > 256:
@@ -2912,6 +3076,51 @@ def _render_layer_content(layer: dict, ltype: str, w: int, h: int, sy: float, el
     return _render_scene_text(layer, w, h, sy, elapsed, now, upload_fonts_dir)
 
 
+
+@lru_cache(maxsize=96)
+def _pixel_transition_rank_mask(effect: str, w: int, h: int) -> Image.Image:
+    """Precompute an 8-bit reveal order so per-frame transitions stay cheap on Pi."""
+    effect=str(effect or "").lower();w=max(1,int(w));h=max(1,int(h));im=Image.new("L",(w,h),255);px=im.load()
+    cx=(w-1)*.5;cy=(h-1)*.5;maxd=max(1.0,math.hypot(cx,cy))
+    for y in range(h):
+        for x in range(w):
+            if effect=="columns": rank=x/max(1,w-1)
+            elif effect=="rows": rank=y/max(1,h-1)
+            elif effect=="center-out": rank=math.hypot(x-cx,y-cy)/maxd
+            elif effect=="spiral":
+                dx=x-cx;dy=y-cy;rad=math.hypot(dx,dy)/maxd;ang=(math.atan2(dy,dx)+math.pi)/math.tau
+                rank=min(1.0,rad*.72+((ang+rad*1.7)%1.0)*.28)
+            else: rank=_stable_pixel_rank(x,y,29)/1023.0
+            px[x,y]=max(0,min(255,int(round(rank*255))))
+    return im
+
+
+def _pixel_transition_mask(effect: str, w: int, h: int, amount: float) -> Image.Image:
+    amount=max(0.0,min(1.0,float(amount)))
+    if amount<=0: return Image.new("L",(w,h),0)
+    if amount>=1: return Image.new("L",(w,h),255)
+    threshold=max(0,min(255,int(round(amount*255))))
+    rank=_pixel_transition_rank_mask(effect,w,h)
+    return rank.point([255 if i<=threshold else 0 for i in range(256)])
+
+
+def _pixel_transition_visible(effect: str, x: int, y: int, w: int, h: int, amount: float) -> bool:
+    """Compatibility/testing helper backed by the cached transition order map."""
+    return _pixel_transition_mask(effect,w,h,amount).getpixel((x,y))>0
+
+
+def _apply_pixel_transition_rgba(viewport: Image.Image, effect: str, amount: float) -> Image.Image:
+    src=viewport.convert("RGBA");mask=_pixel_transition_mask(effect,*src.size,amount)
+    alpha=ImageChops.multiply(src.getchannel("A"),mask)
+    src.putalpha(alpha);return src
+
+
+def _apply_pixel_transition_rgb(im: Image.Image, effect: str, amount: float) -> Image.Image:
+    src=im.convert("RGB");mask=_pixel_transition_mask(effect,*src.size,amount)
+    return Image.composite(src,Image.new("RGB",src.size,(0,0,0)),mask)
+
+
+
 def _apply_scene_transition(im: Image.Image, scene: dict, elapsed: float,
                             forced_exit_elapsed: float | None = None) -> Image.Image:
     """Apply a whole-scene entrance or forced exit transition.
@@ -2968,6 +3177,8 @@ def _apply_scene_transition(im: Image.Image, scene: dict, elapsed: float,
             elif dy<0: out.paste(im,(dx,dy+h))
             elif dy>0: out.paste(im,(dx,dy-h))
         return out
+    if effect in ("columns","rows","spiral","center-out","random-leds"):
+        return _apply_pixel_transition_rgb(im, effect, amount)
     if effect == "zoom":
         scale=max(.04, amount)
         nw,nh=max(1,int(round(w*scale))),max(1,int(round(h*scale)))
@@ -3103,6 +3314,8 @@ def render_scene(scene: dict, width: int, height: int, elapsed: float, now: date
             _alpha_composite_clipped(base,_apply_opacity(viewport,opacity),x,y,zone_clip);continue
 
         lim=_render_layer_content(content_layer,ltype,w,h,sy,content_elapsed,now,upload_fonts_dir)
+        if ltype not in ("text","widget") and animation in ("pixel-assemble","pixel-dissolve","neon-flicker","glitch"):
+            lim=_apply_text_post_effect(lim,content_layer,content_elapsed)
         rotation=int(round(float(layer.get("rotation",0) or 0)))%360
         if rotation:
             crisp=layer_is_crisp

@@ -1,4 +1,16 @@
-# Pi Matrix Signage v0.6.49
+# Pi Matrix Signage v0.6.50
+
+
+## v0.6.50 – Low-resolution effects & shader expansion
+
+- Adds **Pixel assemble** and looping **Pixel dissolve / reform** animations using deterministic physical-LED masks, plus a **Neon flicker** start-up effect and **Glitch / signal interference** with horizontal band displacement and restrained RGB separation.
+- Adds **Character wave** with LED-pixel amplitude/phase controls and **Rolling number display** for text plus live clock/countdown widgets. Dynamic digits roll at their actual value change; static numbers receive a useful roll-in at layer start.
+- Extends **Split-flap display** with optional black departure-board, blue airport-board or custom fixed mechanical cell casing, including cell background, border, centre seam and LED-pixel gap controls.
+- Adds **Moving colour wave** to text colour effects so colour moves through stationary glyphs without compromising readability.
+- Adds six built-in low-resolution shaders: **Fire & Embers**, **LED Marquee Chase**, **Starfield / Warp Speed**, **Falling Particles** (Snow, Confetti, Bubbles, Stars and Hearts), **Radar Sweep**, and **Matrix / Code Rain**.
+- Expands the existing **Aurora** shader into configurable Calm ribbons, Curtains and Vivid waves styles with ribbon width, shimmer, highlight colour and opacity controls.
+- Adds five new deterministic pixel transitions for both whole scenes and individual layer entrances/exits: **Pixel columns**, **Pixel rows**, **Pixels centre-out**, **Pixel spiral**, and **Random LEDs**. Existing dissolve, pixel scatter, Venetian blinds and checkerboard transitions remain available.
+- All new shaders remain isolated behind the existing adaptive shader helper; all CPU text/pixel effects operate at the physical LED/layer resolution and stay clipped to their Designer layer.
 
 
 ## v0.6.49 – Fixed-cell sequential split-flap transitions

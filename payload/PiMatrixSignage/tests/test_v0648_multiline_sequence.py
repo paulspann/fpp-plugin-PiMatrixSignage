@@ -100,4 +100,4 @@ def test_render_scene_passes_only_the_active_line_to_text_renderer(monkeypatch):
     assert seen == [("SECOND", 5.0)]
 
 def test_release_version_is_v0648():
-    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.6.49"
+    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.6.50"
