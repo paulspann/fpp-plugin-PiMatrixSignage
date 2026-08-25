@@ -1668,27 +1668,39 @@ def _split_flap_text_layout(layer: dict, text: str, box_w: int, box_h: int, sy: 
         candidates = range(8, 0, -1) if auto_fit else (requested,)
         chosen = requested
         for scale in candidates:
-            # Mechanical split-flap casings need real LED space around the glyph.
-            # Without this the border sits almost on top of the 5x7 character and
-            # visually disappears on P5/P10 panels.  One LED unit on each side
-            # and top/bottom gives the cell a recognisable physical face while
-            # remaining compact enough for 32-pixel-high signs.
-            case_x = scale if mechanical_cells else 0
-            case_y = scale if mechanical_cells else 0
-            cell_w = max(1, (gw + (1 if bold else 0) + gap_units) * scale + case_x * 2)
-            cell_h = max(1, gh * scale + case_y * 2)
+            # A mechanical casing must surround the glyph, not share its pixels.
+            # Reserve a transparent module gap, a one-pixel frame, and at least
+            # one *clear* LED pixel between the frame and the illuminated glyph.
+            # At scale=1 this deliberately makes a 5x7 glyph sit inside an
+            # 11x13-ish physical module instead of the old 8x9 box whose border
+            # could land directly on the first/last glyph column.
+            configured_gap = max(0, min(3, int(layer.get("flap_cell_gap", 1) or 0)))
+            module_gap = max(1, configured_gap) if board_style in ("departure", "airport") else configured_gap
+            requested_case_padding = max(1, min(6, int(layer.get("flap_case_padding", 2) or 2)))
+            face_padding = max(2, scale, requested_case_padding) if mechanical_cells else 0
+            content_inset = module_gap + face_padding if mechanical_cells else 0
+            glyph_w = max(1, (gw + (1 if bold else 0)) * scale)
+            glyph_h = max(1, gh * scale)
+            cell_w = max(1, glyph_w + content_inset * 2) if mechanical_cells else max(1, (gw + (1 if bold else 0) + gap_units) * scale)
+            cell_h = max(1, glyph_h + content_inset * 2)
             line_gap = line_gap_units * scale
             board_w = max_cols * cell_w
             board_h = line_count * cell_h + max(0, line_count - 1) * line_gap
             chosen = scale
             if not auto_fit or (board_w <= inner_w and board_h <= inner_h):
                 break
-        case_x = chosen if mechanical_cells else 0
-        case_y = chosen if mechanical_cells else 0
-        cell_w = max(1, (gw + (1 if bold else 0) + gap_units) * chosen + case_x * 2)
-        cell_h = max(1, gh * chosen + case_y * 2)
+        configured_gap = max(0, min(3, int(layer.get("flap_cell_gap", 1) or 0)))
+        module_gap = max(1, configured_gap) if board_style in ("departure", "airport") else configured_gap
+        requested_case_padding = max(1, min(6, int(layer.get("flap_case_padding", 2) or 2)))
+        face_padding = max(2, chosen, requested_case_padding) if mechanical_cells else 0
+        content_inset = module_gap + face_padding if mechanical_cells else 0
+        glyph_w = max(1, (gw + (1 if bold else 0)) * chosen)
+        glyph_h = max(1, gh * chosen)
+        cell_w = max(1, glyph_w + content_inset * 2) if mechanical_cells else max(1, (gw + (1 if bold else 0) + gap_units) * chosen)
+        cell_h = max(1, glyph_h + content_inset * 2)
         line_gap = line_gap_units * chosen
-        child_override.update({"render_mode": render_mode, "pixel_scale": chosen, "letter_spacing": 0})
+        child_override.update({"render_mode": render_mode, "pixel_scale": chosen, "letter_spacing": 0,
+                               "_flap_content_inset_x": content_inset, "_flap_content_inset_y": content_inset})
     else:
         stroke = max(0, int(round(float(layer.get("outline_width", 0) or 0) * sy)))
         base_size = max(4, int(round(float(layer.get("font_size", 18) or 18) * sy)))
@@ -1708,19 +1720,27 @@ def _split_flap_text_layout(layer: dict, text: str, box_w: int, box_h: int, sy: 
                                            bool(layer.get("pixel_bold", False)), 0)
                 widths.append(probe.width); heights.append(probe.height)
             gap = max(1, letter_spacing + 1)
-            case_pad = max(1, int(round(size * .08))) if mechanical_cells else 0
-            return (max(widths, default=max(1, size // 2)) + gap + case_pad * 2,
-                    max(heights, default=max(1, size)) + case_pad * 2,
-                    max(0, int(round(size * spacing_ratio))))
+            configured_gap = max(0, min(3, int(layer.get("flap_cell_gap", 1) or 0)))
+            module_gap = max(1, configured_gap) if board_style in ("departure", "airport") else configured_gap
+            # Smooth/pixel TTF gets the same physical rule: frame + visible air
+            # around the glyph.  Use a modest font-relative inset, but never less
+            # than two real output pixels inside the module gap.
+            requested_case_padding = max(1, min(6, int(layer.get("flap_case_padding", 2) or 2)))
+            face_padding = max(2, requested_case_padding, int(round(size * .12))) if mechanical_cells else 0
+            content_inset = module_gap + face_padding if mechanical_cells else 0
+            return (max(widths, default=max(1, size // 2)) + gap + content_inset * 2,
+                    max(heights, default=max(1, size)) + content_inset * 2,
+                    max(0, int(round(size * spacing_ratio))), content_inset)
 
-        cell_w, cell_h, line_gap = metrics(font, chosen_size)
+        cell_w, cell_h, line_gap, content_inset = metrics(font, chosen_size)
         if auto_fit:
             while chosen_size > 4 and (max_cols * cell_w > inner_w or line_count * cell_h + max(0, line_count - 1) * line_gap > inner_h):
                 chosen_size -= 1
                 font = _load_font(str(layer.get("font") or ""), chosen_size, upload_fonts_dir)
-                cell_w, cell_h, line_gap = metrics(font, chosen_size)
+                cell_w, cell_h, line_gap, content_inset = metrics(font, chosen_size)
         child_override.update({"font_size": chosen_size / max(0.0001, sy), "render_mode": render_mode,
-                               "letter_spacing": 0})
+                               "letter_spacing": 0, "_flap_content_inset_x": content_inset,
+                               "_flap_content_inset_y": content_inset})
 
     board_h = line_count * cell_h + max(0, line_count - 1) * line_gap
     board_y = pad + _align_pos(inner_h, board_h, valign, 0)
@@ -1809,8 +1829,20 @@ def _render_split_flap_text(layer: dict, box_w: int, box_h: int, sy: float, elap
     def render_char(ch: str) -> Image.Image:
         child = dict(layer)
         child.update(child_override)
+        inset_x = max(0, int(child.pop("_flap_content_inset_x", 0) or 0))
+        inset_y = max(0, int(child.pop("_flap_content_inset_y", 0) or 0))
         child.update(text=ch, animation="static", delay=0, entrance_effect="none", exit_effect="none")
-        return _render_scene_text(child, cell_w, cell_h, sy, elapsed, now, upload_fonts_dir)
+        # Render the glyph into the flap's *inner face*, then place that inside
+        # the physical module.  This guarantees the frame cannot ever be hidden
+        # underneath the first/last glyph column, even with the 5x7 LED font.
+        inner_char_w = max(1, cell_w - inset_x * 2)
+        inner_char_h = max(1, cell_h - inset_y * 2)
+        glyph = _render_scene_text(child, inner_char_w, inner_char_h, sy, elapsed, now, upload_fonts_dir)
+        if inset_x <= 0 and inset_y <= 0:
+            return glyph
+        framed = Image.new("RGBA", (cell_w, cell_h), (0, 0, 0, 0))
+        framed.alpha_composite(glyph, (inset_x, inset_y))
+        return framed
 
     for li, line in enumerate(lines):
         line_w = max(1, len(line) * cell_w)

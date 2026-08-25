@@ -1,4 +1,4 @@
-# Pi Matrix Signage FPP Plugin v0.1.20
+# Pi Matrix Signage FPP Plugin v0.1.22
 
 10+ bootstrap/integration plugin for Pi Matrix Signage on Raspberry Pi.
 
@@ -27,7 +27,7 @@ For beta testing, open FPP's Plugin Manager, paste that raw `pluginInfo.json` UR
 
 ## Current bootstrap payload
 
-This test bootstrap contains Pi Matrix Signage v0.6.51. The next commercial-hardening stage should move the application payload out of the public bootstrap repository and retrieve a signed, licence-authorised release package from the ISSL/WHMCS licensing service.
+This test bootstrap contains Pi Matrix Signage v0.6.52. The next commercial-hardening stage should move the application payload out of the public bootstrap repository and retrieve a signed, licence-authorised release package from the ISSL/WHMCS licensing service.
 
 
 ## v0.1.2
@@ -149,3 +149,9 @@ FPP Plugin Manager updates intentionally do **not** ship `scripts/fpp_upgrade.sh
 
 - Bundles Pi Matrix Signage **v0.6.51**.
 - Strengthens the low-resolution Departure Board Black split-flap casing with larger fixed cells, clearer frames, distinct upper/lower flap faces, a visible over-glyph centre hinge and persistent blank physical modules.
+
+
+## v0.1.22
+
+- Bundles Pi Matrix Signage **v0.6.52**.
+- Moves departure/airport split-flap casing fully outside the glyph, adds guaranteed inner LED clearance and exposes adjustable casing padding for low-resolution physical-module styling.

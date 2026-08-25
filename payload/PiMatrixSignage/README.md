@@ -1,5 +1,13 @@
-# Pi Matrix Signage v0.6.51
+# Pi Matrix Signage v0.6.52
 
+
+
+## v0.6.52 – True outer split-flap casing
+
+- Reworks the mechanical split-flap geometry so the departure/airport frame genuinely surrounds the glyph instead of sharing the first/last character pixels.
+- Built-in mechanical cells now reserve a transparent module gap, a one-pixel frame and clear LED-pixel breathing room between the frame and the illuminated character; blank cells use the same full-size casing.
+- Glyphs render into an explicit inner flap-face rectangle before being composited into the physical module, preventing the casing border from ever being hidden by a 5x7 character.
+- Adds an adjustable **Casing padding (LED px)** Designer control (1–6, default 2) for chunkier or tighter departure-board modules while preserving plain split-flap character geometry unchanged.
 
 
 ## v0.6.51 – Stronger low-resolution departure-board cells

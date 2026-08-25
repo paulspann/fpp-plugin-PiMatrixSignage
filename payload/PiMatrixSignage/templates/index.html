@@ -382,12 +382,13 @@
                       <label>Centre seam<input type="color" id="layerFlapSeamColor" value="#000000"></label>
                       <label>Cell border<input type="color" id="layerFlapBorderColor" value="#454545"></label>
                       <label>Cell gap (LED px)<input type="number" id="layerFlapCellGap" min="0" max="3" step="1" value="1"></label>
+                      <label>Casing padding (LED px)<input type="number" id="layerFlapCasePadding" min="1" max="6" step="1" value="2"></label>
                     </div>
                     <div class="form-grid cols-2 hidden" id="advancedTextEffectOptions">
                       <label>Effect amount (LED px)<input type="number" id="layerEffectAmount" min="1" max="12" step="1" value="2"></label>
                       <label>Character phase / stagger<input type="number" id="layerEffectStagger" min="0" max="0.5" step="0.01" value="0.08"></label>
                     </div>
-                    <p class="hint">Effects are designed around physical LED pixels. <strong>Effect period</strong> controls split-flap settling, pixel assembly, neon start-up, glitch bursts, character waves and rolling digits. Departure-board casing adds fixed mechanical cells without requiring high-resolution 3D detail.</p>
+                    <p class="hint">Effects are designed around physical LED pixels. <strong>Effect period</strong> controls split-flap settling, pixel assembly, neon start-up, glitch bursts, character waves and rolling digits. Departure-board casing surrounds the glyph with a real frame and adjustable LED-pixel padding; increase Casing padding for a chunkier mechanical board.</p>
                   </details>
 
                   <details id="layerTransitionProperties" class="inspector-group inspector-transitions">
