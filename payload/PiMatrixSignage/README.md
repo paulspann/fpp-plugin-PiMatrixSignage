@@ -1,4 +1,13 @@
-# Pi Matrix Signage v0.6.48
+# Pi Matrix Signage v0.6.49
+
+
+## v0.6.49 – Fixed-cell sequential split-flap transitions
+
+- Sequential multiline **Split-flap display** now behaves as one physical departure-board row instead of re-laying out each line independently. The widest non-empty line defines a fixed character-cell bank for the whole sequence.
+- Each new line starts from the previous line's settled characters. Cells whose character changes flip in place; unchanged cells remain steady rather than restarting unnecessarily.
+- If the next line is shorter, surplus cells visibly rotate through the flap animation to a transparent blank instead of disappearing immediately.
+- Left, centre and right alignment now place every sequential line within the same fixed board width, eliminating the apparent board-position jump between differently sized lines.
+- The first sequential line enters from blank cells, preserving the same physical-cell model from the start of the scene.
 
 
 ## v0.6.48 – Sequential multiline text

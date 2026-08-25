@@ -678,6 +678,12 @@ def _sequenced_text_layer(layer: dict, elapsed: float, scene_duration: float) ->
     child["_line_sequence_index"] = index
     child["_line_sequence_count"] = len(lines)
     child["_line_sequence_slot"] = slot
+    # Keep the complete sequence context on the transient child.  The split-flap
+    # renderer uses this to model one fixed bank of physical character cells: a
+    # new line starts from the previous line instead of appearing from nowhere,
+    # and cells no longer used by the new line can genuinely flap to blank.
+    child["_line_sequence_lines"] = lines
+    child["_line_sequence_previous_text"] = lines[index - 1] if index > 0 else ""
     return child, slot_elapsed
 
 
@@ -1527,6 +1533,46 @@ def _split_flap_sequence(layer: dict, text: str, index: int, target: str, cycles
     return seq
 
 
+def _split_flap_fixed_row(text: str, columns: int, align: str) -> str:
+    """Place one sequential line into a fixed bank of split-flap cells."""
+    value = str(text or "")
+    columns = max(1, int(columns or 1))
+    if len(value) >= columns:
+        return value[:columns]
+    spare = columns - len(value)
+    if align == "right":
+        return " " * spare + value
+    if align == "center":
+        left = spare // 2
+        return " " * left + value + " " * (spare - left)
+    return value + " " * spare
+
+
+def _split_flap_transition_sequence(layer: dict, text: str, index: int, source: str, target: str, cycles: int) -> list[str]:
+    """Build a physical-cell transition from the previous character to the next.
+
+    Sequential departure-board lines must not discard the old cell contents at a
+    slot boundary.  The old glyph is the first flap state.  When the destination
+    is blank, fake glyphs use the old glyph's alphabet/number family and the final
+    flap lands on a genuinely transparent blank cell.
+    """
+    if source == target:
+        return [target]
+    seq = [source]
+    previous = source
+    fake_basis = target if not target.isspace() else source
+    for cycle in range(max(0, int(cycles))):
+        ch = _split_flap_fake_char(layer, text, index, fake_basis, cycle, previous)
+        # Punctuation deliberately does not cycle.  Avoid filling the sequence
+        # with duplicate stages while still allowing the final turn to blank.
+        if ch != previous and ch != target:
+            seq.append(ch)
+            previous = ch
+    if seq[-1] != target:
+        seq.append(target)
+    return seq
+
+
 def _split_flap_cell(src: Image.Image, dst: Image.Image, phase: float, crisp: bool) -> Image.Image:
     """Approximate a mechanical split-flap rotation inside one fixed character cell.
 
@@ -1666,13 +1712,37 @@ def _composite_cell_clipped(base: Image.Image, overlay: Image.Image, x: int, y: 
 
 def _render_split_flap_text(layer: dict, box_w: int, box_h: int, sy: float, elapsed: float,
                             now: datetime, upload_fonts_dir: str) -> Image.Image:
-    target = _transform_text(_token_text(str(layer.get("text") or ""), now), str(layer.get("text_transform") or "none"))
+    transform = str(layer.get("text_transform") or "none")
+    target = _transform_text(_token_text(str(layer.get("text") or ""), now), transform)
     delay = max(0.0, float(layer.get("delay", 0) or 0))
     local = max(0.0, float(elapsed) - delay)
     duration = max(0.1, float(layer.get("effect_period", 1.0) or 1.0))
     cycles = max(1, min(12, int(layer.get("flap_cycles", 4) or 4)))
     stagger = max(0.0, min(0.5, float(layer.get("flap_stagger", 0.06) or 0.0)))
     order = str(layer.get("flap_order") or "left").lower()
+    align = str(layer.get("align") or "center")
+    if align not in ("left", "center", "right"):
+        align = "center"
+
+    # Sequential multiline split-flap text is one physical board, not a series
+    # of independently sized text sprites.  Work out the widest transformed line
+    # and pad both the old and new line into that same fixed bank of cells.
+    sequence_raw = layer.get("_line_sequence_lines")
+    sequential = isinstance(sequence_raw, list) and len(sequence_raw) > 1
+    previous_lines: list[str] | None = None
+    if sequential:
+        sequence_text = [
+            _transform_text(_token_text(str(line or ""), now), transform)
+            for line in sequence_raw
+        ]
+        board_cols = max(1, max((len(line) for line in sequence_text), default=1))
+        previous = _transform_text(
+            _token_text(str(layer.get("_line_sequence_previous_text") or ""), now), transform
+        )
+        target = _split_flap_fixed_row(target, board_cols, align)
+        previous = _split_flap_fixed_row(previous, board_cols, align)
+        previous_lines = [previous]
+
     if not target:
         child = dict(layer); child.update(animation="static", text=target)
         return _render_scene_text(child, box_w, box_h, sy, elapsed, now, upload_fonts_dir)
@@ -1681,11 +1751,22 @@ def _render_split_flap_text(layer: dict, box_w: int, box_h: int, sy: float, elap
         layer, target, box_w, box_h, sy, upload_fonts_dir
     )
     out = Image.new("RGBA", (box_w, box_h), (0, 0, 0, 0))
-    positions = [(li, ci, ch) for li, line in enumerate(lines) for ci, ch in enumerate(line)
-                 if not ch.isspace() and ch not in ("\r", "\n")]
-    if not positions:
-        child = dict(layer); child.update(animation="static", text=target)
-        return _render_scene_text(child, box_w, box_h, sy, elapsed, now, upload_fonts_dir)
+
+    if previous_lines is None:
+        # Original single-line/together behaviour: only visible destination cells
+        # participate, and each one begins on its deterministic fake character.
+        positions = [(li, ci, ch) for li, line in enumerate(lines) for ci, ch in enumerate(line)
+                     if not ch.isspace() and ch not in ("\r", "\n")]
+    else:
+        # Fixed sequential board: every cell whose state changes participates,
+        # including old visible cells whose destination is now a blank flap.
+        positions = []
+        for li, line in enumerate(lines):
+            previous_line = previous_lines[li] if li < len(previous_lines) else " " * len(line)
+            for ci, ch in enumerate(line):
+                src_ch = previous_line[ci] if ci < len(previous_line) else " "
+                if src_ch != ch:
+                    positions.append((li, ci, ch))
 
     ordered = list(positions)
     if order == "right":
@@ -1699,33 +1780,58 @@ def _render_split_flap_text(layer: dict, box_w: int, box_h: int, sy: float, elap
     crisp = _is_crisp_mode(str(child_override.get("render_mode") or layer.get("render_mode") or "smooth"))
     flat_index = 0
 
+    def render_char(ch: str) -> Image.Image:
+        child = dict(layer)
+        child.update(child_override)
+        child.update(text=ch, animation="static", delay=0, entrance_effect="none", exit_effect="none")
+        return _render_scene_text(child, cell_w, cell_h, sy, elapsed, now, upload_fonts_dir)
+
     for li, line in enumerate(lines):
         line_w = max(1, len(line) * cell_w)
         line_x = pad + _align_pos(inner_w, line_w, align, 0)
         y = board_y + li * (cell_h + line_gap)
+        previous_line = previous_lines[li] if previous_lines is not None and li < len(previous_lines) else None
         for ci, target_ch in enumerate(line):
             x = line_x + ci * cell_w
-            if target_ch.isspace():
-                flat_index += 1
-                continue
-            seq = _split_flap_sequence(layer, target, flat_index, target_ch, cycles)
-            char_local = local - rank.get((li, ci), 0) * actual_stagger
-            if char_local <= 0:
-                src_ch = dst_ch = seq[0]; phase = 0.0
-            elif char_local >= flip_window:
-                src_ch = dst_ch = target_ch; phase = 1.0
+            source_ch = previous_line[ci] if previous_line is not None and ci < len(previous_line) else None
+
+            if previous_line is not None:
+                if source_ch == target_ch:
+                    if not target_ch.isspace():
+                        _composite_cell_clipped(out, render_char(target_ch), x, y)
+                    flat_index += 1
+                    continue
+                seq = _split_flap_transition_sequence(layer, target, flat_index, source_ch or " ", target_ch, cycles)
+                char_local = local - rank.get((li, ci), 0) * actual_stagger
+                stage_count = max(1, len(seq) - 1)
+                if char_local <= 0:
+                    src_ch = dst_ch = seq[0]; phase = 0.0
+                elif char_local >= flip_window:
+                    src_ch = dst_ch = target_ch; phase = 1.0
+                else:
+                    scaled = max(0.0, min(float(stage_count) - 1e-9, char_local / flip_window * stage_count))
+                    stage = min(stage_count - 1, int(scaled))
+                    phase = scaled - stage
+                    src_ch, dst_ch = seq[stage], seq[stage + 1]
             else:
-                scaled = max(0.0, min(float(cycles) - 1e-9, char_local / flip_window * cycles))
-                stage = min(cycles - 1, int(scaled))
-                phase = scaled - stage
-                src_ch, dst_ch = seq[stage], seq[stage + 1]
+                if target_ch.isspace():
+                    flat_index += 1
+                    continue
+                seq = _split_flap_sequence(layer, target, flat_index, target_ch, cycles)
+                char_local = local - rank.get((li, ci), 0) * actual_stagger
+                if char_local <= 0:
+                    src_ch = dst_ch = seq[0]; phase = 0.0
+                elif char_local >= flip_window:
+                    src_ch = dst_ch = target_ch; phase = 1.0
+                else:
+                    scaled = max(0.0, min(float(cycles) - 1e-9, char_local / flip_window * cycles))
+                    stage = min(cycles - 1, int(scaled))
+                    phase = scaled - stage
+                    src_ch, dst_ch = seq[stage], seq[stage + 1]
 
-            def render_char(ch: str) -> Image.Image:
-                child = dict(layer)
-                child.update(child_override)
-                child.update(text=ch, animation="static", delay=0, entrance_effect="none", exit_effect="none")
-                return _render_scene_text(child, cell_w, cell_h, sy, elapsed, now, upload_fonts_dir)
-
+            # A destination/source space still owns a real fixed cell.  Rendering
+            # it yields transparent ink, allowing _split_flap_cell() to visibly
+            # fold the previous glyph away instead of dropping it between frames.
             src = render_char(src_ch)
             cell = src if src_ch == dst_ch else _split_flap_cell(src, render_char(dst_ch), phase, crisp)
             _composite_cell_clipped(out, cell, x, y)
