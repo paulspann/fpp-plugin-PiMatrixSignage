@@ -1569,14 +1569,17 @@ def _split_flap_fake_char(layer: dict, text: str, index: int, target: str, cycle
 
 
 def _split_flap_sequence(layer: dict, text: str, index: int, target: str, cycles: int) -> list[str]:
-    seq: list[str] = []
-    previous = ""
-    for cycle in range(cycles):
-        ch = _split_flap_fake_char(layer, text, index, target, cycle, previous)
-        seq.append(ch)
-        previous = ch
-    seq.append(target)
-    return seq
+    """Build the first appearance of a split-flap cell.
+
+    A real departure board that is blank before a message arrives does not show
+    arbitrary letters first.  Keep the cell genuinely blank until its staggered
+    turn begins, then make one physical flap transition directly to the requested
+    character.  Fake flips remain available for changes between already-populated
+    cells (and when rotating an old character away to blank).
+    """
+    if target.isspace() or target in ("\r", "\n"):
+        return [target]
+    return [" ", target]
 
 
 def _split_flap_fixed_row(text: str, columns: int, align: str) -> str:
@@ -1604,6 +1607,11 @@ def _split_flap_transition_sequence(layer: dict, text: str, index: int, source: 
     """
     if source == target:
         return [target]
+    # A previously blank physical flap should turn directly to its requested
+    # character.  Showing random letters before the first real character makes
+    # an empty departure board look like a slot machine rather than a flap bank.
+    if source.isspace() and not target.isspace():
+        return [source, target]
     seq = [source]
     previous = source
     fake_basis = target if not target.isspace() else source
@@ -1919,13 +1927,14 @@ def _render_split_flap_text(layer: dict, box_w: int, box_h: int, sy: float, elap
                     continue
                 seq = _split_flap_sequence(layer, target, flat_index, target_ch, cycles)
                 char_local = local - rank.get((li, ci), 0) * actual_stagger
+                stage_count = max(1, len(seq) - 1)
                 if char_local <= 0:
                     src_ch = dst_ch = seq[0]; phase = 0.0
                 elif char_local >= flip_window:
                     src_ch = dst_ch = target_ch; phase = 1.0
                 else:
-                    scaled = max(0.0, min(float(cycles) - 1e-9, char_local / flip_window * cycles))
-                    stage = min(cycles - 1, int(scaled))
+                    scaled = max(0.0, min(float(stage_count) - 1e-9, char_local / flip_window * stage_count))
+                    stage = min(stage_count - 1, int(scaled))
                     phase = scaled - stage
                     src_ch, dst_ch = seq[stage], seq[stage + 1]
 

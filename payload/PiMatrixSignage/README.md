@@ -1,5 +1,13 @@
-# Pi Matrix Signage v0.6.53
+# Pi Matrix Signage v0.6.54
 
+
+
+## v0.6.54 – Blank-first split-flap arrival
+
+- Split-flap text that begins on an empty display now starts from genuinely blank physical cells and flips directly to the requested characters instead of showing deterministic fake/random letters first.
+- Character stagger and settle order still control when each blank cell begins moving, so a message can build naturally across the board without a slot-machine effect.
+- Sequential multiline split-flap uses the same rule for the first line: blank cells turn directly to the first message. Later transitions between populated characters retain the configurable fake-flip behaviour, and characters removed by a shorter next line still rotate through to blank.
+- Mechanical departure/airport casing remains visible while a cell is blank; plain split-flap text is fully transparent before its first character begins to turn.
 
 
 ## v0.6.53 – Live lunar phase in Sky Weather

@@ -1,4 +1,4 @@
-# Pi Matrix Signage FPP Plugin v0.1.23
+# Pi Matrix Signage FPP Plugin v0.1.24
 
 10+ bootstrap/integration plugin for Pi Matrix Signage on Raspberry Pi.
 
@@ -27,7 +27,7 @@ For beta testing, open FPP's Plugin Manager, paste that raw `pluginInfo.json` UR
 
 ## Current bootstrap payload
 
-This test bootstrap contains Pi Matrix Signage v0.6.53. The next commercial-hardening stage should move the application payload out of the public bootstrap repository and retrieve a signed, licence-authorised release package from the ISSL/WHMCS licensing service.
+This test bootstrap contains Pi Matrix Signage v0.6.54. The next commercial-hardening stage should move the application payload out of the public bootstrap repository and retrieve a signed, licence-authorised release package from the ISSL/WHMCS licensing service.
 
 
 ## v0.1.2
@@ -161,3 +161,9 @@ FPP Plugin Manager updates intentionally do **not** ship `scripts/fpp_upgrade.sh
 
 - Bundles Pi Matrix Signage **v0.6.53**.
 - Adds locally calculated live lunar phase rendering to the Sky Weather shader, including waxing/waning orientation and cloud occlusion without an additional network request.
+
+
+## v0.1.24
+
+- Bundles Pi Matrix Signage **v0.6.54**.
+- Split-flap messages now enter from genuinely blank cells on an empty display; fake flips remain for subsequent populated-cell transitions and clearing cells to blank.
