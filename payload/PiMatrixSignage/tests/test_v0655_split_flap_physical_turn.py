@@ -70,15 +70,17 @@ def test_real_split_flap_scene_has_visible_partial_target_before_settling():
     settled = renderer.render_scene(scene, 32, 16, 2.1, now, "/tmp/no")
     assert _lit(start) == 0
     assert 0 < _lit(early) < _lit(settled)
-    assert 0 < _lit(middle) <= _lit(settled)
+    # An exact mechanical hinge crossing may briefly have no lit glyph pixels.
+    assert _lit(middle) <= _lit(settled)
     assert list(early.get_flattened_data()) != list(settled.get_flattened_data())
     assert list(middle.get_flattened_data()) != list(settled.get_flattened_data())
 
 
-def test_blank_start_still_has_no_fake_intermediate_character_sequence():
-    assert renderer._split_flap_sequence(_layer(text="OPEN"), "OPEN", 0, "O", 8) == [" ", "O"]
-    assert renderer._split_flap_transition_sequence(_layer(text="OPEN"), "OPEN", 0, " ", "O", 8) == [" ", "O"]
+def test_blank_start_uses_ordered_not_random_intermediate_characters():
+    expected = [" ", *list("ABCDEFGHIJKLMNO")]
+    assert renderer._split_flap_sequence(_layer(text="OPEN"), "OPEN", 0, "O", 8) == expected
+    assert renderer._split_flap_transition_sequence(_layer(text="OPEN"), "OPEN", 0, " ", "O", 8) == expected
 
 
 def test_release_version_is_v0655():
-    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.6.55"
+    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.6.56"

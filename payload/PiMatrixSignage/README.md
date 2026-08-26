@@ -1,6 +1,15 @@
-# Pi Matrix Signage v0.6.55
+# Pi Matrix Signage v0.6.56
 
 
+
+## v0.6.56 – Ordered split-flap wheel + fixed Nixie tubes
+
+- Corrects first-arrival split-flap behaviour so a blank cell now clicks through its real ordered character family until it reaches the requested face instead of performing one blank-to-target turn.
+- Letters advance deterministically from blank through A, B, C… to the target (preserving case); digits advance blank, 0, 1, 2… to the target. Punctuation uses a single physical turn because a long punctuation wheel is not useful on low-resolution signage.
+- Blank-start wheel timing now uses a fixed mechanical cadence: **Effect period** represents approximately a complete alphabet/numeric-wheel traversal, so an early face such as A settles quickly while W keeps clicking through the intervening faces.
+- The ordered startup wheel is independent of **Fake flips**. Fake flips remain reserved for later transitions between already-populated cells, while sequential multiline blank cells use the same ordered startup wheel. Every wheel step still uses the centre-hinge fold/unfold compositor.
+- Adds **Nixie tubes – digits only** as a text animation/display option. It accepts only 0–9, hard-limits output to eight tubes and uses a fixed built-in 5×9 cathode face rather than any user/system font.
+- Nixie tubes use a dark low-resolution glass envelope, thin amber cathode wire, one-physical-LED halo and tiny support/base details. Font, font-size and normal text-rendering controls are disabled in the Designer while Nixie mode is active.
 
 ## v0.6.55 – Visible physical blank-to-character split-flap turn
 

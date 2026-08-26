@@ -1147,6 +1147,118 @@ def _render_led5x7_sprite(text: str, max_w: int, max_h: int, color: tuple[int,in
 
 
 
+# Fixed 5x9 cathode faces for the low-resolution Nixie display.  These are
+# intentionally built into Pi Matrix Signage: Nixie mode must never depend on an
+# uploaded/system font whose proportions could stop looking like a tube display.
+_NIXIE_DIGITS = {
+    "0": ("01110","10001","10001","10011","10101","11001","10001","10001","01110"),
+    "1": ("00100","01100","00100","00100","00100","00100","00100","00100","01110"),
+    "2": ("01110","10001","00001","00010","00100","01000","10000","10000","11111"),
+    "3": ("11110","00001","00001","00110","00001","00001","00001","10001","01110"),
+    "4": ("00010","00110","01010","10010","10010","11111","00010","00010","00010"),
+    "5": ("11111","10000","10000","11110","00001","00001","00001","10001","01110"),
+    "6": ("00110","01000","10000","11110","10001","10001","10001","10001","01110"),
+    "7": ("11111","00001","00010","00010","00100","00100","01000","01000","01000"),
+    "8": ("01110","10001","10001","01110","10001","10001","10001","10001","01110"),
+    "9": ("01110","10001","10001","10001","01111","00001","00001","00010","11100"),
+}
+
+
+def _nixie_digits(value: str) -> str:
+    """Return the strict numeric-only, eight-tube Nixie payload."""
+    return "".join(ch for ch in str(value or "") if ch.isdigit())[:8]
+
+
+def _render_nixie_text(layer: dict, box_w: int, box_h: int, sy: float, elapsed: float,
+                       now: datetime) -> Image.Image:
+    """Render up to eight fixed-font low-resolution Nixie tubes.
+
+    The cell is a 7x13 LED-grid module: a 5x9 fixed cathode digit sits inside a
+    dark rounded glass outline with a tiny base/pin area.  The entire face is
+    integer-scaled with nearest-neighbour geometry and gets only a one-physical-LED
+    halo, so it remains recognisable on P5/P10 panels rather than turning into a
+    blurred photographic imitation.
+    """
+    raw = _layer_text_value(dict(layer, animation="static"), now, elapsed)
+    digits = _nixie_digits(raw)
+    out = Image.new("RGBA", (max(1, int(box_w)), max(1, int(box_h))), (0, 0, 0, 0))
+    if not digits:
+        return out
+
+    count = len(digits)
+    base_cell_w, base_cell_h, base_gap = 7, 13, 1
+    base_total_w = count * base_cell_w + max(0, count - 1) * base_gap
+    scale = max(1, min(8, int(min(max(1, box_w) / max(1, base_total_w), max(1, box_h) / base_cell_h))))
+    total_w = base_total_w * scale
+    total_h = base_cell_h * scale
+    align = str(layer.get("align") or "center")
+    valign = str(layer.get("valign") or "middle")
+    x0 = _align_pos(box_w, total_w, align if align in ("left", "center", "right") else "center", 0)
+    y0 = _align_pos(box_h, total_h, valign if valign in ("top", "middle", "bottom") else "middle", 0)
+
+    glass = (88, 42, 15, 210)
+    glass_hot = (132, 62, 20, 225)
+    face = (11, 5, 2, 235)
+    wire = (86, 37, 10, 95)
+    halo_color = (255, 105, 22, 115)
+    cathode = (255, 154, 42, 255)
+    cathode_hot = (255, 216, 142, 255)
+
+    for i, digit in enumerate(digits):
+        bx = x0 + i * (base_cell_w + base_gap) * scale
+        by = y0
+        cw, ch = base_cell_w * scale, base_cell_h * scale
+        cell = Image.new("RGBA", (cw, ch), (0, 0, 0, 0))
+        d = ImageDraw.Draw(cell)
+        border_px = max(1, scale // 2)
+        glass_bottom = 10 * scale + max(0, scale - 1)
+        radius = max(1, scale)
+        # A dark rounded glass envelope, deliberately drawn with a *thin* outline
+        # even when the tube is enlarged.  Nixie tubes are wire-and-glass objects,
+        # not chunky seven-segment boxes.
+        d.rounded_rectangle((0, 0, cw - 1, glass_bottom), radius=radius, fill=face, outline=glass, width=border_px)
+        d.line((radius, 0, cw - 1 - radius, 0), fill=glass_hot, width=border_px)
+        # Faint support wire and two base pins behind the glowing cathode.
+        support_x = cw // 2
+        d.line((support_x, 2 * scale, support_x, 9 * scale), fill=wire, width=max(1, border_px))
+        for pin_x in (2.2, 4.8):
+            px = int(round(pin_x * scale))
+            d.line((px, 10 * scale, px, ch - 1), fill=glass, width=border_px)
+
+        mask = Image.new("L", cell.size, 0)
+        md = ImageDraw.Draw(mask)
+        pat = _NIXIE_DIGITS[digit]
+        stroke_px = max(1, int(round(scale * 0.45)))
+        # Draw a connected cathode wire through neighbouring bitmap nodes instead
+        # of magnifying each source pixel into a square block.  This gives the
+        # fixed face a narrow, tube-like character at 256x64 while retaining a
+        # crisp one-LED face at scale=1.
+        centres = {}
+        for gy, row in enumerate(pat):
+            for gx, on in enumerate(row):
+                if on == "1":
+                    centres[(gx, gy)] = (int(round((1.5 + gx) * scale)), int(round((1.5 + gy) * scale)))
+        for (gx, gy), (cx, cy) in centres.items():
+            for neighbour in ((gx + 1, gy), (gx, gy + 1)):
+                if neighbour in centres:
+                    nx, ny = centres[neighbour]
+                    md.line((cx, cy, nx, ny), fill=255, width=stroke_px)
+            r = max(0, stroke_px // 2)
+            md.ellipse((cx - r, cy - r, cx + r, cy + r), fill=255)
+
+        # One *physical* LED halo regardless of logical tube scale.
+        halo = mask.filter(ImageFilter.MaxFilter(3))
+        halo_only = ImageChops.subtract(halo, mask)
+        glow = Image.new("RGBA", cell.size, halo_color)
+        glow.putalpha(halo_only.point(lambda v: int(v * 0.72)))
+        cell.alpha_composite(glow)
+        core = Image.new("RGBA", cell.size, cathode); core.putalpha(mask); cell.alpha_composite(core)
+        hot = mask.point(lambda v: 205 if v else 0)
+        hot_layer = Image.new("RGBA", cell.size, cathode_hot); hot_layer.putalpha(hot); cell.alpha_composite(hot_layer)
+        out.alpha_composite(cell, (bx, by))
+    return out
+
+
 _LED_FONT_SPECS = {
     "led3x5": (3, 5, "3x5"),
     "led4x6": (4, 6, "3x5"),
@@ -1568,18 +1680,50 @@ def _split_flap_fake_char(layer: dict, text: str, index: int, target: str, cycle
     return choices[random.Random(seed).randrange(len(choices))]
 
 
+def _split_flap_blank_wheel(target: str) -> list[str]:
+    """Return the ordered mechanical wheel from blank to *target*.
+
+    A split-flap cell has a physical stack/wheel of faces.  When a previously
+    blank board receives its first message, it should click through those faces
+    in order rather than either jumping straight to the destination or showing
+    random fake glyphs.  Keep alphabets and digits in their own useful low-res
+    families; punctuation has no sensible long wheel on a tiny sign and therefore
+    receives a single physical blank-to-symbol turn.
+    """
+    if target.isspace() or target in ("\r", "\n"):
+        return [" "]
+    if target.isdigit():
+        pool = "0123456789"
+    elif target.isalpha():
+        pool = "ABCDEFGHIJKLMNOPQRSTUVWXYZ" if target.isupper() else "abcdefghijklmnopqrstuvwxyz"
+    else:
+        return [" ", target]
+    try:
+        stop = pool.index(target)
+    except ValueError:
+        return [" ", target]
+    return [" ", *pool[:stop + 1]]
+
+
+def _split_flap_blank_wheel_capacity(target: str) -> int:
+    """Number of physical face advances in the target's complete startup wheel."""
+    if target.isalpha():
+        return 26
+    if target.isdigit():
+        return 10
+    return 1
+
+
 def _split_flap_sequence(layer: dict, text: str, index: int, target: str, cycles: int) -> list[str]:
     """Build the first appearance of a split-flap cell.
 
-    A real departure board that is blank before a message arrives does not show
-    arbitrary letters first.  Keep the cell genuinely blank until its staggered
-    turn begins, then make one physical flap transition directly to the requested
-    character.  Fake flips remain available for changes between already-populated
-    cells (and when rotating an old character away to blank).
+    Blank cells use the real ordered flap wheel: blank -> A -> B -> ... -> target
+    for letters, and blank -> 0 -> 1 -> ... -> target for digits.  This preserves
+    the user's requested mechanical 'flick round to the character' behaviour while
+    avoiding random startup glyphs.  ``cycles`` remains reserved for later changes
+    between already-populated cells.
     """
-    if target.isspace() or target in ("\r", "\n"):
-        return [target]
-    return [" ", target]
+    return _split_flap_blank_wheel(target)
 
 
 def _split_flap_fixed_row(text: str, columns: int, align: str) -> str:
@@ -1607,11 +1751,11 @@ def _split_flap_transition_sequence(layer: dict, text: str, index: int, source: 
     """
     if source == target:
         return [target]
-    # A previously blank physical flap should turn directly to its requested
-    # character.  Showing random letters before the first real character makes
-    # an empty departure board look like a slot machine rather than a flap bank.
+    # A previously blank physical flap advances through its ordered character
+    # wheel until it reaches the destination.  This is deterministic mechanical
+    # motion, not the configurable random/fake flips used between populated cells.
     if source.isspace() and not target.isspace():
-        return [source, target]
+        return _split_flap_blank_wheel(target)
     seq = [source]
     previous = source
     fake_basis = target if not target.isspace() else source
@@ -1934,7 +2078,23 @@ def _render_split_flap_text(layer: dict, box_w: int, box_h: int, sy: float, elap
                 seq = _split_flap_transition_sequence(layer, target, flat_index, source_ch or " ", target_ch, cycles)
                 char_local = local - rank.get((li, ci), 0) * actual_stagger
                 stage_count = max(1, len(seq) - 1)
-                if char_local <= 0:
+                blank_origin = bool((source_ch or " ").isspace() and not target_ch.isspace())
+                if blank_origin:
+                    # First arrival has a fixed mechanical cadence: Effect period
+                    # is approximately a complete family-wheel traversal, so A
+                    # settles after one flap while W keeps clicking through A..W.
+                    stage_span = flip_window / max(1, _split_flap_blank_wheel_capacity(target_ch))
+                    settle_at = stage_span * stage_count
+                    if char_local <= 0:
+                        src_ch = dst_ch = seq[0]; phase = 0.0
+                    elif char_local >= settle_at:
+                        src_ch = dst_ch = target_ch; phase = 1.0
+                    else:
+                        scaled = max(0.0, min(float(stage_count) - 1e-9, char_local / max(1e-6, stage_span)))
+                        stage = min(stage_count - 1, int(scaled))
+                        phase = scaled - stage
+                        src_ch, dst_ch = seq[stage], seq[stage + 1]
+                elif char_local <= 0:
                     src_ch = dst_ch = seq[0]; phase = 0.0
                 elif char_local >= flip_window:
                     src_ch = dst_ch = target_ch; phase = 1.0
@@ -1952,12 +2112,14 @@ def _render_split_flap_text(layer: dict, box_w: int, box_h: int, sy: float, elap
                 seq = _split_flap_sequence(layer, target, flat_index, target_ch, cycles)
                 char_local = local - rank.get((li, ci), 0) * actual_stagger
                 stage_count = max(1, len(seq) - 1)
+                stage_span = flip_window / max(1, _split_flap_blank_wheel_capacity(target_ch))
+                settle_at = stage_span * stage_count
                 if char_local <= 0:
                     src_ch = dst_ch = seq[0]; phase = 0.0
-                elif char_local >= flip_window:
+                elif char_local >= settle_at:
                     src_ch = dst_ch = target_ch; phase = 1.0
                 else:
-                    scaled = max(0.0, min(float(stage_count) - 1e-9, char_local / flip_window * stage_count))
+                    scaled = max(0.0, min(float(stage_count) - 1e-9, char_local / max(1e-6, stage_span)))
                     stage = min(stage_count - 1, int(scaled))
                     phase = scaled - stage
                     src_ch, dst_ch = seq[stage], seq[stage + 1]
@@ -2191,6 +2353,8 @@ def _render_rolling_digits_text(layer: dict, box_w: int, box_h: int, sy: float, 
 
 def _render_scene_text(layer: dict, box_w: int, box_h: int, sy: float, elapsed: float, now: datetime, upload_fonts_dir: str) -> Image.Image:
     animation = str(layer.get("animation") or "static")
+    if animation == "nixie" and str(layer.get("type") or "text") == "text":
+        return _render_nixie_text(layer, box_w, box_h, sy, elapsed, now)
     if animation == "split-flap" and str(layer.get("type") or "text") == "text":
         return _render_split_flap_text(layer, box_w, box_h, sy, elapsed, now, upload_fonts_dir)
     if animation == "character-wave" and str(layer.get("type") or "text") == "text":
@@ -3464,7 +3628,7 @@ def render_scene(scene: dict, width: int, height: int, elapsed: float, now: date
         scene_duration = max(0.25, float(scene.get("duration", 10) or 10))
         content_layer, content_elapsed = _sequenced_text_layer(layer, elapsed, scene_duration)
         text_render_mode = content_layer.get("cloud_render_mode") if ltype == "cloud-text" else content_layer.get("render_mode")
-        layer_is_crisp = (ltype == "icon") or (ltype in ("text", "cloud-text", "widget") and _is_crisp_mode(str(text_render_mode or "smooth")))
+        layer_is_crisp = (ltype == "icon") or (ltype == "text" and str(content_layer.get("animation") or "") == "nixie") or (ltype in ("text", "cloud-text", "widget") and _is_crisp_mode(str(text_render_mode or "smooth")))
         zone_clip = _scene_zone_rect(scene, layer, sx, sy)
         animation = str(layer.get("animation") or "static")
 

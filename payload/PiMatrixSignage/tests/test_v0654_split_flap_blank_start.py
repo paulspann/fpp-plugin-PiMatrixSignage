@@ -35,12 +35,12 @@ def _lit(im):
     return sum(1 for px in im.get_flattened_data() if max(px[:3]) > 0)
 
 
-def test_first_appearance_sequence_is_blank_directly_to_target():
-    assert renderer._split_flap_sequence(_layer(), "OPEN", 0, "O", 8) == [" ", "O"]
+def test_first_appearance_sequence_uses_ordered_wheel_from_blank():
+    assert renderer._split_flap_sequence(_layer(), "OPEN", 0, "O", 8) == [" ", *list("ABCDEFGHIJKLMNO")]
 
 
-def test_blank_sequential_cell_does_not_cycle_fake_characters():
-    assert renderer._split_flap_transition_sequence(_layer(), "OPEN", 0, " ", "O", 8) == [" ", "O"]
+def test_blank_sequential_cell_uses_same_ordered_wheel():
+    assert renderer._split_flap_transition_sequence(_layer(), "OPEN", 0, " ", "O", 8) == [" ", *list("ABCDEFGHIJKLMNO")]
 
 
 def test_existing_character_transition_keeps_fake_flip_behaviour():
@@ -68,4 +68,4 @@ def test_plain_split_flap_is_genuinely_blank_at_scene_start():
 
 
 def test_release_version_is_v0654():
-    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.6.55"
+    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.6.56"

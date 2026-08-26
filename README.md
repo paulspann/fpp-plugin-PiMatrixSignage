@@ -1,4 +1,4 @@
-# Pi Matrix Signage FPP Plugin v0.1.25
+# Pi Matrix Signage FPP Plugin v0.1.26
 
 10+ bootstrap/integration plugin for Pi Matrix Signage on Raspberry Pi.
 
@@ -27,7 +27,7 @@ For beta testing, open FPP's Plugin Manager, paste that raw `pluginInfo.json` UR
 
 ## Current bootstrap payload
 
-This test bootstrap contains Pi Matrix Signage v0.6.55. The next commercial-hardening stage should move the application payload out of the public bootstrap repository and retrieve a signed, licence-authorised release package from the ISSL/WHMCS licensing service.
+This test bootstrap contains Pi Matrix Signage v0.6.56. The next commercial-hardening stage should move the application payload out of the public bootstrap repository and retrieve a signed, licence-authorised release package from the ISSL/WHMCS licensing service.
 
 
 ## v0.1.2
@@ -172,3 +172,9 @@ FPP Plugin Manager updates intentionally do **not** ship `scripts/fpp_upgrade.sh
 
 - Bundles Pi Matrix Signage **v0.6.55**.
 - Makes first-arrival split-flap characters visibly unfold from a blank centre hinge without fake/random startup glyphs, and makes character-to-blank transitions fold away physically.
+
+## v0.1.26
+
+- Bundles Pi Matrix Signage **v0.6.56**.
+- Blank split-flap cells now advance through the ordered alphabetic/numeric flap wheel until they reach the requested face; fake/random startup glyphs remain disabled.
+- Adds the fixed-font, numeric-only **Nixie tubes** display option with an eight-digit maximum.
