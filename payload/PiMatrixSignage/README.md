@@ -1,6 +1,13 @@
-# Pi Matrix Signage v0.6.54
+# Pi Matrix Signage v0.6.55
 
 
+
+## v0.6.55 – Visible physical blank-to-character split-flap turn
+
+- Fixes blank-first split-flap arrival so removing fake/random startup glyphs does not make the final character appear to pop directly onto the display.
+- A blank cell now unfolds the requested glyph progressively out from the centre hinge over the complete flap turn; it remains genuinely blank at phase zero and never shows a fake character.
+- Character-to-blank is now the exact reverse physical motion, folding the old glyph into the hinge instead of disappearing at the midpoint. Populated-to-populated flips fold the old glyph closed then unfold the next glyph.
+- The behaviour is deliberately implemented in physical LED-pixel geometry so it remains visible with 5x7 fonts on 16/32-pixel-high P5/P10 displays.
 
 ## v0.6.54 – Blank-first split-flap arrival
 

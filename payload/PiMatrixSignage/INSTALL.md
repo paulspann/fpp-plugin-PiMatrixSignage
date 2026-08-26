@@ -1,4 +1,4 @@
-# Pi Matrix Signage v0.6.45 – Install / Upgrade
+# Pi Matrix Signage v0.6.55 – Install / Upgrade
 
 Pi Matrix Signage uses FPP 10+ for plugin installation/update and the underlying panel drivers. From v0.6.44 the controller interface is selectable: **FPP + Pi Matrix Signage add-on** is the safe default for new installs, while **Pi Matrix Signage appliance** mode is opt-in for dedicated signage controllers.
 
@@ -16,7 +16,7 @@ The managed upgrade preserves the Pi Matrix database, media, uploaded shaders, u
 
 ```bash
 cd /home/fpp/media/upload
-unzip -o PiMatrixSignage-v0.6.45.zip
+unzip -o PiMatrixSignage-v0.6.55.zip
 cd PiMatrixSignage
 sudo ./install.sh
 ```

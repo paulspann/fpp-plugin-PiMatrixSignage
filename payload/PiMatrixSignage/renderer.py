@@ -1628,42 +1628,66 @@ def _split_flap_transition_sequence(layer: dict, text: str, index: int, source: 
 
 
 def _split_flap_cell(src: Image.Image, dst: Image.Image, phase: float, crisp: bool) -> Image.Image:
-    """Approximate a mechanical split-flap rotation inside one fixed character cell.
+    """Render one low-resolution mechanical split-flap turn.
 
-    On the first half of the turn the old top half collapses into the centre
-    seam.  On the second half the new lower half unfolds from that seam.  This
-    deliberately uses very few visual cues so it remains legible on a 16/32 px
-    high HUB75 display.
+    The previous implementation exposed the complete upper half of the destination
+    as soon as the turn crossed 50%.  On a 5x7/32-pixel-high matrix that could read
+    as an instant character change rather than a physical flap.  This version folds
+    glyph ink toward the centre hinge and unfolds the next glyph back out from it.
+
+    Blank -> character is deliberately special: there is no fake/intermediate glyph
+    and the requested character unfolds from the hinge across the *whole* phase.
+    Character -> blank is the exact reverse.  Populated -> populated transitions fold
+    the old glyph closed during the first half and unfold the next glyph during the
+    second half.
     """
     w, h = src.size
     if dst.size != src.size:
         dst = dst.resize(src.size, Image.Resampling.NEAREST if crisp else Image.Resampling.BICUBIC)
     if w <= 0 or h <= 1:
-        return dst.copy() if phase >= 0.5 else src.copy()
+        return dst.copy() if phase >= 1.0 else src.copy()
+
     p = max(0.0, min(1.0, float(phase)))
     mid = max(1, h // 2)
     lower_h = h - mid
     resample = Image.Resampling.NEAREST if crisp else Image.Resampling.BICUBIC
-    out = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    src_visible = src.getchannel("A").getbbox() is not None
+    dst_visible = dst.getchannel("A").getbbox() is not None
 
-    if p < 0.5:
-        # The old lower half remains visible while the upper flap rotates down.
-        if lower_h > 0:
-            out.alpha_composite(src.crop((0, mid, w, h)), (0, mid))
-        frac = 1.0 - p * 2.0
-        sh = max(0, int(round(mid * frac)))
-        if sh > 0:
-            top = src.crop((0, 0, w, mid)).resize((w, sh), resample)
-            out.alpha_composite(top, (0, mid - sh))
-    else:
-        # Once the flap crosses the centre, the new upper half is exposed and
-        # its lower half unfolds downwards.
-        out.alpha_composite(dst.crop((0, 0, w, mid)), (0, 0))
-        frac = (p - 0.5) * 2.0
-        sh = max(0, int(round(lower_h * frac)))
-        if sh > 0 and lower_h > 0:
-            bottom = dst.crop((0, mid, w, h)).resize((w, sh), resample)
+    def folded(image: Image.Image, amount: float) -> Image.Image:
+        """Return ``image`` unfolded by amount 0..1 around the centre hinge."""
+        amount = max(0.0, min(1.0, float(amount)))
+        out = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        if amount <= 0.0:
+            return out
+        if amount >= 1.0:
+            out.alpha_composite(image)
+            return out
+
+        top_h = max(0, min(mid, int(round(mid * amount))))
+        bottom_h = max(0, min(lower_h, int(round(lower_h * amount))))
+        if top_h > 0:
+            top = image.crop((0, 0, w, mid)).resize((w, top_h), resample)
+            out.alpha_composite(top, (0, mid - top_h))
+        if bottom_h > 0 and lower_h > 0:
+            bottom = image.crop((0, mid, w, h)).resize((w, bottom_h), resample)
             out.alpha_composite(bottom, (0, mid))
+        return out
+
+    if not src_visible and not dst_visible:
+        out = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    elif not src_visible:
+        # Empty board: the real requested character grows out from the hinge.
+        # No random glyphs and no sudden half-character pop at p=0.5.
+        out = folded(dst, p)
+    elif not dst_visible:
+        # Clearing a cell is the reverse physical motion: fold the old glyph all
+        # the way into the hinge instead of dropping it at the midpoint.
+        out = folded(src, 1.0 - p)
+    elif p < 0.5:
+        out = folded(src, 1.0 - p * 2.0)
+    else:
+        out = folded(dst, (p - 0.5) * 2.0)
 
     # A one-pixel dark hinge line, but only where glyph ink exists.  It never
     # paints a black rectangle over layers behind transparent text.
