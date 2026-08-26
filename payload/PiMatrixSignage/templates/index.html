@@ -388,7 +388,11 @@
                       <label>Effect amount (LED px)<input type="number" id="layerEffectAmount" min="1" max="12" step="1" value="2"></label>
                       <label>Character phase / stagger<input type="number" id="layerEffectStagger" min="0" max="0.5" step="0.01" value="0.08"></label>
                     </div>
-                    <p class="hint">Effects are designed around physical LED pixels. <strong>Effect period</strong> controls split-flap settling, pixel assembly, neon start-up, glitch bursts, character waves and rolling digits. A split-flap board starts blank and mechanically clicks through the ordered character wheel until it reaches the requested glyph (A, B, C… for letters; 0, 1, 2… for digits). Every step uses the centre-hinge flap motion; startup characters are ordered, not random. Departure-board casing surrounds the glyph with a real frame and adjustable LED-pixel padding; increase Casing padding for a chunkier mechanical board. Nixie mode is a fixed amber numeric face: digits only, maximum eight tubes.</p>
+                    <div class="form-grid cols-2 hidden" id="nixieOptions">
+                      <label class="checkline"><input type="checkbox" id="layerNixieBuild"> Build up from 0000</label>
+                      <label>Build duration (s)<input type="number" id="layerNixieBuildDuration" min="0.5" max="60" step="0.1" value="4"></label>
+                    </div>
+                    <p class="hint">Effects are designed around physical LED pixels. <strong>Effect period</strong> controls split-flap settling, pixel assembly, neon start-up, glitch bursts, character waves and rolling digits. A split-flap board starts blank and mechanically clicks through the ordered character wheel until it reaches the requested glyph (A, B, C… for letters; 0, 1, 2… for digits). Every step uses the centre-hinge flap motion; startup characters are ordered, not random. Departure-board casing surrounds the glyph with a real frame and adjustable LED-pixel padding; increase Casing padding for a chunkier mechanical board. Nixie mode is a fixed amber numeric face: digits only, maximum eight tubes. <strong>Build up from 0000</strong> resolves each tube independently from left to right; it does not count the complete displayed number.</p>
                   </details>
 
                   <details id="layerTransitionProperties" class="inspector-group inspector-transitions">
@@ -424,7 +428,7 @@
                   <div id="textLayerProperties" class="layer-kind-properties content-properties">
                     <h3>Text content &amp; appearance</h3>
                     <label>Text<textarea id="layerText" rows="4" placeholder="Type layer text…"></textarea></label>
-                    <p class="hint hidden" id="nixieTextHint"><strong>Nixie tubes:</strong> digits 0–9 only, maximum 8 digits. Pi Matrix uses its fixed built-in Nixie cathode face; Font, font size and text-rendering controls are intentionally disabled.</p>
+                    <p class="hint hidden" id="nixieTextHint"><strong>Nixie tubes:</strong> digits 0–9 only, maximum 8 digits. Pi Matrix uses its fixed built-in Nixie cathode face; Font, font size and text-rendering controls are intentionally disabled. Optional zero-build starts every tube at 0 and advances each tube independently to its requested digit.</p>
                     <div class="form-grid cols-2">
                       <label>Multiple lines<select id="layerLineDisplay"><option value="together">Display together</option><option value="sequence">Show one after another</option></select></label>
                       <div class="line-sequence-note"><strong id="lineSequenceTiming">Lines display together</strong><small>One after another divides this text layer’s available timeline evenly between non-empty lines. For split-flap text, all lines share one fixed bank of character cells, so old characters flap to their replacements or to blank.</small></div>

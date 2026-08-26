@@ -1169,6 +1169,39 @@ def _nixie_digits(value: str) -> str:
     return "".join(ch for ch in str(value or "") if ch.isdigit())[:8]
 
 
+def _nixie_build_digits(target: str, elapsed: float, duration: float, enabled: bool = False) -> str:
+    """Build a Nixie number from all-zero tubes without numerically counting it.
+
+    Tubes resolve independently from left to right.  Within its own time slot a
+    tube advances through the cathode faces 0, 1, 2 ... until it reaches its
+    requested digit.  For example 1965 progresses through the coarse settled
+    states 0000 -> 1000 -> 1900 -> 1960 -> 1965; it never counts 0001, 0002 ...
+    1965 as a whole number.
+    """
+    digits = _nixie_digits(target)
+    if not digits or not enabled:
+        return digits
+    count = len(digits)
+    total = max(0.1, float(duration or 4.0))
+    slot = total / max(1, count)
+    t = max(0.0, float(elapsed or 0.0))
+    current = []
+    for i, ch in enumerate(digits):
+        target_digit = int(ch)
+        local = t - i * slot
+        if target_digit <= 0 or local <= 0:
+            current.append("0")
+            continue
+        if local >= slot:
+            current.append(ch)
+            continue
+        # Give every cathode from zero through the target an equal visible slice.
+        progress = max(0.0, min(0.999999, local / slot))
+        step = min(target_digit, int(math.floor(progress * (target_digit + 1))))
+        current.append(str(step))
+    return "".join(current)
+
+
 def _render_nixie_text(layer: dict, box_w: int, box_h: int, sy: float, elapsed: float,
                        now: datetime) -> Image.Image:
     """Render up to eight fixed-font low-resolution Nixie tubes.
@@ -1181,6 +1214,9 @@ def _render_nixie_text(layer: dict, box_w: int, box_h: int, sy: float, elapsed: 
     """
     raw = _layer_text_value(dict(layer, animation="static"), now, elapsed)
     digits = _nixie_digits(raw)
+    digits = _nixie_build_digits(
+        digits, elapsed, layer.get("nixie_build_duration", 4.0), bool(layer.get("nixie_build", False))
+    )
     out = Image.new("RGBA", (max(1, int(box_w)), max(1, int(box_h))), (0, 0, 0, 0))
     if not digits:
         return out

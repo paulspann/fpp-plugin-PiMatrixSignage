@@ -71,5 +71,5 @@ def test_early_letter_settles_before_late_letter_at_same_mechanical_cadence():
     assert list(a_mid.get_flattened_data()) == list(a_final.get_flattened_data())
     assert list(w_mid.get_flattened_data()) != list(w_final.get_flattened_data())
 
-def test_release_version_is_v0656():
-    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.6.56"
+def test_release_version_is_v0657():
+    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.6.57"

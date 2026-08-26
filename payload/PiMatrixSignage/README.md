@@ -1,6 +1,13 @@
-# Pi Matrix Signage v0.6.56
+# Pi Matrix Signage v0.6.57
 
 
+
+
+## v0.6.57 – Independent Nixie zero-build
+
+- Adds an optional **Build up from 0000** mode to the fixed numeric Nixie display. Every visible tube starts at zero and the tubes resolve independently from left to right.
+- Each tube advances only through its own cathode sequence 0, 1, 2… until it reaches the requested digit. A target of `1965` therefore settles as `0000 → 1000 → 1900 → 1960 → 1965`; the display never counts the complete number from 0 to 1965.
+- Adds a dedicated **Build duration** control (default 4 seconds) for the complete zero-build sequence. Normal Nixie rendering remains immediate when the option is disabled.
 
 ## v0.6.56 – Ordered split-flap wheel + fixed Nixie tubes
 
