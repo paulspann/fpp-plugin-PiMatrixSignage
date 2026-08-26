@@ -11,6 +11,8 @@
     {"NAME":"CloudCover","LABEL":"Cloud cover","TYPE":"float","DEFAULT":0.55,"MIN":0.0,"MAX":1.0},
     {"NAME":"PrecipIntensity","LABEL":"Rain / snow intensity","TYPE":"float","DEFAULT":0.65,"MIN":0.0,"MAX":1.0},
     {"NAME":"SunSize","LABEL":"Sun / moon size","TYPE":"float","DEFAULT":0.12,"MIN":0.04,"MAX":0.28},
+    {"NAME":"MoonPhase","LABEL":"Moon cycle (manual)","TYPE":"float","DEFAULT":0.5,"MIN":0.0,"MAX":1.0},
+    {"NAME":"MoonBrightness","LABEL":"Moon brightness","TYPE":"float","DEFAULT":0.95,"MIN":0.1,"MAX":1.0},
     {"NAME":"SunMoonPosition","LABEL":"Sun / moon position","TYPE":"float","DEFAULT":0.72,"MIN":0.0,"MAX":1.0},
     {"NAME":"SunMoonHeight","LABEL":"Sun / moon height","TYPE":"float","DEFAULT":0.72,"MIN":0.05,"MAX":0.95},
     {"NAME":"SunMoonMovement","LABEL":"Sun / moon movement","TYPE":"long","DEFAULT":0,"VALUES":[0,1,2],"LABELS":["Stationary","Left to right","Right to left"]},
@@ -68,11 +70,37 @@ void main(){
   }
   float bodyY=1.0-clamp(SunMoonHeight,0.05,0.95);
   vec2 bodyPos=vec2(bodyX,bodyY);
-  float body=softCircle(p,bodyPos,clamp(SunSize,0.02,0.35));
-  float glow=softCircle(p,bodyPos,clamp(SunSize,0.02,0.35)*1.75);
-  vec3 bodyColor=(SkyPhase==2)?vec3(0.76,0.86,1.0):((SkyPhase==1)?vec3(1.0,0.34,0.06):vec3(1.0,0.86,0.22));
-  col=mix(col,bodyColor,glow*0.20);
-  col=mix(col,bodyColor,body*0.96);
+  float bodyRadius=clamp(SunSize,0.02,0.35);
+  // Keep the celestial body circular in physical LED pixels even on very wide
+  // signage canvases. SunSize remains relative to display height.
+  vec2 bodyDelta=vec2((p.x-bodyPos.x)*(W/H),p.y-bodyPos.y);
+  float bodyDist=length(bodyDelta);
+  float body=1.0-smoothstep(bodyRadius,bodyRadius+max(0.004,bodyRadius*0.12),bodyDist);
+  float glowRadius=bodyRadius*1.75;
+  float glow=1.0-smoothstep(glowRadius,glowRadius+max(0.004,glowRadius*0.12),bodyDist);
+  if(SkyPhase==2){
+    // Project a lit hemisphere onto the visible moon disc. MoonPhase is a
+    // synodic cycle: 0=new, .25=first quarter, .5=full, .75=last quarter.
+    // This produces crescents/quarters/gibbous phases without texture detail
+    // that would disappear on a low-resolution P5/P10 matrix.
+    vec2 moonXY=bodyDelta/max(bodyRadius,0.001);
+    float moonR2=dot(moonXY,moonXY);
+    float moonZ=sqrt(max(0.0,1.0-moonR2));
+    float phaseAngle=fract(MoonPhase)*6.28318530718;
+    vec3 moonNormal=vec3(moonXY.x,moonXY.y,moonZ);
+    vec3 moonLight=vec3(sin(phaseAngle),0.0,-cos(phaseAngle));
+    float terminator=dot(moonNormal,moonLight);
+    float litHemisphere=smoothstep(-0.055,0.055,terminator);
+    float illumination=0.5*(1.0-cos(phaseAngle));
+    float moonLit=body*litHemisphere*step(moonR2,1.0);
+    vec3 moonColor=vec3(0.76,0.86,1.0)*clamp(MoonBrightness,0.1,1.0);
+    col=mix(col,moonColor,glow*0.16*sqrt(max(illumination,0.0)));
+    col=mix(col,moonColor,moonLit*0.98*step(0.004,illumination));
+  }else{
+    vec3 bodyColor=(SkyPhase==1)?vec3(1.0,0.34,0.06):vec3(1.0,0.86,0.22);
+    col=mix(col,bodyColor,glow*0.20);
+    col=mix(col,bodyColor,body*0.96);
+  }
 
   float requested=clamp(CloudCover,0.0,1.0);
   float weatherCover=(Weather==0)?0.0:((Weather==1)?0.38:((Weather==2)?0.82:0.92));

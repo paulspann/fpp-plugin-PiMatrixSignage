@@ -15,7 +15,7 @@ def test_sky_weather_builtin_is_packaged_with_expected_controls():
     assert sky["name"] == "Sky Weather"
     controls = {x["name"]: x for x in sky["inputs"]}
     for name in ("Weather", "SkyPhase", "Speed", "WindDirection", "CloudCover",
-                 "PrecipIntensity", "SunSize", "SunMoonPosition", "SunMoonHeight",
+                 "PrecipIntensity", "SunSize", "MoonPhase", "MoonBrightness", "SunMoonPosition", "SunMoonHeight",
                  "SunMoonMovement", "SunMoonSpeed", "HorizonGlow", "SkyTop", "SkyBottom",
                  "CloudColor", "RainColor", "SnowColor"):
         assert name in controls
@@ -37,6 +37,8 @@ def test_sky_weather_shader_prepares_for_desktop_and_gles():
     assert "uniform int SkyPhase;" in desktop
     assert "uniform int WindDirection;" in desktop
     assert "uniform float PrecipIntensity;" in desktop
+    assert "uniform float MoonPhase;" in desktop
+    assert "uniform float MoonBrightness;" in desktop
     assert "uniform float SunMoonPosition;" in desktop
     assert "uniform float SunMoonHeight;" in desktop
     assert "uniform int SunMoonMovement;" in desktop

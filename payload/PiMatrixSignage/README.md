@@ -1,5 +1,14 @@
-# Pi Matrix Signage v0.6.52
+# Pi Matrix Signage v0.6.53
 
+
+
+## v0.6.53 – Live lunar phase in Sky Weather
+
+- Sky Weather now calculates the current lunar phase locally whenever **Use live weather** is enabled; no additional weather/astronomy API request is required.
+- Night scenes render the actual illuminated lunar shape continuously through new moon, waxing crescent, first quarter, waxing gibbous, full moon, waning gibbous, last quarter and waning crescent rather than always drawing a full disc.
+- The low-resolution moon uses a projected lit hemisphere, so crescents and quarters remain legible on P5/P10 panels; cloud layers continue to pass in front of and naturally obscure the moon.
+- Sun/moon geometry is now aspect-corrected in physical LED pixels, so the lunar disc remains round on wide 256×64-style canvases instead of stretching horizontally.
+- Southern-hemisphere live-weather locations reverse the waxing/waning visual orientation. Manual Sky Weather retains a **Moon cycle (manual)** control and adds **Moon brightness**.
 
 
 ## v0.6.52 – True outer split-flap casing

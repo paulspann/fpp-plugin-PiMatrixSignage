@@ -17,7 +17,7 @@ from collections import deque
 import threading
 import time
 from dataclasses import dataclass
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -583,8 +583,34 @@ def _transform_text(text: str, mode: str) -> str:
     return text
 
 
+_SYNODIC_MONTH_DAYS = 29.530588853
+_MOON_REFERENCE_NEW = datetime(2000, 1, 6, 18, 14, tzinfo=timezone.utc)
+
+
+def _moon_phase_fraction(now: datetime | None = None) -> float:
+    """Return lunar synodic-cycle position: 0=new, 0.25=first quarter, 0.5=full.
+
+    The phase is calculated locally so Sky Weather does not add another network
+    request.  A fixed well-known new-moon epoch plus the mean synodic month is
+    more than accurate enough for the 5-9 LED-pixel moon used by the signage
+    shader, while remaining deterministic and offline-capable.
+    """
+    instant = now or datetime.now(timezone.utc)
+    if instant.tzinfo is None:
+        instant = instant.replace(tzinfo=timezone.utc)
+    else:
+        instant = instant.astimezone(timezone.utc)
+    days = (instant - _MOON_REFERENCE_NEW).total_seconds() / 86400.0
+    return (days / _SYNODIC_MONTH_DAYS) % 1.0
+
+
+def _moon_illumination(phase: float) -> float:
+    """Approximate illuminated fraction for a 0..1 synodic phase."""
+    return 0.5 * (1.0 - math.cos(2.0 * math.pi * (float(phase) % 1.0)))
+
+
 def _live_weather_shader_params(config: dict, params: dict) -> dict:
-    """Overlay Sky Weather uniforms with cached Open-Meteo conditions."""
+    """Overlay Sky Weather uniforms with cached Open-Meteo conditions and moon phase."""
     out = dict(params or {})
     if not bool(config.get("shader_live_weather")):
         return out
@@ -608,6 +634,13 @@ def _live_weather_shader_params(config: dict, params: dict) -> dict:
     wind_degrees = float(data.get("wind_direction") or 0.0) % 360.0
     cloud = max(0.0, min(100.0, float(data.get("cloud") or 0.0))) / 100.0
     precip = max(0.0, float(data.get("precip") or 0.0))
+    moon_phase = _moon_phase_fraction()
+    # A waxing moon is conventionally lit on the right in the northern
+    # hemisphere and on the left in the southern hemisphere.  Reversing the
+    # visual cycle below the equator keeps the deliberately simplified
+    # low-resolution moon intuitive worldwide without another astronomy API.
+    if float(weather_config.get("weather_lat") or 0.0) < 0.0:
+        moon_phase = (-moon_phase) % 1.0
     out.update({
         "Weather": weather_mode,
         "SkyPhase": 0 if bool(data.get("is_day", True)) else 2,
@@ -615,6 +648,7 @@ def _live_weather_shader_params(config: dict, params: dict) -> dict:
         "Speed": max(0.05, min(4.0, 0.05 + wind / 8.0)),
         "WindDirection": 0 if 180.0 <= wind_degrees < 360.0 else 1,
         "PrecipIntensity": max(0.0, min(1.0, precip / 5.0)) if weather_mode < 3 else max(0.25, min(1.0, precip / 5.0)),
+        "MoonPhase": moon_phase,
     })
     return out
 
