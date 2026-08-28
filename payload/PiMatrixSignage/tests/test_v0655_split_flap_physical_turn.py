@@ -83,4 +83,4 @@ def test_blank_start_uses_ordered_not_random_intermediate_characters():
 
 
 def test_release_version_is_v0655():
-    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.6.57"
+    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.6.58"

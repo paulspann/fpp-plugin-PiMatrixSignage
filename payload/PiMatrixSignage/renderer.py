@@ -437,7 +437,8 @@ def _weather_current(layer: dict) -> dict:
             "current": ",".join((
                 "temperature_2m", "apparent_temperature", "relative_humidity_2m",
                 "precipitation", "rain", "showers", "snowfall", "weather_code",
-                "cloud_cover", "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m", "is_day"
+                "cloud_cover", "cloud_cover_low", "cloud_cover_mid", "cloud_cover_high",
+                "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m", "is_day"
             )),
             "temperature_unit": temp_unit,
             "wind_speed_unit": wind_unit,
@@ -453,7 +454,9 @@ def _weather_current(layer: dict) -> dict:
             "temp": cur.get("temperature_2m"), "feels": cur.get("apparent_temperature"),
             "humidity": cur.get("relative_humidity_2m"), "precip": cur.get("precipitation"),
             "rain": cur.get("rain"), "showers": cur.get("showers"), "snow": cur.get("snowfall"),
-            "cloud": cur.get("cloud_cover"), "wind": cur.get("wind_speed_10m"),
+            "cloud": cur.get("cloud_cover"), "cloud_low": cur.get("cloud_cover_low"),
+            "cloud_mid": cur.get("cloud_cover_mid"), "cloud_high": cur.get("cloud_cover_high"),
+            "wind": cur.get("wind_speed_10m"),
             "wind_direction": cur.get("wind_direction_10m"), "gust": cur.get("wind_gusts_10m"),
             "is_day": bool(int(cur.get("is_day", 1) if cur.get("is_day") is not None else 1)),
             "temp_unit": "°F" if temp_unit == "fahrenheit" else "°C",
@@ -633,6 +636,20 @@ def _live_weather_shader_params(config: dict, params: dict) -> dict:
     wind = max(0.0, float(data.get("wind") or 0.0))
     wind_degrees = float(data.get("wind_direction") or 0.0) % 360.0
     cloud = max(0.0, min(100.0, float(data.get("cloud") or 0.0))) / 100.0
+    # Open-Meteo exposes low/mid/high cloud layers as well as total cloud cover.
+    # Some models can omit an individual layer, so fall back to total rather
+    # than turning a missing layer into an artificial clear band.
+    def _cloud_fraction(name: str) -> float:
+        value = data.get(name)
+        if value is None:
+            return cloud
+        try:
+            return max(0.0, min(100.0, float(value))) / 100.0
+        except Exception:
+            return cloud
+    cloud_low = _cloud_fraction("cloud_low")
+    cloud_mid = _cloud_fraction("cloud_mid")
+    cloud_high = _cloud_fraction("cloud_high")
     precip = max(0.0, float(data.get("precip") or 0.0))
     moon_phase = _moon_phase_fraction()
     # A waxing moon is conventionally lit on the right in the northern
@@ -645,6 +662,9 @@ def _live_weather_shader_params(config: dict, params: dict) -> dict:
         "Weather": weather_mode,
         "SkyPhase": 0 if bool(data.get("is_day", True)) else 2,
         "CloudCover": cloud,
+        "LowCloudCover": cloud_low,
+        "MidCloudCover": cloud_mid,
+        "HighCloudCover": cloud_high,
         "Speed": max(0.05, min(4.0, 0.05 + wind / 8.0)),
         "WindDirection": 0 if 180.0 <= wind_degrees < 360.0 else 1,
         "PrecipIntensity": max(0.0, min(1.0, precip / 5.0)) if weather_mode < 3 else max(0.25, min(1.0, precip / 5.0)),

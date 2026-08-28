@@ -1,7 +1,15 @@
-# Pi Matrix Signage v0.6.57
+# Pi Matrix Signage v0.6.58
 
 
 
+
+
+## v0.6.58 – Layered live cloud cover
+
+- Sky Weather live mode now consumes Open-Meteo total, low, mid and high cloud-cover percentages instead of reducing the sky to one total percentage plus a WMO condition label.
+- Dense live cloud now forms an overlapping moving cloud deck. At or near 100% total cover the shader removes the large blue gaps that previously remained between isolated cloud blobs and progressively greys/dims the sky.
+- Low, mid and high layers retain separate movement/scale, so broken cloud remains visibly layered while full overcast reads as continuous cloud on 32/64-pixel-high matrices.
+- Manual Sky Weather gains low/mid/high cloud-cover controls; live mode overrides them automatically. Missing layer data safely falls back to total cloud cover.
 
 ## v0.6.57 – Independent Nixie zero-build
 

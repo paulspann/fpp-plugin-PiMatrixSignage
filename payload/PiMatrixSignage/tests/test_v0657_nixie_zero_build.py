@@ -68,4 +68,4 @@ def test_designer_has_zero_build_option_duration_and_persists_them():
 
 
 def test_release_version_is_v0657():
-    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.6.57"
+    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.6.58"

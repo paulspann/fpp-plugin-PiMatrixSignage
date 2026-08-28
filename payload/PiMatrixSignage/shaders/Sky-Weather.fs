@@ -8,7 +8,10 @@
     {"NAME":"SkyPhase","LABEL":"Sky phase","TYPE":"long","DEFAULT":0,"VALUES":[0,1,2],"LABELS":["Day","Sunset","Night"]},
     {"NAME":"Speed","LABEL":"Cloud / weather speed","TYPE":"float","DEFAULT":1.0,"MIN":0.05,"MAX":4.0},
     {"NAME":"WindDirection","LABEL":"Wind direction","TYPE":"long","DEFAULT":0,"VALUES":[0,1],"LABELS":["Left to right","Right to left"]},
-    {"NAME":"CloudCover","LABEL":"Cloud cover","TYPE":"float","DEFAULT":0.55,"MIN":0.0,"MAX":1.0},
+    {"NAME":"CloudCover","LABEL":"Total cloud cover","TYPE":"float","DEFAULT":0.55,"MIN":0.0,"MAX":1.0},
+    {"NAME":"LowCloudCover","LABEL":"Low cloud cover","TYPE":"float","DEFAULT":0.55,"MIN":0.0,"MAX":1.0},
+    {"NAME":"MidCloudCover","LABEL":"Mid cloud cover","TYPE":"float","DEFAULT":0.55,"MIN":0.0,"MAX":1.0},
+    {"NAME":"HighCloudCover","LABEL":"High cloud cover","TYPE":"float","DEFAULT":0.55,"MIN":0.0,"MAX":1.0},
     {"NAME":"PrecipIntensity","LABEL":"Rain / snow intensity","TYPE":"float","DEFAULT":0.65,"MIN":0.0,"MAX":1.0},
     {"NAME":"SunSize","LABEL":"Sun / moon size","TYPE":"float","DEFAULT":0.12,"MIN":0.04,"MAX":0.28},
     {"NAME":"MoonPhase","LABEL":"Moon cycle (manual)","TYPE":"float","DEFAULT":0.5,"MIN":0.0,"MAX":1.0},
@@ -105,29 +108,57 @@ void main(){
   float requested=clamp(CloudCover,0.0,1.0);
   float weatherCover=(Weather==0)?0.0:((Weather==1)?0.38:((Weather==2)?0.82:0.92));
   float cover=clamp(max(requested,weatherCover),0.0,1.0);
+  float lowCover=clamp(max(LowCloudCover,(Weather>=2)?cover*0.72:0.0),0.0,1.0);
+  float midCover=clamp(max(MidCloudCover,(Weather>=2)?cover*0.58:0.0),0.0,1.0);
+  float highCover=clamp(max(HighCloudCover,(Weather>=2)?cover*0.42:0.0),0.0,1.0);
+
+  // High total cloud should look like an actual sky deck, not merely every
+  // member of a sparse set of isolated cloud puffs.  This broad, softly
+  // textured veil removes the large blue holes that were still visible at
+  // 100% live cloud cover while retaining motion/detail on a 32/64px matrix.
+  float overcast=smoothstep(0.68,0.96,cover);
+  float deckCellX=floor((p.x+dir*t*0.010)*W/8.0);
+  float deckCellY=floor(p.y*H/6.0);
+  float deckNoise=0.78+0.22*hash1(deckCellX+deckCellY*37.0);
+  float deckDepth=max(cover,clamp((lowCover+midCover)*0.5,0.0,1.0));
+  float deckHeight=mix(0.68,1.0,deckDepth);
+  float deckMask=(1.0-smoothstep(deckHeight,1.08,p.y))*overcast*deckNoise;
+  float overcastShade=mix(0.76,0.50,clamp(lowCover*0.7+midCover*0.3,0.0,1.0));
+  if(Weather==5)overcastShade*=0.72;
+  vec3 deckRgb=CloudColor.rgb*overcastShade;
+  col=mix(col,deckRgb,clamp(deckMask*(0.82+0.16*cover),0.0,0.98));
+
   float cloud=0.0;
   for(int layer=0;layer<3;layer++){
     float fl=float(layer);
-    float y=0.20+fl*0.19;
-    float scale=0.075+fl*0.022;
-    float layerSpeed=(0.020+fl*0.009)*t*dir;
-    for(int i=0;i<7;i++){
+    float layerCover=(layer==0)?highCover:((layer==1)?midCover:lowCover);
+    float y=0.17+fl*0.20;
+    float scale=0.080+fl*0.034;
+    float layerSpeed=(0.015+fl*0.010)*t*dir;
+    // Increase both density and puff width with layer coverage.  At 100% this
+    // becomes an overlapping deck; lower values still read as separate clouds.
+    float densityScale=mix(0.88,1.58,layerCover);
+    for(int i=0;i<9;i++){
       float fi=float(i);
-      float seed=fi+fl*17.0;
-      float spacing=1.0/7.0;
-      float x=mod(fi*spacing+hash1(seed)*0.12+layerSpeed+2.0,1.20)-0.10;
-      float shown=step(hash1(seed*2.7),cover);
-      vec2 c=vec2(x,y+(hash1(seed*5.1)-0.5)*0.075);
-      float a=cloudBlob(p,c,vec2(scale*(1.55+hash1(seed)*0.65),scale*0.62));
-      float b=cloudBlob(p,c+vec2(scale*0.58,-scale*0.20),vec2(scale,scale*0.82));
-      float d=cloudBlob(p,c-vec2(scale*0.55,scale*0.10),vec2(scale*0.85,scale*0.68));
+      float seed=fi+fl*19.0;
+      float spacing=1.0/9.0;
+      float x=mod(fi*spacing+hash1(seed)*0.10+layerSpeed+2.0,1.22)-0.11;
+      float shown=step(hash1(seed*2.7),layerCover);
+      vec2 c=vec2(x,y+(hash1(seed*5.1)-0.5)*0.085);
+      float a=cloudBlob(p,c,vec2(scale*densityScale*(1.55+hash1(seed)*0.65),scale*0.62*densityScale));
+      float b=cloudBlob(p,c+vec2(scale*0.58,-scale*0.20),vec2(scale*densityScale,scale*0.82*densityScale));
+      float d=cloudBlob(p,c-vec2(scale*0.55,scale*0.10),vec2(scale*0.85*densityScale,scale*0.68*densityScale));
       cloud=max(cloud,max(a,max(b,d))*shown);
     }
   }
-  float cloudShade=mix(1.0,0.52,step(2.5,float(Weather)));
+  // Dense overcast clouds lose the bright-white fair-weather look.  Keep
+  // broken cloud bright, then progressively grey the visible deck as total
+  // coverage approaches 100%.
+  float cloudShade=mix(1.0,0.62,cover);
+  if(Weather==3||Weather==4)cloudShade=min(cloudShade,0.58);
   if(Weather==5)cloudShade=0.32;
   vec3 cloudRgb=CloudColor.rgb*cloudShade;
-  col=mix(col,cloudRgb,cloud*(0.62+cover*0.32));
+  col=mix(col,cloudRgb,cloud*(0.56+cover*0.40));
 
   float intensity=clamp(PrecipIntensity,0.0,1.0);
   if(Weather==3||Weather==5){

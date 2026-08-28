@@ -278,7 +278,7 @@
                     <label>Longitude<input type="number" id="sceneBgShaderWeatherLon" step="0.0001" value="-2.52"></label>
                     <label>Refresh every (s)<input type="number" id="sceneBgShaderWeatherRefresh" min="60" max="3600" step="60" value="600"></label>
                   </div>
-                  <p class="hint">Optional. Live Open-Meteo conditions select the weather, day/night phase, cloud cover, wind and precipitation. At night the current moon phase is calculated locally and shown automatically. Manual controls remain as the fallback if weather data is unavailable.</p>
+                  <p class="hint">Optional. Live Open-Meteo conditions select the weather, day/night phase, total/low/mid/high cloud cover, wind and precipitation; dense overcast is rendered as a continuous cloud deck. At night the current moon phase is calculated locally and shown automatically. Manual controls remain as the fallback if weather data is unavailable.</p>
                 </div>
                 <div id="sceneBgShaderParameterFields" class="shader-parameter-fields"></div>
                 <p class="hint">Auto performance first tries native LED resolution, allows extra time for shader compilation, then automatically falls back to ½ or ¼ resolution only if the effect is too expensive for the Pi. The result is scaled back to the physical LED canvas.</p>
@@ -543,7 +543,7 @@
                         <label>Longitude<input type="number" id="layerShaderWeatherLon" step="0.0001" value="-2.52"></label>
                         <label>Refresh every (s)<input type="number" id="layerShaderWeatherRefresh" min="60" max="3600" step="60" value="600"></label>
                       </div>
-                      <p class="hint">Optional. Live Open-Meteo conditions select the weather, day/night phase, cloud cover, wind and precipitation. At night the current moon phase is calculated locally and shown automatically. Manual controls remain as the fallback if weather data is unavailable.</p>
+                      <p class="hint">Optional. Live Open-Meteo conditions select the weather, day/night phase, total/low/mid/high cloud cover, wind and precipitation; dense overcast is rendered as a continuous cloud deck. At night the current moon phase is calculated locally and shown automatically. Manual controls remain as the fallback if weather data is unavailable.</p>
                     </div>
                     <div id="shaderParameterFields" class="shader-parameter-fields"></div>
                     <p class="hint">Supports ISF-style fragment shaders using <code>TIME</code>, <code>RENDERSIZE</code>, float/bool/int, point2D and colour inputs. Shader rendering runs in an isolated helper process and is frame-limited so a broken or heavy shader cannot block the LED output loop.</p>

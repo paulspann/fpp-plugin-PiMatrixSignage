@@ -166,7 +166,7 @@ def test_v0650_effects_and_shader_expansion_is_packaged():
     html = (payload / 'templates' / 'index.html').read_text(encoding='utf-8')
     renderer = (payload / 'renderer.py').read_text(encoding='utf-8')
     version = (payload / 'VERSION').read_text(encoding='utf-8').strip()
-    assert version == '0.6.57'
+    assert version == '0.6.58'
     for name in ('Fire-Embers.fs','Starfield-Warp.fs','Particle-Fall.fs','Radar-Sweep.fs','Matrix-Rain.fs','LED-Marquee.fs','Aurora.fs'):
         assert (payload / 'shaders' / name).is_file(), name
     for marker in ('pixel-assemble','pixel-dissolve','neon-flicker','glitch','character-wave','rolling-digits'):
@@ -184,7 +184,7 @@ def test_v0651_departure_board_strengthening_is_packaged():
     payload = ROOT / 'payload' / 'PiMatrixSignage'
     renderer = (payload / 'renderer.py').read_text(encoding='utf-8')
     version = (payload / 'VERSION').read_text(encoding='utf-8').strip()
-    assert version == '0.6.57'
+    assert version == '0.6.58'
     assert 'def _split_flap_board_overlay' in renderer
     assert 'A mechanical casing must surround the glyph, not share its pixels' in renderer
     assert 'separate upper/lower flap face' in renderer
@@ -196,7 +196,7 @@ def test_v0652_outer_departure_casing_is_packaged():
     html = (payload / 'templates' / 'index.html').read_text(encoding='utf-8')
     js = (payload / 'static' / 'app.js').read_text(encoding='utf-8')
     version = (payload / 'VERSION').read_text(encoding='utf-8').strip()
-    assert version == '0.6.57'
+    assert version == '0.6.58'
     assert '_flap_content_inset_x' in renderer
     assert "Render the glyph into the flap's *inner face*" in renderer
     assert 'id="layerFlapCasePadding"' in html
@@ -210,7 +210,7 @@ def test_v0653_live_moon_phase_is_packaged():
     renderer = (payload / 'renderer.py').read_text(encoding='utf-8')
     help_html = (payload / 'templates' / 'help.html').read_text(encoding='utf-8')
     cert = json.loads((payload / 'controller-platform-certification.json').read_text(encoding='utf-8'))
-    assert version == '0.6.57'
+    assert version == '0.6.58'
     assert cert['pimatrix_version'] == version
     assert '"NAME":"MoonPhase"' in shader
     assert '"NAME":"MoonBrightness"' in shader
@@ -219,3 +219,17 @@ def test_v0653_live_moon_phase_is_packaged():
     assert 'def _moon_phase_fraction' in renderer
     assert '"MoonPhase": moon_phase' in renderer
     assert 'calculates the current moon phase locally' in help_html
+
+
+def test_v0658_layered_live_clouds_are_packaged():
+    payload = ROOT / 'payload' / 'PiMatrixSignage'
+    renderer = (payload / 'renderer.py').read_text(encoding='utf-8')
+    shader = (payload / 'shaders' / 'Sky-Weather.fs').read_text(encoding='utf-8')
+    help_html = (payload / 'templates' / 'help.html').read_text(encoding='utf-8')
+    version = (payload / 'VERSION').read_text(encoding='utf-8').strip()
+    assert version == '0.6.58'
+    for marker in ('cloud_cover_low', 'cloud_cover_mid', 'cloud_cover_high', 'LowCloudCover', 'MidCloudCover', 'HighCloudCover'):
+        assert marker in renderer or marker in shader
+    assert 'float overcast=' in shader
+    assert 'float deckMask=' in shader
+    assert '100% cover no longer leaves large blue gaps' in help_html

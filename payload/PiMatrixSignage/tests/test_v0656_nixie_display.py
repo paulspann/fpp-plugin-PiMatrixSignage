@@ -68,4 +68,4 @@ def test_nixie_animation_option_and_designer_constraints_are_present():
 
 
 def test_release_version_is_v0657():
-    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.6.57"
+    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.6.58"
