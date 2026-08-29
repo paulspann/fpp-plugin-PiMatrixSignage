@@ -76,7 +76,7 @@ def test_designer_exposes_sequence_mode_and_live_timing_help():
     assert '<option value="sequence">Show one after another</option>' in html
     assert 'id="lineSequenceTiming"' in html
     assert "function updateLineSequenceTiming()" in js
-    assert "l.line_display=l.animation==='nixie'?'together':($('layerLineDisplay').value||'together')" in js
+    assert "l.line_display=['nixie','seven-segment','fourteen-segment'].includes(l.animation)?'together':($('layerLineDisplay').value||'together')" in js
     assert "line_display:'together'" in js
 
 
@@ -100,4 +100,4 @@ def test_render_scene_passes_only_the_active_line_to_text_renderer(monkeypatch):
     assert seen == [("SECOND", 5.0)]
 
 def test_release_version_is_v0648():
-    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.6.58"
+    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.6.59"

@@ -1315,6 +1315,131 @@ def _render_nixie_text(layer: dict, box_w: int, box_h: int, sy: float, elapsed: 
     return out
 
 
+# Fixed geometric LED faces used by the seven- and fourteen-segment display
+# modes. Each name is a physical bar; glyphs simply energise a set of bars.
+_SEGMENT_PATHS = {
+    "a": ((2, 1), (8, 1)), "b": ((9, 2), (9, 6)),
+    "c": ((9, 9), (9, 13)), "d": ((2, 14), (8, 14)),
+    "e": ((1, 9), (1, 13)), "f": ((1, 2), (1, 6)),
+    "g1": ((2, 7), (5, 7)), "g2": ((5, 7), (8, 7)),
+    "h": ((2, 2), (5, 7)), "i": ((8, 2), (5, 7)),
+    "j": ((2, 13), (5, 8)), "k": ((8, 13), (5, 8)),
+    "l": ((5, 2), (5, 6)), "m": ((5, 9), (5, 13)),
+}
+
+_SEVEN_SEGMENT_GLYPHS = {
+    "0": "abcdef", "1": "bc", "2": "abdeg", "3": "abcdg",
+    "4": "bcfg", "5": "acdfg", "6": "acdefg", "7": "abc",
+    "8": "abcdefg", "9": "abcdfg",
+    # Useful letters that remain unambiguous on a seven-bar module.
+    "A": "abcefg", "B": "cdefg", "C": "adef", "D": "bcdeg",
+    "E": "adefg", "F": "aefg", "H": "bcefg", "L": "def",
+    "P": "abefg", "U": "bcdef", "-": "g", "_": "d", "=": "dg",
+}
+
+_FOURTEEN_SEGMENT_GLYPHS = {
+    "0": "abcdef", "1": "bc", "2": "abdeg", "3": "abcdg",
+    "4": "bcfg", "5": "acdfg", "6": "acdefg", "7": "abc",
+    "8": "abcdefg", "9": "abcdfg",
+    "A": "abcefg", "B": "abcdg1g2lm", "C": "adef",
+    "D": "abcdlm", "E": "adefg", "F": "aefg", "G": "acdefg2",
+    "H": "bcefg", "I": "adlm", "J": "bcde", "K": "efg1ik",
+    "L": "def", "M": "bcefhi", "N": "bcefhk", "O": "abcdef",
+    "P": "abefg", "Q": "abcdefk", "R": "abefgk", "S": "acdfg",
+    "T": "alm", "U": "bcdef", "V": "efjk", "W": "bcefjk",
+    "X": "hijk", "Y": "him", "Z": "adij",
+    "-": "g", "_": "d", "=": "dg", "+": "glm", "/": "ij", "\\": "hk",
+    "[": "adef", "]": "abcd", "(": "hjde", ")": "ikbc", "°": "abfg",
+}
+
+
+def _segment_names(value: str) -> set[str]:
+    """Expand compact glyph definitions while retaining two-character g-bars."""
+    compact = str(value or "").replace(" ", "")
+    names: set[str] = set()
+    i = 0
+    while i < len(compact):
+        if compact[i:i + 2] in ("g1", "g2"):
+            names.add(compact[i:i + 2]); i += 2
+        else:
+            names.add(compact[i]); i += 1
+    if "g" in names:
+        names.remove("g"); names.update(("g1", "g2"))
+    return names
+
+
+def _segment_text(value: str, kind: int) -> str:
+    """Normalise a display payload without disturbing character-cell positions."""
+    raw = str(value or "").replace("\r", " ").replace("\n", " ").upper()
+    glyphs = _SEVEN_SEGMENT_GLYPHS if int(kind) == 7 else _FOURTEEN_SEGMENT_GLYPHS
+    specials = {" ", ".", ":"}
+    return "".join(ch if ch in glyphs or ch in specials else " " for ch in raw)[:32]
+
+
+def _render_segment_text(layer: dict, box_w: int, box_h: int, sy: float, elapsed: float,
+                         now: datetime, kind: int) -> Image.Image:
+    """Render a real seven- or fourteen-segment LED module bank.
+
+    Bars are drawn on an 11x16 logical grid and enlarged with nearest-neighbour
+    scaling, keeping diagonals and one-pixel gaps stable on P5/P10 matrices.
+    """
+    raw = _layer_text_value(dict(layer, animation="static"), now, elapsed)
+    display_text = _segment_text(raw, kind)
+    out = Image.new("RGBA", (max(1, int(box_w)), max(1, int(box_h))), (0, 0, 0, 0))
+    if not display_text:
+        return out
+
+    cell_w, cell_h, gap = 11, 16, 1
+    base_w = len(display_text) * cell_w + max(0, len(display_text) - 1) * gap
+    pad = max(0, int(round(float(layer.get("padding", 0) or 0) * sy)))
+    avail_w, avail_h = max(1, box_w - pad * 2), max(1, box_h - pad * 2)
+    scale = max(1, min(8, int(min(avail_w / max(1, base_w), avail_h / cell_h))))
+    face_w, face_h = base_w * scale, cell_h * scale
+    align = str(layer.get("align") or "center")
+    valign = str(layer.get("valign") or "middle")
+    x0 = pad + _align_pos(avail_w, face_w, align if align in ("left", "center", "right") else "center", 0)
+    y0 = pad + _align_pos(avail_h, face_h, valign if valign in ("top", "middle", "bottom") else "middle", 0)
+
+    logical_off = Image.new("L", (base_w, cell_h), 0)
+    logical_on = Image.new("L", (base_w, cell_h), 0)
+    off_draw, on_draw = ImageDraw.Draw(logical_off), ImageDraw.Draw(logical_on)
+    glyphs = _SEVEN_SEGMENT_GLYPHS if int(kind) == 7 else _FOURTEEN_SEGMENT_GLYPHS
+    physical = {"a", "b", "c", "d", "e", "f", "g1", "g2"}
+    if int(kind) == 14:
+        physical.update(("h", "i", "j", "k", "l", "m"))
+
+    for ci, ch in enumerate(display_text):
+        ox = ci * (cell_w + gap)
+        for name in physical:
+            p1, p2 = _SEGMENT_PATHS[name]
+            off_draw.line((ox + p1[0], p1[1], ox + p2[0], p2[1]), fill=255, width=1)
+        for name in _segment_names(glyphs.get(ch, "")):
+            if name not in physical:
+                continue
+            p1, p2 = _SEGMENT_PATHS[name]
+            on_draw.line((ox + p1[0], p1[1], ox + p2[0], p2[1]), fill=255, width=1)
+        # Decimal points and colons are discrete LEDs, not bars.
+        if ch == ".":
+            off_draw.point((ox + 9, 14), fill=255); on_draw.point((ox + 9, 14), fill=255)
+        elif ch == ":":
+            for py in (5, 10):
+                off_draw.point((ox + 9, py), fill=255); on_draw.point((ox + 9, py), fill=255)
+
+    off_mask = logical_off.resize((face_w, face_h), Image.Resampling.NEAREST)
+    on_mask = logical_on.resize((face_w, face_h), Image.Resampling.NEAREST)
+    color = _hex_color(str(layer.get("color") or "#ff3030"), "#ff3030")
+    face = Image.new("RGBA", (face_w, face_h), (0, 0, 0, 0))
+    dim = Image.new("RGBA", face.size, (*tuple(max(1, c // 3) for c in color), 30))
+    dim.putalpha(off_mask.point(lambda v: 30 if v else 0)); face.alpha_composite(dim)
+    halo = on_mask.filter(ImageFilter.MaxFilter(3))
+    halo_only = ImageChops.subtract(halo, on_mask)
+    halo_layer = Image.new("RGBA", face.size, (*color, 70))
+    halo_layer.putalpha(halo_only.point(lambda v: 70 if v else 0)); face.alpha_composite(halo_layer)
+    lit_layer = Image.new("RGBA", face.size, (*color, 255)); lit_layer.putalpha(on_mask); face.alpha_composite(lit_layer)
+    out.alpha_composite(face, (x0, y0))
+    return out
+
+
 _LED_FONT_SPECS = {
     "led3x5": (3, 5, "3x5"),
     "led4x6": (4, 6, "3x5"),
@@ -2411,6 +2536,10 @@ def _render_scene_text(layer: dict, box_w: int, box_h: int, sy: float, elapsed: 
     animation = str(layer.get("animation") or "static")
     if animation == "nixie" and str(layer.get("type") or "text") == "text":
         return _render_nixie_text(layer, box_w, box_h, sy, elapsed, now)
+    if animation == "seven-segment" and str(layer.get("type") or "text") == "text":
+        return _render_segment_text(layer, box_w, box_h, sy, elapsed, now, 7)
+    if animation == "fourteen-segment" and str(layer.get("type") or "text") == "text":
+        return _render_segment_text(layer, box_w, box_h, sy, elapsed, now, 14)
     if animation == "split-flap" and str(layer.get("type") or "text") == "text":
         return _render_split_flap_text(layer, box_w, box_h, sy, elapsed, now, upload_fonts_dir)
     if animation == "character-wave" and str(layer.get("type") or "text") == "text":
@@ -3684,7 +3813,7 @@ def render_scene(scene: dict, width: int, height: int, elapsed: float, now: date
         scene_duration = max(0.25, float(scene.get("duration", 10) or 10))
         content_layer, content_elapsed = _sequenced_text_layer(layer, elapsed, scene_duration)
         text_render_mode = content_layer.get("cloud_render_mode") if ltype == "cloud-text" else content_layer.get("render_mode")
-        layer_is_crisp = (ltype == "icon") or (ltype == "text" and str(content_layer.get("animation") or "") == "nixie") or (ltype in ("text", "cloud-text", "widget") and _is_crisp_mode(str(text_render_mode or "smooth")))
+        layer_is_crisp = (ltype == "icon") or (ltype == "text" and str(content_layer.get("animation") or "") in ("nixie", "seven-segment", "fourteen-segment")) or (ltype in ("text", "cloud-text", "widget") and _is_crisp_mode(str(text_render_mode or "smooth")))
         zone_clip = _scene_zone_rect(scene, layer, sx, sy)
         animation = str(layer.get("animation") or "static")
 

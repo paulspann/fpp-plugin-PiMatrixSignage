@@ -68,4 +68,4 @@ def test_plain_split_flap_is_genuinely_blank_at_scene_start():
 
 
 def test_release_version_is_v0654():
-    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.6.58"
+    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.6.59"

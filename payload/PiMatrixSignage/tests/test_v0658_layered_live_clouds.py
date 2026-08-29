@@ -85,4 +85,4 @@ def test_help_explains_layered_live_overcast():
 
 
 def test_release_version_is_v0658():
-    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.6.58"
+    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.6.59"

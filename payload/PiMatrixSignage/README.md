@@ -1,8 +1,12 @@
-# Pi Matrix Signage v0.6.58
+# Pi Matrix Signage v0.6.59
 
 
+## v0.6.59 – Seven- and fourteen-segment displays
 
-
+- Adds fixed geometric **7-segment LED display** and **14-segment LED display** modes to Designer text layers.
+- Seven-segment mode supports digits, the unambiguous display-letter subset, spaces, decimal points, colons and basic signs. Fourteen-segment mode supports uppercase A–Z, digits and common punctuation.
+- Both faces use real physical bar geometry, dim unlit segments and a restrained one-LED halo. They integer-scale with nearest-neighbour rendering for crisp P5/P10 output, honour text colour, alignment, vertical alignment and padding, and do not depend on an installed or uploaded font.
+- Live text tokens remain available, allowing clocks such as `{TIME}` and other dynamic values to use either segment face. Unsupported characters become blank cells without shifting the rest of the display.
 
 ## v0.6.58 – Layered live cloud cover
 

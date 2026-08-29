@@ -81,4 +81,4 @@ def test_designer_exposes_casing_padding_and_defaults_existing_layers_safely():
 
 
 def test_v0652_version():
-    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.6.58"
+    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.6.59"
