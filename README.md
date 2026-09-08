@@ -1,4 +1,4 @@
-# Pi Matrix Signage FPP Plugin v0.1.29
+# Pi Matrix Signage FPP Plugin v0.1.30
 
 10+ bootstrap/integration plugin for Pi Matrix Signage on Raspberry Pi.
 
@@ -27,13 +27,13 @@ For beta testing, open FPP's Plugin Manager, paste that raw `pluginInfo.json` UR
 
 ## Current bootstrap payload
 
-This test bootstrap contains Pi Matrix Signage v0.6.59. The next commercial-hardening stage should move the application payload out of the public bootstrap repository and retrieve a signed, licence-authorised release package from the ISSL/WHMCS licensing service.
+This test bootstrap contains Pi Matrix Signage v0.6.60. The next commercial-hardening stage should move the application payload out of the public bootstrap repository and retrieve a signed, licence-authorised release package from the ISSL/WHMCS licensing service.
 
 
 
 ## v0.1.28
 
-- Bundles Pi Matrix Signage **v0.6.59** with fixed geometric seven- and fourteen-segment LED text displays.
+- Bundles Pi Matrix Signage **v0.6.60** with procedural left/right neon chevron effects and selectable foreground/background colours.
 - Live weather now carries Open-Meteo total/low/mid/high cloud cover into the shader so full overcast renders as a continuous moving deck instead of sparse individual clouds.
 
 ## v0.1.2

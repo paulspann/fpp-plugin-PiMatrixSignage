@@ -1,5 +1,12 @@
-# Pi Matrix Signage v0.6.59
+# Pi Matrix Signage v0.6.60
 
+
+## v0.6.60 – Procedural neon chevrons
+
+- Adds **Neon Chevrons – Left** and **Neon Chevrons – Right** as built-in procedural shader effects inspired by modern neon directional signage. No video or external media file is used.
+- Both effects loop seamlessly and expose Designer controls for travel speed, chevron width, spacing, height, tube thickness, glow and rhythmic brightness pulse.
+- **Chevron colour** and **Background colour** use normal colour pickers. Background opacity can be reduced to use the chevrons as an overlay over other content; white on black remains the default.
+- The effects render at the selected shader layer/background resolution and remain compatible with normal layer opacity, positioning, zones, clipping and entrance/exit transitions.
 
 ## v0.6.59 – Seven- and fourteen-segment displays
 
