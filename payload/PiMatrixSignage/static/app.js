@@ -700,7 +700,10 @@
   }
   function updateAnimationFieldVisibility(){
     const anim=$('layerAnimation').value,flap=anim==='split-flap',advanced=['glitch','character-wave'].includes(anim);
-    $('splitFlapOptions').classList.toggle('hidden',!flap);$('advancedTextEffectOptions').classList.toggle('hidden',!advanced);updateNixieTextControls();
+    $('splitFlapOptions').classList.toggle('hidden',!flap);$('advancedTextEffectOptions').classList.toggle('hidden',!advanced);
+    const resetOption=$('layerExitEffect')?.querySelector('option[value="reset-slats"]');if(resetOption)resetOption.disabled=!flap;
+    if(!flap&&$('layerExitEffect')?.value==='reset-slats')$('layerExitEffect').value='none';
+    updateNixieTextControls();
   }
   function updateLineSequenceTiming(){
     const el=$('lineSequenceTiming'),l=selectedLayer();if(!el||!l||l.type!=='text'){return;}

@@ -1,5 +1,13 @@
-# Pi Matrix Signage v0.6.60
+# Pi Matrix Signage v0.6.61
 
+
+## v0.6.61 – Split-flap reset-to-blank exit
+
+- Adds **Reset slats to blank** as a dedicated exit effect for split-flap text layers.
+- When the exit begins, every populated module advances forward through the remainder of its real alphabetic or numeric card wheel and finishes on the dedicated blank card. For example, `X` turns through `Y → Z → blank`, while `7` turns through `8 → 9 → blank`.
+- Existing Character stagger and Settle order controls govern how cells begin resetting; Exit duration controls the complete reset. Punctuation performs one physical turn directly to blank.
+- Mechanical departure/airport/custom casing remains visible as a bank of blank physical modules after a timed reset. During a forced message change, the blank bank is retained until the next scene replaces it.
+- Designer only enables this exit choice while **Split-flap display** is selected, preventing it being applied to incompatible layer types.
 
 ## v0.6.60 – Procedural neon chevrons
 

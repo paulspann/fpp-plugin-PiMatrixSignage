@@ -1754,7 +1754,13 @@ def _layer_transition_phase(layer: dict, elapsed: float, forced_exit_elapsed: fl
             exit_duration = max(0.05, float(layer.get("exit_duration", 0.5) or 0.5))
             forced = max(0.0, float(forced_exit_elapsed))
             if forced >= exit_duration:
-                return exit_effect, 1.0, False, False
+                # A reset split-flap exit finishes on the physical blank card.
+                # Keep that blank bank renderable until the enclosing scene is
+                # replaced; ordinary exits disappear at the end as before.
+                retain_blank = (exit_effect == "reset-slats"
+                                and str(layer.get("type") or "text") == "text"
+                                and str(layer.get("animation") or "") == "split-flap")
+                return exit_effect, 1.0, False, retain_blank
             return exit_effect, _transition_ease(forced / exit_duration), False, True
 
     delay = max(0.0, float(layer.get("delay", 0.0) or 0.0))
@@ -1774,7 +1780,10 @@ def _layer_transition_phase(layer: dict, elapsed: float, forced_exit_elapsed: fl
         # Never start the exit before a configured entrance has completed.
         exit_start = max(exit_after, entrance_duration if entrance != "none" else 0.0)
         if local >= exit_start + exit_duration:
-            return exit_effect, 1.0, False, False
+            retain_blank = (exit_effect == "reset-slats"
+                            and str(layer.get("type") or "text") == "text"
+                            and str(layer.get("animation") or "") == "split-flap")
+            return exit_effect, 1.0, False, retain_blank
         if local >= exit_start:
             return exit_effect, _transition_ease((local - exit_start) / exit_duration), False, True
 
@@ -1884,6 +1893,29 @@ def _split_flap_blank_wheel(target: str) -> list[str]:
     except ValueError:
         return [" ", target]
     return [" ", *pool[:stop + 1]]
+
+
+def _split_flap_reset_wheel(source: str) -> list[str]:
+    """Return the forward physical wheel from a displayed face to blank.
+
+    Resetting a real split-flap module does not fade its printed face away.  It
+    continues forward through the remaining cards in that character family and
+    finally lands on the dedicated blank card.
+    """
+    source = str(source or " ")[:1] or " "
+    if source.isspace() or source in ("\r", "\n"):
+        return [" "]
+    if source.isdigit():
+        pool = "0123456789"
+    elif source.isalpha():
+        pool = "ABCDEFGHIJKLMNOPQRSTUVWXYZ" if source.isupper() else "abcdefghijklmnopqrstuvwxyz"
+    else:
+        return [source, " "]
+    try:
+        start = pool.index(source)
+    except ValueError:
+        return [source, " "]
+    return [*pool[start:], " "]
 
 
 def _split_flap_blank_wheel_capacity(target: str) -> int:
@@ -2157,6 +2189,10 @@ def _render_split_flap_text(layer: dict, box_w: int, box_h: int, sy: float, elap
     cycles = max(1, min(12, int(layer.get("flap_cycles", 4) or 4)))
     stagger = max(0.0, min(0.5, float(layer.get("flap_stagger", 0.06) or 0.0)))
     order = str(layer.get("flap_order") or "left").lower()
+    resetting = layer.get("_flap_reset_progress") is not None
+    reset_progress = max(0.0, min(1.0, float(layer.get("_flap_reset_progress", 0.0) or 0.0)))
+    reset_duration = max(0.05, float(layer.get("_flap_reset_duration", layer.get("exit_duration", 0.5)) or 0.5))
+    reset_elapsed = reset_progress * reset_duration
     align = str(layer.get("align") or "center")
     if align not in ("left", "center", "right"):
         align = "center"
@@ -2189,7 +2225,12 @@ def _render_split_flap_text(layer: dict, box_w: int, box_h: int, sy: float, elap
     )
     out = Image.new("RGBA", (box_w, box_h), (0, 0, 0, 0))
 
-    if previous_lines is None:
+    if resetting:
+        # Reset the currently displayed board, irrespective of whether its text
+        # came from a normal or sequential line slot.
+        positions = [(li, ci, ch) for li, line in enumerate(lines) for ci, ch in enumerate(line)
+                     if not ch.isspace() and ch not in ("\r", "\n")]
+    elif previous_lines is None:
         # Original single-line/together behaviour: only visible destination cells
         # participate, and each one begins on its deterministic fake character.
         positions = [(li, ci, ch) for li, line in enumerate(lines) for ci, ch in enumerate(line)
@@ -2211,9 +2252,10 @@ def _render_split_flap_text(layer: dict, box_w: int, box_h: int, sy: float, elap
     elif order == "random":
         random.Random(f"{layer.get('id','')}|{layer.get('name','')}|{target}|flap-order").shuffle(ordered)
     rank = {(li, ci): idx for idx, (li, ci, _ch) in enumerate(ordered)}
-    max_delay = min(stagger * max(0, len(ordered) - 1), duration * 0.68)
+    timing_duration = reset_duration if resetting else duration
+    max_delay = min(stagger * max(0, len(ordered) - 1), timing_duration * 0.68)
     actual_stagger = max_delay / max(1, len(ordered) - 1)
-    flip_window = max(0.12, duration - max_delay)
+    flip_window = max(0.05 if resetting else 0.12, timing_duration - max_delay)
     crisp = _is_crisp_mode(str(child_override.get("render_mode") or layer.get("render_mode") or "smooth"))
     flat_index = 0
 
@@ -2247,6 +2289,33 @@ def _render_split_flap_text(layer: dict, box_w: int, box_h: int, sy: float, elap
             board_overlay = _split_flap_board_overlay(layer, cell_w, cell_h)
             if board_cell is not None:
                 _composite_cell_clipped(out, board_cell, x, y)
+
+            if resetting:
+                if target_ch.isspace() or target_ch in ("\r", "\n"):
+                    if board_overlay is not None:
+                        _composite_cell_clipped(out, board_overlay, x, y)
+                    flat_index += 1
+                    continue
+                seq = _split_flap_reset_wheel(target_ch)
+                char_local = reset_elapsed - rank.get((li, ci), 0) * actual_stagger
+                stage_count = max(1, len(seq) - 1)
+                if char_local <= 0:
+                    src_ch = dst_ch = seq[0]; phase = 0.0
+                elif char_local >= flip_window:
+                    src_ch = dst_ch = " "; phase = 1.0
+                else:
+                    scaled = max(0.0, min(float(stage_count) - 1e-9,
+                                          char_local / max(1e-6, flip_window) * stage_count))
+                    stage = min(stage_count - 1, int(scaled))
+                    phase = scaled - stage
+                    src_ch, dst_ch = seq[stage], seq[stage + 1]
+                src = render_char(src_ch)
+                cell = src if src_ch == dst_ch else _split_flap_cell(src, render_char(dst_ch), phase, crisp)
+                _composite_cell_clipped(out, cell, x, y)
+                if board_overlay is not None:
+                    _composite_cell_clipped(out, board_overlay, x, y)
+                flat_index += 1
+                continue
 
             if previous_line is not None:
                 if source_ch == target_ch:
@@ -3812,6 +3881,16 @@ def render_scene(scene: dict, width: int, height: int, elapsed: float, now: date
         ltype = str(layer.get("type") or "text")
         scene_duration = max(0.25, float(scene.get("duration", 10) or 10))
         content_layer, content_elapsed = _sequenced_text_layer(layer, elapsed, scene_duration)
+        transition_effect, transition_progress, transition_entering, _transition_visible = _layer_transition_phase(
+            layer, elapsed, forced_exit_elapsed
+        )
+        if (ltype == "text" and str(content_layer.get("animation") or "") == "split-flap"
+                and transition_effect == "reset-slats" and not transition_entering):
+            content_layer = dict(content_layer)
+            content_layer["_flap_reset_progress"] = transition_progress
+            content_layer["_flap_reset_duration"] = max(
+                0.05, float(layer.get("exit_duration", 0.5) or 0.5)
+            )
         text_render_mode = content_layer.get("cloud_render_mode") if ltype == "cloud-text" else content_layer.get("render_mode")
         layer_is_crisp = (ltype == "icon") or (ltype == "text" and str(content_layer.get("animation") or "") in ("nixie", "seven-segment", "fourteen-segment")) or (ltype in ("text", "cloud-text", "widget") and _is_crisp_mode(str(text_render_mode or "smooth")))
         zone_clip = _scene_zone_rect(scene, layer, sx, sy)

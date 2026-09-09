@@ -409,7 +409,7 @@
                       </select></label>
                       <label>Entrance duration (s)<input type="number" id="layerEntranceDuration" min="0.05" max="60" step="0.05" value="0.5"></label>
                       <label>Exit<select id="layerExitEffect">
-                        <option value="none">None</option><option value="fade">Fade out</option>
+                        <option value="none">None</option><option value="fade">Fade out</option><option value="reset-slats">Reset slats to blank</option>
                         <option value="slide-left">Slide out left</option><option value="slide-right">Slide out right</option>
                         <option value="slide-up">Slide out top</option><option value="slide-down">Slide out bottom</option>
                         <option value="wipe-left">Wipe out to left</option><option value="wipe-right">Wipe out to right</option>
@@ -422,7 +422,7 @@
                       <label>Exit after (s)<input type="number" id="layerExitAfter" min="0" max="86400" step="0.1" value="0"></label>
                       <label>Exit duration (s)<input type="number" id="layerExitDuration" min="0.05" max="60" step="0.05" value="0.5"></label>
                     </div>
-                    <p class="hint">Text, image, video, widget and icon layers. Exit after is measured from the layer start, after Start delay. Set it to 0 to keep the layer on indefinitely. Entrance/exit effects can be combined with scrolling, bounce, blink or pulse.</p>
+                    <p class="hint">Text, image, video, widget and icon layers. Exit after is measured from the layer start, after Start delay. Set it to 0 to keep the layer on indefinitely. <strong>Reset slats to blank</strong> is available for split-flap text: every populated cell cycles forward through its physical card wheel and lands on blank. Other entrance/exit effects can be combined with scrolling, bounce, blink or pulse.</p>
                   </details>
 
                   <div id="textLayerProperties" class="layer-kind-properties content-properties">
