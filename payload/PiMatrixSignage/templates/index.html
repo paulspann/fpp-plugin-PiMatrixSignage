@@ -418,11 +418,12 @@
                         <option value="zoom">Zoom out</option>
                       </select></label>
                     </div>
-                    <div class="form-grid cols-2">
-                      <label>Exit after (s)<input type="number" id="layerExitAfter" min="0" max="86400" step="0.1" value="0"></label>
+                    <div class="form-grid cols-3">
+                      <label>Exit timing<select id="layerExitTiming"><option value="scene-end">At scene end</option><option value="after">After a set time</option><option value="message-change">When message changes</option><option value="none">No automatic exit</option></select></label>
+                      <label id="layerExitAfterWrap">Exit after (s)<input type="number" id="layerExitAfter" min="0.05" max="86400" step="0.1" value="5"></label>
                       <label>Exit duration (s)<input type="number" id="layerExitDuration" min="0.05" max="60" step="0.05" value="0.5"></label>
                     </div>
-                    <p class="hint">Text, image, video, widget and icon layers. Exit after is measured from the layer start, after Start delay. Set it to 0 to keep the layer on indefinitely. <strong>Reset slats to blank</strong> is available for split-flap text: every populated cell cycles forward through its physical card wheel and lands on blank. Other entrance/exit effects can be combined with scrolling, bounce, blink or pulse.</p>
+                    <p class="hint"><strong>At scene end</strong> guarantees the exit is visible before the scene changes. <strong>After a set time</strong> is measured from the layer start. <strong>When message changes</strong> runs only when playback moves away. <strong>Reset slats to blank</strong> is available for split-flap text and cycles every populated cell to its blank card.</p>
                   </details>
 
                   <div id="textLayerProperties" class="layer-kind-properties content-properties">
@@ -529,6 +530,8 @@
 
                   <div id="shaderLayerProperties" class="layer-kind-properties content-properties hidden">
                     <div class="card-head mini"><div><h3>Shader</h3><p>GPU-generated animated backgrounds/effects rendered directly at the layer's LED resolution.</p></div><label class="btn secondary file-btn">Upload shader<input type="file" id="designerShaderUpload" accept=".fs,.frag,.glsl,.json"></label></div>
+                    <div class="form-grid cols-2"><label>Find an effect<input type="search" id="shaderEffectSearch" placeholder="Search name, description or category"></label><label>Category<select id="shaderEffectCategory"><option value="">All categories</option></select></label></div>
+                    <p class="hint" id="shaderEffectCount">All compatible shader effects are shown. Selecting one updates the animated Designer preview.</p>
                     <div class="form-grid cols-4">
                       <label>Shader<select id="layerShader"><option value="">Choose a shader</option></select></label>
                       <label>Render rate<select id="layerShaderFps"><option value="8">8 fps</option><option value="12">12 fps</option><option value="15" selected>15 fps</option><option value="20">20 fps</option><option value="25">25 fps</option></select></label>
@@ -553,7 +556,7 @@
                   <div id="widgetLayerProperties" class="layer-kind-properties content-properties hidden">
                     <h3>Live widget</h3>
                     <div class="form-grid cols-3">
-                      <label>Widget<select id="layerWidgetType"><option value="clock">Digital clock</option><option value="analog-clock">Analogue clock</option><option value="date">Date</option><option value="countdown">Countdown</option><option value="weather">Weather</option><option value="json">JSON / API value</option><option value="rss">RSS headline</option></select></label>
+                      <label>Widget<select id="layerWidgetType"><option value="clock">Digital clock</option><option value="analog-clock">Analogue clock</option><option value="date">Date</option><option value="countdown">Countdown</option><option value="weather">Weather</option><option value="shopify-products">Fledglings new products</option><option value="json">JSON / API value</option><option value="rss">RSS headline</option></select></label>
                       <label>Display / format<input id="layerWidgetFormat" placeholder="e.g. %H:%M:%S"></label>
                       <label>Refresh (s)<input type="number" id="layerWidgetRefresh" min="5" max="86400" step="1" value="300"></label>
                     </div>
@@ -593,6 +596,11 @@
                     <div id="widgetDataFields" class="widget-fields hidden">
                       <label>Data URL<input type="url" id="layerDataUrl" placeholder="https://example.com/data.json"></label>
                       <div class="form-grid cols-3"><label>JSON path<input id="layerJsonPath" placeholder="status.temperature"></label><label>RSS item #<input type="number" id="layerRssItem" min="1" max="50" value="1"></label><label>Prefix / suffix<div class="inline-fields"><input id="layerDataPrefix" placeholder="Prefix"><input id="layerDataSuffix" placeholder="Suffix"></div></label></div>
+                    </div>
+                    <div id="widgetShopifyFields" class="widget-fields hidden">
+                      <div class="callout compact-callout"><strong>Fledglings product card:</strong> selects randomly from the newest active Shopify products, avoids an immediate repeat, and shows the photograph on the left with title and price on the right. Products with differing variant prices automatically say <em>From £…</em>.</div>
+                      <div class="form-grid cols-4"><label>Change product every (s)<input type="number" id="shopifyRotateSeconds" min="2" max="3600" step="1" value="12"></label><label>Recent product pool<input type="number" id="shopifyProductCount" min="2" max="100" step="1" value="24"></label><label>Photo width (%)<input type="number" id="shopifyImageRatio" min="25" max="70" step="1" value="42"></label><label>Gap (LED px)<input type="number" id="shopifyGap" min="0" max="20" step="1" value="2"></label></div>
+                      <div class="form-grid cols-3"><label>Background<input type="color" id="shopifyBackground" value="#000000"></label><label>Title colour<input type="color" id="shopifyTitleColor" value="#ffffff"></label><label>Price colour<input type="color" id="shopifyPriceColor" value="#ffd45d"></label></div>
                     </div>
                     <details id="widgetTextStyle" class="inspector-group widget-text-style">
                       <summary>Widget text style</summary>
@@ -759,6 +767,12 @@
                     <div class="callout compact-callout"><strong>Access control:</strong> usernames, passwords and tab permissions are managed from the Users tab.</div>
                     <div class="toolbar"><button class="btn primary" id="saveSettings">Save display settings</button></div>
                   </article>
+
+          <article class="card full-span" id="shopifySetupCard">
+            <div class="card-head"><div><h2>Fledglings Shopify products</h2><p>Connect the shop once, then add “Fledglings new products” as a Designer widget. The credential stays on this controller.</p></div><span class="health-badge" id="shopifyStatus">Not connected</span></div>
+            <div class="form-grid cols-4"><label>Shopify store<input id="shopifyStore" placeholder="fledglings.myshopify.com" autocomplete="off"></label><label>Admin API access token<input type="password" id="shopifyToken" placeholder="Leave blank to keep saved token" autocomplete="new-password"></label><label>Newest product pool<input type="number" id="shopifyDefaultCount" min="2" max="100" value="24"></label><label>Refresh catalogue every (s)<input type="number" id="shopifyRefreshSeconds" min="60" max="86400" value="300"></label></div>
+            <div class="toolbar"><button class="btn primary" id="saveShopify" type="button">Save Shopify connection</button><button class="btn secondary" id="testShopify" type="button">Test connection</button><button class="btn danger ghost" id="disconnectShopify" type="button">Disconnect</button><span class="muted" id="shopifyMessage">Use a custom app Admin API token with read_products permission.</span></div>
+          </article>
         </div>
       </div>
 

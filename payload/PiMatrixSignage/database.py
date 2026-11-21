@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from typing import Any, Iterable
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 DEFAULT_SETTINGS = {
     "panel_width": 64,
@@ -46,6 +46,13 @@ DEFAULT_SETTINGS = {
         {"id":"B","enabled":False,"action":"none","contact_type":"normally_open","emergency_behaviour":"latch","debounce_ms":100},
         {"id":"C","enabled":False,"action":"none","contact_type":"normally_open","emergency_behaviour":"latch","debounce_ms":100},
     ],
+    # Fledglings Shopify product feed.  The access token is kept server-side and
+    # is deliberately removed from every settings response and support bundle.
+    "shopify_store": "",
+    "shopify_admin_token": "",
+    "shopify_api_version": "2026-07",
+    "shopify_product_count": 24,
+    "shopify_refresh_seconds": 300,
 }
 
 

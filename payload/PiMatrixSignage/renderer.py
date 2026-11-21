@@ -12,6 +12,7 @@ import urllib.parse
 import xml.etree.ElementTree as ET
 import random
 import hashlib
+import base64
 from functools import lru_cache
 from collections import deque
 import threading
@@ -78,6 +79,27 @@ _LIVE_DATA_CACHE: dict[str, dict] = {}
 _LIVE_DATA_LOCK = threading.RLock()
 _SHADER_CLIENTS: dict[str, ShaderClient] = {}
 _SHADER_CLIENTS_LOCK = threading.RLock()
+_SHOPIFY_CONFIG: dict = {}
+_SHOPIFY_CONFIG_LOCK = threading.RLock()
+
+
+def configure_shopify(settings: dict | None) -> None:
+    """Install the server-side Shopify source without leaking it into scenes."""
+    source = settings or {}
+    with _SHOPIFY_CONFIG_LOCK:
+        _SHOPIFY_CONFIG.clear()
+        _SHOPIFY_CONFIG.update({
+            "store": str(source.get("shopify_store") or "").strip(),
+            "token": str(source.get("shopify_admin_token") or "").strip(),
+            "api_version": str(source.get("shopify_api_version") or "2026-07").strip(),
+            "count": max(2, min(100, int(source.get("shopify_product_count") or 24))),
+            "refresh": max(60, min(86400, int(source.get("shopify_refresh_seconds") or 300))),
+        })
+
+
+def _shopify_config() -> dict:
+    with _SHOPIFY_CONFIG_LOCK:
+        return dict(_SHOPIFY_CONFIG)
 
 
 def _shader_client(upload_fonts_dir: str) -> ShaderClient:
@@ -357,6 +379,163 @@ def _http_text(url: str, timeout: float = 5.0, max_bytes: int = 1_000_000) -> st
     if len(raw) > max_bytes:
         raise ValueError("Live-data response is too large")
     return raw.decode("utf-8", "replace")
+
+
+def _shopify_store_host(value: str) -> str:
+    raw = str(value or "").strip().lower()
+    if "://" in raw:
+        raw = urllib.parse.urlparse(raw).netloc
+    raw = raw.split("/", 1)[0].strip(". ")
+    if raw and "." not in raw:
+        raw += ".myshopify.com"
+    if not re.fullmatch(r"[a-z0-9][a-z0-9.-]*[a-z0-9]", raw or ""):
+        return ""
+    return raw
+
+
+def _shopify_products(layer: dict) -> list[dict]:
+    config = _shopify_config()
+    store = _shopify_store_host(config.get("store", ""))
+    token = str(config.get("token") or "")
+    if not store or not token:
+        return []
+    refresh = max(60.0, float(config.get("refresh") or 300))
+    count = max(2, min(100, int(layer.get("shopify_product_count") or config.get("count") or 24)))
+    key = f"shopify-products:{store}:{count}"
+
+    def fetch():
+        version = str(config.get("api_version") or "2026-07")
+        if not re.fullmatch(r"20\d\d-(?:01|04|07|10)", version):
+            version = "2026-07"
+        query = """query RecentProducts($first: Int!) {
+          products(first: $first, sortKey: CREATED_AT, reverse: true, query: \"status:active\") {
+            nodes { id title createdAt onlineStoreUrl
+              featuredImage { url altText }
+              priceRangeV2 { minVariantPrice { amount currencyCode }
+                             maxVariantPrice { amount currencyCode } }
+            }
+          }
+        }"""
+        payload = json.dumps({"query": query, "variables": {"first": count}}).encode("utf-8")
+        req = urllib.request.Request(
+            f"https://{store}/admin/api/{version}/graphql.json", data=payload, method="POST",
+            headers={"Content-Type": "application/json", "X-Shopify-Access-Token": token,
+                     "User-Agent": "PiMatrixSignage/Fledglings"},
+        )
+        with urllib.request.urlopen(req, timeout=8.0) as response:
+            raw = response.read(2_000_001)
+        if len(raw) > 2_000_000:
+            raise ValueError("Shopify response is too large")
+        body = json.loads(raw.decode("utf-8", "replace"))
+        if body.get("errors"):
+            raise ValueError(str(body["errors"][0].get("message") or "Shopify query failed"))
+        nodes = (((body.get("data") or {}).get("products") or {}).get("nodes") or [])
+        products = []
+        for node in nodes:
+            if not isinstance(node, dict) or not str(node.get("title") or "").strip():
+                continue
+            price = node.get("priceRangeV2") or {}
+            low, high = price.get("minVariantPrice") or {}, price.get("maxVariantPrice") or {}
+            products.append({
+                "id": str(node.get("id") or ""), "title": str(node.get("title") or "").strip(),
+                "image": str((node.get("featuredImage") or {}).get("url") or ""),
+                "min": str(low.get("amount") or "0"), "max": str(high.get("amount") or low.get("amount") or "0"),
+                "currency": str(low.get("currencyCode") or "GBP"), "created_at": str(node.get("createdAt") or ""),
+            })
+        return json.dumps(products, separators=(",", ":"), ensure_ascii=False)
+
+    raw = _live_fetch_async(key, refresh, fetch, placeholder="[]", error_value="[]")
+    try:
+        products = json.loads(raw)
+        return products if isinstance(products, list) else []
+    except Exception:
+        return []
+
+
+def _shopify_selected_product(layer: dict, elapsed: float) -> dict | None:
+    products = _shopify_products(layer)
+    if not products:
+        return None
+    period = max(2.0, min(3600.0, float(layer.get("shopify_rotate_seconds") or 12)))
+    bucket = max(0, int(elapsed // period))
+    identity = str(layer.get("id") or "fledglings-products")
+    digest = hashlib.sha256(f"{identity}:{bucket}".encode()).digest()
+    index = int.from_bytes(digest[:4], "big") % len(products)
+    if len(products) > 1 and bucket > 0:
+        previous = int.from_bytes(hashlib.sha256(f"{identity}:{bucket-1}".encode()).digest()[:4], "big") % len(products)
+        if index == previous:
+            index = (index + 1) % len(products)
+    return products[index]
+
+
+def _shopify_product_image(url: str) -> Image.Image | None:
+    url = str(url or "").strip()
+    if not url:
+        return None
+    key = "shopify-image:" + hashlib.sha256(url.encode()).hexdigest()[:20]
+
+    def fetch():
+        parsed = urllib.parse.urlparse(url)
+        if parsed.scheme != "https" or not parsed.netloc:
+            raise ValueError("Invalid Shopify image URL")
+        req = urllib.request.Request(url, headers={"User-Agent": "PiMatrixSignage/Fledglings"})
+        with urllib.request.urlopen(req, timeout=8.0) as response:
+            raw = response.read(5_000_001)
+        if len(raw) > 5_000_000:
+            raise ValueError("Product image is too large")
+        with Image.open(io.BytesIO(raw)) as source:
+            source.thumbnail((512, 512), Image.Resampling.LANCZOS)
+            out = io.BytesIO(); source.convert("RGBA").save(out, format="PNG", optimize=True)
+        return base64.b64encode(out.getvalue()).decode("ascii")
+
+    encoded = _live_fetch_async(key, 86400.0, fetch, placeholder="", error_value="")
+    if not encoded:
+        return None
+    try:
+        with Image.open(io.BytesIO(base64.b64decode(encoded))) as image:
+            return image.convert("RGBA")
+    except Exception:
+        return None
+
+
+def _shopify_price(product: dict) -> str:
+    symbols = {"GBP": "£", "EUR": "€", "USD": "$", "CAD": "CA$", "AUD": "A$"}
+    currency = str(product.get("currency") or "GBP").upper()
+    try:
+        low, high = float(product.get("min") or 0), float(product.get("max") or 0)
+    except Exception:
+        low = high = 0.0
+    amount = f"{low:.2f}"
+    value = f"{symbols.get(currency, currency + ' ')}{amount}"
+    return ("From " if abs(high - low) > 0.0001 else "") + value
+
+
+def _render_shopify_product(layer: dict, box_w: int, box_h: int, sy: float, elapsed: float,
+                            now: datetime, upload_fonts_dir: str) -> Image.Image:
+    w, h = max(1, int(box_w)), max(1, int(box_h))
+    out = Image.new("RGBA", (w, h), (*_hex_color(str(layer.get("shopify_background") or "#000000")), 255))
+    product = _shopify_selected_product(layer, elapsed)
+    if product is None:
+        message = "Connect Fledglings Shopify" if not _shopify_config().get("token") else "Loading new products…"
+        child = dict(layer); child.update(type="text", text=message, animation="static", auto_fit=True, wrap=True, padding=1)
+        return _render_scene_text(child, w, h, sy, elapsed, now, upload_fonts_dir)
+    gap = max(1, int(round(float(layer.get("shopify_gap") or 2) * sy)))
+    image_w = max(1, min(w - 1, int(round(w * max(.25, min(.7, float(layer.get("shopify_image_ratio") or .42)))))))
+    image = _shopify_product_image(str(product.get("image") or ""))
+    if image is not None:
+        fitted = _contain(image, (image_w, h))
+        out.alpha_composite(fitted, ((image_w - fitted.width) // 2, (h - fitted.height) // 2))
+    text_x = min(w - 1, image_w + gap); text_w = max(1, w - text_x)
+    price_h = max(5, min(h // 2, int(round(h * .30))))
+    title_h = max(1, h - price_h)
+    title = dict(layer); title.update(type="text", widget_type="", text=str(product.get("title") or "New product"),
+        animation="static", auto_fit=True, wrap=True, padding=0, align="left", valign="middle",
+        color=str(layer.get("shopify_title_color") or "#ffffff"))
+    price = dict(title); price.update(text=_shopify_price(product), wrap=False, valign="middle",
+        color=str(layer.get("shopify_price_color") or "#ffd45d"))
+    out.alpha_composite(_render_scene_text(title, text_w, title_h, sy, elapsed, now, upload_fonts_dir), (text_x, 0))
+    out.alpha_composite(_render_scene_text(price, text_w, price_h, sy, elapsed, now, upload_fonts_dir), (text_x, title_h))
+    return out
 
 
 def _json_path(value, path: str):
@@ -1749,6 +1928,8 @@ def _layer_transition_phase(layer: dict, elapsed: float, forced_exit_elapsed: fl
         return "none", 1.0, True, True
 
     if forced_exit_elapsed is not None:
+        if str(layer.get("exit_timing") or "scene-end").lower() == "none":
+            return "none", 1.0, True, True
         exit_effect = str(layer.get("exit_effect") or "none").lower()
         if exit_effect != "none":
             exit_duration = max(0.05, float(layer.get("exit_duration", 0.5) or 0.5))
@@ -3665,6 +3846,8 @@ def _render_scene_background_shader(bg: dict, w: int, h: int, elapsed: float, up
 
 def _render_layer_content(layer: dict, ltype: str, w: int, h: int, sy: float, elapsed: float,
                           now: datetime, upload_fonts_dir: str, scroll_axis: str | None = None) -> Image.Image:
+    if ltype == "widget" and str(layer.get("widget_type") or "clock") == "shopify-products":
+        return _render_shopify_product(layer, w, h, sy, elapsed, now, upload_fonts_dir)
     if ltype == "widget" and str(layer.get("widget_type") or "clock") == "analog-clock":
         return _render_analog_clock(layer, w, h, now)
     if ltype == "widget" and str(layer.get("widget_type") or "clock") == "weather" and str(layer.get("weather_display") or "text") != "text":
@@ -3874,12 +4057,21 @@ def render_scene(scene: dict, width: int, height: int, elapsed: float, now: date
     sorted_layers = sorted((x for x in layers if isinstance(x, dict)), key=lambda x: int(x.get("z",0) or 0))
     for layer in sorted_layers:
         if not bool(layer.get("enabled", True)): continue
+        layer = dict(layer)
+        scene_duration = max(0.25, float(scene.get("duration", 10) or 10))
+        timing = str(layer.get("exit_timing") or ("after" if float(layer.get("exit_after", 0) or 0) > 0 else "scene-end")).lower()
+        if timing == "scene-end" and str(layer.get("exit_effect") or "none").lower() != "none":
+            delay = max(0.0, float(layer.get("delay", 0) or 0))
+            exit_duration = max(0.05, float(layer.get("exit_duration", .5) or .5))
+            layer["exit_after"] = max(0.05, scene_duration - delay - exit_duration)
+        elif timing in ("message-change", "none"):
+            layer["exit_after"] = 0
+        layer["exit_timing"] = timing
         x = int(round(float(layer.get("x",0) or 0)*sx))
         y = int(round(float(layer.get("y",0) or 0)*sy))
         w = max(1,int(round(float(layer.get("w",design_w) or design_w)*sx)))
         h = max(1,int(round(float(layer.get("h",design_h) or design_h)*sy)))
         ltype = str(layer.get("type") or "text")
-        scene_duration = max(0.25, float(scene.get("duration", 10) or 10))
         content_layer, content_elapsed = _sequenced_text_layer(layer, elapsed, scene_duration)
         transition_effect, transition_progress, transition_entering, _transition_visible = _layer_transition_phase(
             layer, elapsed, forced_exit_elapsed
@@ -4150,6 +4342,7 @@ def _message_exit_duration(message: dict | None) -> float:
         if not isinstance(layer,dict) or not bool(layer.get("enabled",True)): continue
         if str(layer.get("type") or "text") not in ("text","cloud-text","image","video","widget","icon","shader"): continue
         if str(layer.get("exit_effect") or "none").lower()=="none": continue
+        if str(layer.get("exit_timing") or "scene-end").lower()=="none": continue
         try: duration=max(duration,max(.05,float(layer.get("exit_duration",.5) or .5)))
         except Exception: duration=max(duration,.5)
     return duration

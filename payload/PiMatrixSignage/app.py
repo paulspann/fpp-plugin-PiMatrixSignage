@@ -33,7 +33,7 @@ from PIL import Image
 from werkzeug.utils import secure_filename
 
 from database import Database
-from renderer import RendererEngine, list_fonts, render_message, shader_layer_status
+from renderer import RendererEngine, list_fonts, render_message, shader_layer_status, configure_shopify
 from diagnostics import SystemDiagnostics
 from shader_support import SHADER_EXTENSIONS, list_shader_assets, shader_asset_from_path
 from gpio_controls import GPIOControlManager, normalise_gpio_inputs
@@ -114,6 +114,7 @@ for p in (DATA_DIR, UPLOAD_DIR / "images", UPLOAD_DIR / "fonts", UPLOAD_DIR / "v
     p.mkdir(parents=True, exist_ok=True)
 
 db = Database(str(DB_PATH))
+configure_shopify(db.get_settings())
 license_manager = LicenseManager(DATA_DIR, APP_VERSION)
 engine = RendererEngine(db, str(DATA_DIR), str(UPLOAD_DIR), license_checker=license_manager.is_licensed)
 diagnostics = SystemDiagnostics(engine, db, DATA_DIR, UPGRADE_HELPER, LOG)
@@ -367,6 +368,7 @@ def _portable_build_payload(kind: str, object_id: int | None = None) -> dict:
     elif kind == "configuration":
         settings = dict(db.get_settings())
         settings.pop("web_password", None)
+        settings.pop("shopify_admin_token", None)
         payload.update({
             "settings": settings,
             "messages": [_portable_message_record(x) for x in db.list_messages()],
@@ -613,7 +615,7 @@ def _portable_import_payload(manifest: dict, mapping: dict[str, str], saved_by: 
         settings = dict(payload.get("settings") or {})
         if settings.get("default_message_id") is not None: settings["default_message_id"] = msgmap.get(int(settings["default_message_id"]), None)
         if settings.get("emergency_message_id") is not None: settings["emergency_message_id"] = msgmap.get(int(settings["emergency_message_id"]), None)
-        settings.pop("web_password", None); db.update_settings(settings); engine.reload_settings()
+        settings.pop("web_password", None); settings.pop("shopify_admin_token", None); db.update_settings(settings); configure_shopify(db.get_settings()); engine.reload_settings()
         result.update(messages=len(msgmap), playlists=len(plmap), configuration=True)
     else:
         raise ValueError("Unsupported portable package type")
@@ -886,6 +888,8 @@ def get_settings():
     s = db.get_settings()
     safe = dict(s)
     safe.pop("web_password", None)
+    safe.pop("shopify_admin_token", None)
+    safe["shopify_configured"] = bool(s.get("shopify_store") and s.get("shopify_admin_token"))
     safe["display_width"] = int(s["panel_width"]) * int(s["panels_across"])
     safe["display_height"] = int(s["panel_height"]) * int(s["panels_down"])
     safe["channel_count"] = safe["display_width"] * safe["display_height"] * 3
@@ -963,11 +967,73 @@ def put_settings():
     for key in ("auto_recovery_enabled", "auto_recover_renderer", "auto_recover_fppd"):
         if key in data:
             clean[key] = bool(data[key])
+    if "shopify_store" in data:
+        store = str(data.get("shopify_store") or "").strip()
+        if len(store) > 255:
+            raise ValueError("Shopify store address is too long")
+        clean["shopify_store"] = store
+    # An empty token means "leave the saved token alone".  Clearing credentials
+    # is a separate explicit action, which prevents a normal settings save from
+    # accidentally disconnecting the Fledglings feed.
+    if str(data.get("shopify_admin_token") or "").strip():
+        token = str(data["shopify_admin_token"]).strip()
+        if len(token) > 500:
+            raise ValueError("Shopify token is too long")
+        clean["shopify_admin_token"] = token
+    if "shopify_product_count" in data:
+        clean["shopify_product_count"] = max(2, min(100, int(data["shopify_product_count"])))
+    if "shopify_refresh_seconds" in data:
+        clean["shopify_refresh_seconds"] = max(60, min(86400, int(data["shopify_refresh_seconds"])))
     if any(key in clean and clean[key] != current.get(key) for key in HARDWARE_PROFILE_KEYS):
         clean.update({"colorlight_commissioned": False, "colorlight_commissioned_at": "", "colorlight_commissioned_by": "", "colorlight_commissioning_tests": {}})
     db.update_settings(clean)
+    configure_shopify(db.get_settings())
     engine.reload_settings()
     return get_settings()
+
+
+@app.post("/api/shopify/test")
+@permission_required("display_setup")
+def shopify_test_api():
+    settings = db.get_settings()
+    raw_store = str(settings.get("shopify_store") or "").strip().lower()
+    if "://" in raw_store:
+        raw_store = urllib.parse.urlparse(raw_store).netloc
+    store = raw_store.split("/", 1)[0].strip(". ")
+    if store and "." not in store:
+        store += ".myshopify.com"
+    token = str(settings.get("shopify_admin_token") or "").strip()
+    if not store or not token or not re.fullmatch(r"[a-z0-9][a-z0-9.-]*[a-z0-9]", store):
+        return jsonify({"ok": False, "message": "Save the Fledglings Shopify store and Admin API token first."}), 400
+    version = str(settings.get("shopify_api_version") or "2026-07")
+    body = json.dumps({"query": "{ shop { name } products(first: 1, query: \"status:active\") { nodes { id } } }"}).encode()
+    req = urllib.request.Request(
+        f"https://{store}/admin/api/{version}/graphql.json", data=body, method="POST",
+        headers={"Content-Type": "application/json", "X-Shopify-Access-Token": token,
+                 "User-Agent": "PiMatrixSignage/Fledglings"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as response:
+            result = json.loads(response.read(500_001).decode("utf-8", "replace"))
+        if result.get("errors"):
+            raise ValueError(str(result["errors"][0].get("message") or "Shopify rejected the request"))
+        data = result.get("data") or {}
+        name = str((data.get("shop") or {}).get("name") or store)
+        available = len(((data.get("products") or {}).get("nodes") or []))
+        return jsonify({"ok": True, "store_name": name, "has_active_products": bool(available),
+                        "message": f"Connected to {name}." + (" Active products are available." if available else " No active products were returned.")})
+    except Exception as exc:
+        LOG.warning("Shopify connection test failed: %s", exc)
+        return jsonify({"ok": False, "message": f"Shopify connection failed: {exc}"}), 400
+
+
+@app.delete("/api/shopify/connection")
+@permission_required("display_setup")
+def shopify_disconnect_api():
+    db.update_settings({"shopify_store": "", "shopify_admin_token": ""})
+    configure_shopify(db.get_settings())
+    engine.reload_settings()
+    return jsonify({"ok": True})
 
 
 def _network_interfaces() -> list[dict]:

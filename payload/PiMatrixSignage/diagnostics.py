@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -127,6 +128,24 @@ class SystemDiagnostics:
         except Exception:
             pass
         return None
+
+    @staticmethod
+    def _throttling() -> dict:
+        """Decode Raspberry Pi under-voltage/thermal throttle flags when available."""
+        try:
+            result = subprocess.run(["vcgencmd", "get_throttled"], capture_output=True, text=True, timeout=1.5)
+            match = re.search(r"0x([0-9a-fA-F]+)", result.stdout or "") if result.returncode == 0 else None
+            if not match:
+                return {"available": False, "raw": None, "active": False, "events": []}
+            value = int(match.group(1), 16)
+            labels = ((0, "Under-voltage now"), (1, "Frequency capped now"), (2, "Throttled now"),
+                      (3, "Soft temperature limit now"), (16, "Under-voltage occurred"),
+                      (17, "Frequency capping occurred"), (18, "Throttling occurred"),
+                      (19, "Soft temperature limit occurred"))
+            events = [label for bit, label in labels if value & (1 << bit)]
+            return {"available": True, "raw": f"0x{value:x}", "active": bool(value & 0xF), "events": events}
+        except Exception:
+            return {"available": False, "raw": None, "active": False, "events": []}
 
     @staticmethod
     def _uptime_seconds() -> float:
@@ -288,6 +307,7 @@ class SystemDiagnostics:
         except Exception:
             load1 = load5 = load15 = 0.0
         temp = self._temperature()
+        throttling = self._throttling()
         fppd_state = self._service_state("fppd.service")
         app_state = self._service_state("pi-matrix-signage.service")
         ddp_port = int(settings.get("ddp_port") or 4048)
@@ -305,6 +325,9 @@ class SystemDiagnostics:
         add("DDP input", "ok" if ddp_listening else "warn", f"UDP {ddp_port} listening" if ddp_listening else f"No listener detected on UDP {ddp_port}")
         if temp is not None:
             add("Temperature", "error" if temp >= 85 else "warn" if temp >= 75 else "ok", f"{temp:.1f}°C")
+        if throttling.get("available"):
+            add("Pi power / throttling", "error" if throttling.get("active") else "warn" if throttling.get("events") else "ok",
+                "; ".join(throttling.get("events") or []) or "No under-voltage or throttling flags")
         free = int(disk.get("free_bytes") or 0)
         add("Storage", "error" if free < 250*1024*1024 else "warn" if free < 1024*1024*1024 else "ok", f"{free/1024/1024/1024:.1f} GB free")
         memp = self._memory()
@@ -323,6 +346,7 @@ class SystemDiagnostics:
                 "cpu_percent": self._cpu_percent(),
                 "load": [round(load1, 2), round(load5, 2), round(load15, 2)],
                 "temperature_c": temp,
+                "throttling": throttling,
                 "memory": memp,
                 "process_rss_bytes": self._process_rss(),
                 "disk": disk,

@@ -1,7 +1,13 @@
-# Pi Matrix Signage v0.6.61
+# Pi Matrix Signage v0.7.0
+
+This Fledglings release adds a credential-safe Shopify new-products widget, explicit scene-end exit timing, searchable shader effects and Pi power/throttling diagnostics.
 
 
-## v0.6.61 – Split-flap reset-to-blank exit
+## v0.7.0 – Fledglings Shopify and operational hardening
+
+- Adds a native Fledglings Shopify new-products widget with recent active-product caching, non-repeating random rotation, photograph-left layout, title and automatic fixed/“From” variant pricing.
+- Adds explicit layer exit timing, searchable/category-filtered shader effects, and Raspberry Pi power/throttling diagnostics.
+- Retains the established FPP panel-output fallback and certified Hanson/Adafruit/Colorlight profiles while the native output daemon proceeds through physical hardware validation.
 
 - Adds **Reset slats to blank** as a dedicated exit effect for split-flap text layers.
 - When the exit begins, every populated module advances forward through the remainder of its real alphabetic or numeric card wheel and finishes on the dedicated blank card. For example, `X` turns through `Y → Z → blank`, while `7` turns through `8 → 9 → blank`.
