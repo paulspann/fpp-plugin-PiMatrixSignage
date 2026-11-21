@@ -10,6 +10,47 @@ def test_shopify_variant_range_uses_from_price():
     assert renderer._shopify_price({"min": "12.5", "max": "12.50", "currency": "GBP"}) == "£12.50"
 
 
+def test_shopify_stock_query_paginates_and_uses_only_local_available_variants(monkeypatch):
+    def variant(price, quantity, tracked=True, name="available"):
+        return {"price": price, "inventoryItem": {"tracked": tracked, "inventoryLevel":
+                None if quantity is None else {"quantities": [{"name": name, "quantity": quantity}]}}}
+
+    def page(nodes, cursor=None):
+        return {"nodes": nodes, "pageInfo": {"hasNextPage": bool(cursor), "endCursor": cursor}}
+
+    def product(pid, variants, status="ACTIVE"):
+        return {"id": pid, "title": pid, "status": status, "variants": variants}
+
+    def graphql(store, token, version, query, variables, timeout):
+        assert variables["location"] == "gid://shopify/Location/9090105380"
+        assert 'inventoryLevel(locationId: $location)' in query
+        assert 'quantities(names: ["available"])' in query
+        if "query MoreStock" in query:
+            assert variables["cursor"] == "variants-2"
+            return {"product": {"variants": page([variant("14.00", 1)])}}
+        if not variables["cursor"]:
+            nodes = [
+                product("other locations only", page([variant("1", None)])),
+                product("zero, negative or untracked", page([
+                    variant("2", 0), variant("3", -1), variant("4", 5, tracked=False),
+                    variant("5", 10, name="on_hand"),
+                ])),
+                product("draft", page([variant("5", 2)]), status="DRAFT"),
+            ]
+            products = page(nodes, "products-2")
+        else:
+            assert variables["cursor"] == "products-2"
+            products = page([product("stocked", page(
+                [variant("6", 0), variant("18", 3)], "variants-2"))])
+        return {"shop": {"name": "Fledglings", "currencyCode": "GBP"}, "products": products}
+
+    monkeypatch.setattr(renderer, "_shopify_graphql", graphql)
+    name, products = renderer.fetch_shopify_stock("fledglings.myshopify.com", "token", "2026-07", 2)
+    assert name == "Fledglings"
+    assert [p["id"] for p in products] == ["stocked"]
+    assert renderer._shopify_price(products[0]) == "From £14.00"
+
+
 def _rotation_fixture(monkeypatch, count):
     products = [{"id": str(i), "title": str(i)} for i in range(count)]
     clock = [0.0]

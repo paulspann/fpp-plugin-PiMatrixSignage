@@ -27,7 +27,7 @@ For beta testing, open FPP's Plugin Manager, paste that raw `pluginInfo.json` UR
 
 ## Current bootstrap payload
 
-This bootstrap contains Pi Matrix Signage v0.7.1 for the Fledglings installation. Signed updates, rollback, controller recovery, licensing and support-package tooling remain built into the managed appliance path.
+This bootstrap contains Pi Matrix Signage v0.7.2 for the Fledglings installation. Signed updates, rollback, controller recovery, licensing and support-package tooling remain built into the managed appliance path.
 
 ## v0.1.32
 
