@@ -1,4 +1,4 @@
-# Pi Matrix Signage FPP Plugin v0.1.31
+# Pi Matrix Signage FPP Plugin v0.1.32
 
 10+ bootstrap/integration plugin for Pi Matrix Signage on Raspberry Pi.
 
@@ -27,13 +27,21 @@ For beta testing, open FPP's Plugin Manager, paste that raw `pluginInfo.json` UR
 
 ## Current bootstrap payload
 
-This test bootstrap contains Pi Matrix Signage v0.6.61. The next commercial-hardening stage should move the application payload out of the public bootstrap repository and retrieve a signed, licence-authorised release package from the ISSL/WHMCS licensing service.
+This bootstrap contains Pi Matrix Signage v0.7.0 for the Fledglings installation. Signed updates, rollback, controller recovery, licensing and support-package tooling remain built into the managed appliance path.
+
+## v0.1.32
+
+- Bundles Pi Matrix Signage **v0.7.0**.
+- Adds the native Fledglings Shopify new-products widget: newest active product pool, non-repeating random rotation, cached photography, title and automatic fixed/“From” variant pricing.
+- Keeps the Shopify Admin API credential on the controller and excludes it from browser settings, exports, backups and support packages.
+- Replaces ambiguous `Exit after = 0` behaviour with explicit At scene end / After a set time / When message changes / No automatic exit modes, fixing split-flap reset-to-blank at scene end.
+- Adds searchable/category-filtered shader effects and Raspberry Pi under-voltage/throttling diagnostics.
 
 
 
 ## v0.1.28
 
-- Bundles Pi Matrix Signage **v0.6.61** with the split-flap reset-to-blank exit effect, procedural neon chevrons and 7-/14-segment displays.
+- Bundles Pi Matrix Signage **v0.7.0** with the split-flap reset-to-blank exit effect, procedural neon chevrons and 7-/14-segment displays.
 - Live weather now carries Open-Meteo total/low/mid/high cloud cover into the shader so full overcast renders as a continuous moving deck instead of sparse individual clouds.
 
 ## v0.1.2
