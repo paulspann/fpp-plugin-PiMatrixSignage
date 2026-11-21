@@ -33,8 +33,7 @@ from PIL import Image
 from werkzeug.utils import secure_filename
 
 from database import Database
-from renderer import (RendererEngine, list_fonts, render_message, shader_layer_status,
-                      configure_shopify, fetch_shopify_stock, _shopify_store_host)
+from renderer import RendererEngine, list_fonts, render_message, shader_layer_status, configure_shopify
 from diagnostics import SystemDiagnostics
 from shader_support import SHADER_EXTENSIONS, list_shader_assets, shader_asset_from_path
 from gpio_controls import GPIOControlManager, normalise_gpio_inputs
@@ -997,15 +996,32 @@ def put_settings():
 @permission_required("display_setup")
 def shopify_test_api():
     settings = db.get_settings()
-    store = _shopify_store_host(settings.get("shopify_store") or "")
+    raw_store = str(settings.get("shopify_store") or "").strip().lower()
+    if "://" in raw_store:
+        raw_store = urllib.parse.urlparse(raw_store).netloc
+    store = raw_store.split("/", 1)[0].strip(". ")
+    if store and "." not in store:
+        store += ".myshopify.com"
     token = str(settings.get("shopify_admin_token") or "").strip()
-    if not store or not token:
+    if not store or not token or not re.fullmatch(r"[a-z0-9][a-z0-9.-]*[a-z0-9]", store):
         return jsonify({"ok": False, "message": "Save the Fledglings Shopify store and Admin API token first."}), 400
+    version = str(settings.get("shopify_api_version") or "2026-07")
+    body = json.dumps({"query": "{ shop { name } products(first: 1, query: \"status:active\") { nodes { id } } }"}).encode()
+    req = urllib.request.Request(
+        f"https://{store}/admin/api/{version}/graphql.json", data=body, method="POST",
+        headers={"Content-Type": "application/json", "X-Shopify-Access-Token": token,
+                 "User-Agent": "PiMatrixSignage/Fledglings"},
+    )
     try:
-        name, available = fetch_shopify_stock(store, token, str(settings.get("shopify_api_version") or "2026-07"), 1)
-        return jsonify({"ok": True, "store_name": name, "has_in_stock_products": bool(available),
-                        "message": f"Connected to {name}." + (" Stock confirmed at the Fledglings warehouse." if available
-                                    else " No in-stock products found in the recent catalogue at the Fledglings warehouse.")})
+        with urllib.request.urlopen(req, timeout=10) as response:
+            result = json.loads(response.read(500_001).decode("utf-8", "replace"))
+        if result.get("errors"):
+            raise ValueError(str(result["errors"][0].get("message") or "Shopify rejected the request"))
+        data = result.get("data") or {}
+        name = str((data.get("shop") or {}).get("name") or store)
+        available = len(((data.get("products") or {}).get("nodes") or []))
+        return jsonify({"ok": True, "store_name": name, "has_active_products": bool(available),
+                        "message": f"Connected to {name}." + (" Active products are available." if available else " No active products were returned.")})
     except Exception as exc:
         LOG.warning("Shopify connection test failed: %s", exc)
         return jsonify({"ok": False, "message": f"Shopify connection failed: {exc}"}), 400

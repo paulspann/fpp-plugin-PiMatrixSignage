@@ -8,7 +8,6 @@ import os
 import re
 import colorsys
 import urllib.request
-import urllib.error
 import urllib.parse
 import xml.etree.ElementTree as ET
 import random
@@ -19,7 +18,6 @@ from collections import deque
 import threading
 import time
 from dataclasses import dataclass, field
-from decimal import Decimal, InvalidOperation
 from datetime import datetime, date, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -84,7 +82,6 @@ _SHADER_CLIENTS_LOCK = threading.RLock()
 _SHOPIFY_CONFIG: dict = {}
 _SHOPIFY_CONFIG_LOCK = threading.RLock()
 _SHOPIFY_REPEAT_SECONDS = 300
-_SHOPIFY_LOCATION_ID = "gid://shopify/Location/9090105380"
 _SHOPIFY_ROTATIONS_LOCK = threading.RLock()
 
 
@@ -301,8 +298,7 @@ def _load_video_frame(path: str, elapsed: float, speed: float = 1.0, loop: bool 
 
 
 def _live_fetch_async(key: str, ttl: float, fetcher, placeholder: str = "Loading…",
-                      error_value: str = "Data unavailable", fetch_timeout: float = 12.0,
-                      keep_on_error: bool = True) -> str:
+                      error_value: str = "Data unavailable", fetch_timeout: float = 12.0) -> str:
     """Return cached live data immediately and refresh stale values off-thread.
 
     Network access must never block the LED output thread.  A generation token
@@ -325,7 +321,7 @@ def _live_fetch_async(key: str, ttl: float, fetcher, placeholder: str = "Loading
             entry["fetching"] = False
             entry["fetched"] = now_m
             entry["error"] = f"Live data request timed out after {timeout_s:g}s"
-            if not keep_on_error or not entry.get("value") or entry.get("value") == placeholder:
+            if not entry.get("value") or entry.get("value") == placeholder:
                 entry["value"] = error_value
             LOG.warning("Live data refresh timed out for %s after %.1fs", key, timeout_s)
 
@@ -355,7 +351,7 @@ def _live_fetch_async(key: str, ttl: float, fetcher, placeholder: str = "Loading
                         if int(e.get("generation") or 0) != my_generation:
                             return
                         # Keep a prior successful value on transient failures.
-                        if not keep_on_error or not e.get("value") or e.get("value") == placeholder:
+                        if not e.get("value") or e.get("value") == placeholder:
                             e["value"] = error_value
                         e.update(fetched=time.monotonic(), fetching=False, started=0.0, error=str(exc))
 
@@ -410,198 +406,63 @@ def _shopify_store_host(value: str) -> str:
     return raw
 
 
-_SHOPIFY_VARIANT_STOCK = """
-  pageInfo { hasNextPage endCursor }
-  nodes { price inventoryItem { tracked
-    inventoryLevel(locationId: $location) { quantities(names: ["available"]) { name quantity } }
-  } }
-"""
-
-
-def _shopify_graphql(store: str, token: str, version: str, query: str, variables: dict, timeout: float) -> dict:
-    if not re.fullmatch(r"20\d\d-(?:01|04|07|10)", version):
-        version = "2026-07"
-    payload = json.dumps({"query": query, "variables": variables}).encode("utf-8")
-    req = urllib.request.Request(
-        f"https://{store}/admin/api/{version}/graphql.json", data=payload, method="POST",
-        headers={"Content-Type": "application/json", "X-Shopify-Access-Token": token,
-                 "User-Agent": "PiMatrixSignage/Fledglings"},
-    )
-    with urllib.request.urlopen(req, timeout=timeout) as response:
-        raw = response.read(2_000_001)
-    if len(raw) > 2_000_000:
-        raise ValueError("Shopify response is too large")
-    body = json.loads(raw)
-    if body.get("errors"):
-        raise ValueError(str(body["errors"][0].get("message") or "Shopify stock check failed"))
-    return body["data"]
-
-
-def _shopify_stocked_prices(variants: dict) -> list[Decimal]:
-    prices = []
-    for variant in variants.get("nodes") or []:
-        item = variant.get("inventoryItem") or {}
-        level = item.get("inventoryLevel") or {}
-        if not item.get("tracked") or not any(
-            q.get("name") == "available" and (q.get("quantity") or 0) > 0
-            for q in level.get("quantities") or []
-        ):
-            continue
-        try:
-            price = Decimal(str(variant.get("price")))
-            if price.is_finite() and price >= 0:
-                prices.append(price)
-        except InvalidOperation:
-            continue
-    return prices
-
-
-class _ShopifyPartialTimeout(TimeoutError):
-    def __init__(self, products: list[dict]):
-        super().__init__("Shopify stock scan timed out after verifying part of the pool")
-        self.products = products
-
-
-def fetch_shopify_stock(store: str, token: str, version: str, count: int) -> tuple[str, list[dict]]:
-    """Find newest eligible products without querying other stock locations."""
-    deadline = time.monotonic() + 45.0
-
-    def request(query, **variables):
-        for attempt in range(2):
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise TimeoutError("Shopify stock check timed out")
-            try:
-                return _shopify_graphql(store, token, version, query,
-                                        dict(variables, location=_SHOPIFY_LOCATION_ID), min(10.0, remaining))
-            except (TimeoutError, urllib.error.URLError) as exc:
-                if not isinstance(exc, TimeoutError) and not isinstance(getattr(exc, "reason", None), TimeoutError):
-                    raise
-                if attempt or deadline - time.monotonic() < 3.0:
-                    raise TimeoutError("Shopify stock check timed out") from exc
-
-    recent = """query RecentStock($location: ID!, $cursor: String) {
-      shop { name currencyCode }
-      products(first: 20, after: $cursor, sortKey: CREATED_AT, reverse: true, query: "status:active") {
-        pageInfo { hasNextPage endCursor }
-        nodes { id title status featuredImage { url }
-          variants(first: 8) { %s }
-        }
-      }
-    }""" % _SHOPIFY_VARIANT_STOCK
-    more = """query MoreStock($location: ID!, $product: ID!, $cursor: String!) {
-      product(id: $product) { variants(first: 100, after: $cursor) { %s } }
-    }""" % _SHOPIFY_VARIANT_STOCK
-    products, cursor = [], None
-    try:
-        # Bound API use on catalogues with mostly supplier stock.
-        for _ in range(10):
-            data = request(recent, cursor=cursor)
-            shop = data["shop"]
-            page = data["products"]
-            for node in page["nodes"]:
-                if node.get("status") != "ACTIVE" or not node.get("id") or not str(node.get("title") or "").strip():
-                    continue
-                variants = node["variants"]
-                prices = _shopify_stocked_prices(variants)
-                while variants["pageInfo"]["hasNextPage"]:
-                    variant_cursor = variants["pageInfo"]["endCursor"]
-                    result = request(more, product=node["id"], cursor=variant_cursor)["product"]
-                    if not result:  # Deleted while the stock refresh was running.
-                        prices = []
-                        break
-                    variants = result["variants"]
-                    prices.extend(_shopify_stocked_prices(variants))
-                if not prices:
-                    continue
-                products.append({
-                    "id": node["id"], "title": node["title"].strip(),
-                    "image": (node.get("featuredImage") or {}).get("url") or "",
-                    "min": str(min(prices)), "max": str(max(prices)), "currency": shop["currencyCode"],
-                })
-                if len(products) >= count:
-                    return shop["name"], products
-            if not page["pageInfo"]["hasNextPage"]:
-                break
-            cursor = page["pageInfo"]["endCursor"]
-        return shop["name"], products
-    except TimeoutError as exc:
-        if not products:
-            raise
-        raise _ShopifyPartialTimeout(products) from exc
-
-
-def _shopify_stock_source(layer: dict) -> tuple[dict, str, int]:
+def _shopify_products(layer: dict) -> list[dict]:
     config = _shopify_config()
     store = _shopify_store_host(config.get("store", ""))
-    count = max(2, min(100, int(layer.get("shopify_product_count") or config.get("count") or 24)))
-    return config, store, count
-
-
-def _shopify_products(layer: dict) -> list[dict]:
-    config, store, count = _shopify_stock_source(layer)
     token = str(config.get("token") or "")
     if not store or not token:
         return []
     refresh = max(60.0, float(config.get("refresh") or 300))
-    key = f"shopify-stock:{store}:{count}"
+    count = max(2, min(100, int(layer.get("shopify_product_count") or config.get("count") or 24)))
+    key = f"shopify-products:{store}:{count}"
 
     def fetch():
-        partial = False
-        try:
-            _, products = fetch_shopify_stock(store, token, str(config.get("api_version") or "2026-07"), count)
-        except _ShopifyPartialTimeout as exc:
-            # Use only products from this refresh, never stale results from the last one.
-            products, partial = exc.products, True
-            LOG.warning("Shopify stock scan timed out; using %d/%d verified products", len(products), count)
-        return json.dumps({"products": products, "partial_timeout": partial},
-                          separators=(",", ":"), ensure_ascii=False)
+        version = str(config.get("api_version") or "2026-07")
+        if not re.fullmatch(r"20\d\d-(?:01|04|07|10)", version):
+            version = "2026-07"
+        query = """query RecentProducts($first: Int!) {
+          products(first: $first, sortKey: CREATED_AT, reverse: true, query: \"status:active\") {
+            nodes { id title createdAt onlineStoreUrl
+              featuredImage { url altText }
+              priceRangeV2 { minVariantPrice { amount currencyCode }
+                             maxVariantPrice { amount currencyCode } }
+            }
+          }
+        }"""
+        payload = json.dumps({"query": query, "variables": {"first": count}}).encode("utf-8")
+        req = urllib.request.Request(
+            f"https://{store}/admin/api/{version}/graphql.json", data=payload, method="POST",
+            headers={"Content-Type": "application/json", "X-Shopify-Access-Token": token,
+                     "User-Agent": "PiMatrixSignage/Fledglings"},
+        )
+        with urllib.request.urlopen(req, timeout=8.0) as response:
+            raw = response.read(2_000_001)
+        if len(raw) > 2_000_000:
+            raise ValueError("Shopify response is too large")
+        body = json.loads(raw.decode("utf-8", "replace"))
+        if body.get("errors"):
+            raise ValueError(str(body["errors"][0].get("message") or "Shopify query failed"))
+        nodes = (((body.get("data") or {}).get("products") or {}).get("nodes") or [])
+        products = []
+        for node in nodes:
+            if not isinstance(node, dict) or not str(node.get("title") or "").strip():
+                continue
+            price = node.get("priceRangeV2") or {}
+            low, high = price.get("minVariantPrice") or {}, price.get("maxVariantPrice") or {}
+            products.append({
+                "id": str(node.get("id") or ""), "title": str(node.get("title") or "").strip(),
+                "image": str((node.get("featuredImage") or {}).get("url") or ""),
+                "min": str(low.get("amount") or "0"), "max": str(high.get("amount") or low.get("amount") or "0"),
+                "currency": str(low.get("currencyCode") or "GBP"), "created_at": str(node.get("createdAt") or ""),
+            })
+        return json.dumps(products, separators=(",", ":"), ensure_ascii=False)
 
-    raw = _live_fetch_async(key, refresh, fetch, placeholder="[]", error_value="[]",
-                            fetch_timeout=55, keep_on_error=False)
+    raw = _live_fetch_async(key, refresh, fetch, placeholder="[]", error_value="[]")
     try:
-        payload = json.loads(raw)
-        products = payload.get("products") if isinstance(payload, dict) else payload
+        products = json.loads(raw)
         return products if isinstance(products, list) else []
     except Exception:
         return []
-
-
-def _shopify_display_status(layer: dict) -> tuple[str, str]:
-    """Show only fixed diagnostic labels and counts; never echo API output."""
-    config, store, target = _shopify_stock_source(layer)
-    if not store or not config.get("token"):
-        return "SHOPIFY NOT SET", ""
-    with _LIVE_DATA_LOCK:
-        entry = dict(_LIVE_DATA_CACHE.get(f"shopify-stock:{store}:{target}") or {})
-    try:
-        data = json.loads(entry.get("value") or "[]")
-        partial = isinstance(data, dict) and data.get("partial_timeout")
-        verified = len(data.get("products", []) if isinstance(data, dict) else data)
-    except (TypeError, ValueError):
-        verified = 0
-        partial = False
-    pool = f"POOL {verified}/{target}"
-    if entry.get("fetching") or not entry:
-        return "CHECKING STOCK", pool
-    error = str(entry.get("error") or "").lower()
-    if error:
-        if re.search(r"\b(?:429|throttled|throttling)\b|rate limit", error):
-            label = "API RATE LIMIT"
-        elif "cost" in error and any(term in error for term in ("limit", "exceed", "maximum", "max")):
-            label = "QUERY COST LIMIT"
-        elif "timeout" in error or "timed out" in error:
-            label = "SCAN TIMEOUT"
-        elif re.search(r"\b(?:401|403)\b|access denied|read_inventory|not authorized|unauthori[sz]ed", error):
-            label = "ACCESS DENIED"
-        elif match := re.search(r"http error ([1-5][0-9]{2})\b", error):
-            label = f"API HTTP {match[1]}"
-        elif any(term in error for term in ("urlopen error", "connection refused", "name resolution", "certificate")):
-            label = "NETWORK ERROR"
-        else:
-            label = "SHOPIFY API ERROR"
-        return label, pool
-    return ("PARTIAL TIMEOUT" if partial else "STOCK FOUND" if verified else "NO STOCK MATCHES"), pool
 
 
 def _shopify_selected_product(layer: dict, elapsed: float) -> dict | None:
@@ -683,19 +544,9 @@ def _render_shopify_product(layer: dict, box_w: int, box_h: int, sy: float, elap
                             now: datetime, upload_fonts_dir: str) -> Image.Image:
     w, h = max(1, int(box_w)), max(1, int(box_h))
     out = Image.new("RGBA", (w, h), (*_hex_color(str(layer.get("shopify_background") or "#000000")), 255))
-    if layer.get("shopify_debug") is True:
-        _shopify_products(layer)  # Use the same background refresh as normal playback.
-        status, pool = _shopify_display_status(layer)
-        child = dict(layer, type="text", text="\n".join(filter(None, (status, pool))),
-                     animation="static", auto_fit=True, wrap=False, padding=1,
-                     align="center", valign="middle", color="#ffffff")
-        out.alpha_composite(_render_scene_text(child, w, h, sy, elapsed, now, upload_fonts_dir))
-        return out
     product = _shopify_selected_product(layer, elapsed)
     if product is None:
-        status, _ = _shopify_display_status(layer)
-        message = {"SHOPIFY NOT SET": "Connect Fledglings Shopify", "CHECKING STOCK": "Checking stock…",
-                   "NO STOCK MATCHES": "No stock matches"}.get(status, "Stock check failed")
+        message = "Connect Fledglings Shopify" if not _shopify_config().get("token") else "Loading new products…"
         child = dict(layer); child.update(type="text", text=message, animation="static", auto_fit=True, wrap=True, padding=1)
         return _render_scene_text(child, w, h, sy, elapsed, now, upload_fonts_dir)
     gap = max(1, int(round(float(layer.get("shopify_gap") or 2) * sy)))
