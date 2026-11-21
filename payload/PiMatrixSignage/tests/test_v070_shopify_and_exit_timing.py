@@ -10,12 +10,50 @@ def test_shopify_variant_range_uses_from_price():
     assert renderer._shopify_price({"min": "12.5", "max": "12.50", "currency": "GBP"}) == "£12.50"
 
 
-def test_random_product_rotation_never_immediately_repeats(monkeypatch):
-    products = [{"id": str(i), "title": str(i)} for i in range(5)]
+def _rotation_fixture(monkeypatch, count):
+    products = [{"id": str(i), "title": str(i)} for i in range(count)]
+    clock = [0.0]
+    monkeypatch.setattr(renderer, "_SHOPIFY_ROTATIONS", {})
     monkeypatch.setattr(renderer, "_shopify_products", lambda layer: products)
-    layer = {"id": "fledglings", "shopify_rotate_seconds": 10}
-    picked = [renderer._shopify_selected_product(layer, t * 10.0)["id"] for t in range(20)]
-    assert all(a != b for a, b in zip(picked, picked[1:]))
+    monkeypatch.setattr(renderer.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(renderer.random, "choice", lambda values: values[0])
+    def pick(seconds, elapsed=None):
+        clock[0] = seconds
+        return renderer._shopify_selected_product(
+            {"id": "fledglings", "shopify_rotate_seconds": 10},
+            seconds if elapsed is None else elapsed,
+        )["id"]
+    return products, pick
+
+
+def test_shopify_uses_fresh_products_and_holds_when_pool_is_cooling(monkeypatch):
+    products, pick = _rotation_fixture(monkeypatch, 3)
+    assert [pick(t) for t in (0, 9, 10, 20, 30)] == ["0", "0", "1", "2", "2"]
+    products.reverse()  # A refresh can change list order but not product IDs.
+    assert pick(308) == "2"
+    assert pick(309) == "0"  # 300 seconds since the last frame showing product 0.
+
+
+def test_shopify_live_history_survives_scene_restart_and_preview_is_separate(monkeypatch):
+    _, pick = _rotation_fixture(monkeypatch, 3)
+    real_thread = renderer.threading.current_thread()
+    monkeypatch.setattr(real_thread, "name", "PiMatrixRenderer")
+    assert pick(0, 0) == "0"
+    assert pick(1, 1) == "0"
+    assert pick(5, 0) == "1"  # Same widget on its next playlist visit.
+    monkeypatch.setattr(real_thread, "name", "preview")
+    assert pick(6, 0) == "0"
+    monkeypatch.setattr(real_thread, "name", "PiMatrixRenderer")
+    assert pick(7, 2) == "1"
+
+
+def test_shopify_single_product_and_catalogue_removal(monkeypatch):
+    products, pick = _rotation_fixture(monkeypatch, 2)
+    assert pick(0) == "0"
+    assert pick(10) == "1"
+    products.pop()
+    assert pick(11) == "0"
+    assert pick(30) == "0"
 
 
 def test_shopify_widget_has_offline_setup_placeholder(tmp_path):

@@ -71,4 +71,4 @@ def test_segment_modes_support_live_tokens_and_are_exposed_in_designer():
 
 
 def test_release_version_is_v0659():
-    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.7.0"
+    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.7.1"

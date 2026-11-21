@@ -17,7 +17,7 @@ from functools import lru_cache
 from collections import deque
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, date, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -81,6 +81,19 @@ _SHADER_CLIENTS: dict[str, ShaderClient] = {}
 _SHADER_CLIENTS_LOCK = threading.RLock()
 _SHOPIFY_CONFIG: dict = {}
 _SHOPIFY_CONFIG_LOCK = threading.RLock()
+_SHOPIFY_REPEAT_SECONDS = 300
+_SHOPIFY_ROTATIONS_LOCK = threading.RLock()
+
+
+@dataclass
+class _ShopifyRotation:
+    current: str = ""
+    switched_at: float = 0.0
+    elapsed: float = 0.0
+    last_shown: dict[str, float] = field(default_factory=dict)
+
+
+_SHOPIFY_ROTATIONS: dict[tuple[str, str, str], _ShopifyRotation] = {}
 
 
 def configure_shopify(settings: dict | None) -> None:
@@ -457,15 +470,32 @@ def _shopify_selected_product(layer: dict, elapsed: float) -> dict | None:
     if not products:
         return None
     period = max(2.0, min(3600.0, float(layer.get("shopify_rotate_seconds") or 12)))
-    bucket = max(0, int(elapsed // period))
-    identity = str(layer.get("id") or "fledglings-products")
-    digest = hashlib.sha256(f"{identity}:{bucket}".encode()).digest()
-    index = int.from_bytes(digest[:4], "big") % len(products)
-    if len(products) > 1 and bucket > 0:
-        previous = int.from_bytes(hashlib.sha256(f"{identity}:{bucket-1}".encode()).digest()[:4], "big") % len(products)
-        if index == previous:
-            index = (index + 1) % len(products)
-    return products[index]
+    by_id = {str(p.get("id") or p["title"]): p for p in products}
+    live = threading.current_thread().name == "PiMatrixRenderer"
+    key = (_shopify_config().get("store", ""), "live" if live else "preview",
+           str(layer.get("id") or "fledglings-products"))
+    with _SHOPIFY_ROTATIONS_LOCK:
+        now = time.monotonic()
+        state = _SHOPIFY_ROTATIONS.pop(key, _ShopifyRotation())
+        _SHOPIFY_ROTATIONS[key] = state
+        if len(_SHOPIFY_ROTATIONS) > 256:
+            del _SHOPIFY_ROTATIONS[next(iter(_SHOPIFY_ROTATIONS))]
+        restarted = live and elapsed < state.elapsed
+        if state.current not in by_id or restarted or now - state.switched_at >= period:
+            cutoff = now - _SHOPIFY_REPEAT_SECONDS
+            state.last_shown = {pid: seen for pid, seen in state.last_shown.items() if seen > cutoff}
+            fresh = [pid for pid in by_id if pid != state.current and pid not in state.last_shown]
+            if fresh:
+                state.current = random.choice(fresh)
+                state.switched_at = now
+            elif state.current not in by_id:
+                # A catalogue refresh removed the current card. Stay on the
+                # active catalogue even if all remaining cards are cooling down.
+                state.current = min(by_id, key=lambda pid: state.last_shown.get(pid, float("-inf")))
+                state.switched_at = now
+        state.elapsed = elapsed
+        state.last_shown[state.current] = now
+        return by_id[state.current]
 
 
 def _shopify_product_image(url: str) -> Image.Image | None:
@@ -4076,6 +4106,10 @@ def render_scene(scene: dict, width: int, height: int, elapsed: float, now: date
         transition_effect, transition_progress, transition_entering, _transition_visible = _layer_transition_phase(
             layer, elapsed, forced_exit_elapsed
         )
+        if ltype == "widget" and layer.get("widget_type") == "shopify-products" and (
+            not _transition_visible or elapsed < float(layer.get("delay") or 0)
+        ):
+            continue
         if (ltype == "text" and str(content_layer.get("animation") or "") == "split-flap"
                 and transition_effect == "reset-slats" and not transition_entering):
             content_layer = dict(content_layer)
