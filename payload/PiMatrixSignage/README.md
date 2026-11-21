@@ -1,4 +1,4 @@
-# Pi Matrix Signage v0.7.3
+# Pi Matrix Signage v0.7.4
 
 This Fledglings release adds a credential-safe Shopify new-products widget, explicit scene-end exit timing, searchable shader effects and Pi power/throttling diagnostics.
 

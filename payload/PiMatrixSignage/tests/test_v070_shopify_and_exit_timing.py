@@ -74,6 +74,35 @@ def test_shopify_stock_query_paginates_and_uses_only_local_available_variants(mo
     assert renderer._shopify_price(products[0]) == "From £14.00"
 
 
+def test_shopify_timeout_retries_then_keeps_only_newly_verified_stock(monkeypatch):
+    requests = []
+    def graphql(store, token, version, query, variables, timeout):
+        cursor = variables["cursor"]
+        requests.append(cursor)
+        if cursor:
+            raise renderer.urllib.error.URLError(TimeoutError("timed out"))
+        item = {"tracked": True, "inventoryLevel": {"quantities": [{"name": "available", "quantity": 2}]}}
+        product = {"id": "verified", "title": "Verified", "status": "ACTIVE", "variants": {
+            "nodes": [{"price": "19.99", "inventoryItem": item}], "pageInfo": {"hasNextPage": False},
+        }}
+        return {"shop": {"name": "Fledglings", "currencyCode": "GBP"}, "products": {
+            "nodes": [product], "pageInfo": {"hasNextPage": True, "endCursor": "next"},
+        }}
+
+    def fetch_sync(key, refresh, fn, **kwargs):
+        value = fn()
+        renderer._LIVE_DATA_CACHE[key] = {"value": value}
+        return value
+
+    monkeypatch.setattr(renderer, "_shopify_config", lambda: {"store": "fledglings", "token": "secret"})
+    monkeypatch.setattr(renderer, "_shopify_graphql", graphql)
+    monkeypatch.setattr(renderer, "_LIVE_DATA_CACHE", {})
+    monkeypatch.setattr(renderer, "_live_fetch_async", fetch_sync)
+    assert [p["id"] for p in renderer._shopify_products({})] == ["verified"]
+    assert requests == [None, "next", "next"]
+    assert renderer._shopify_display_status({}) == ("PARTIAL TIMEOUT", "POOL 1/24")
+
+
 def _rotation_fixture(monkeypatch, count):
     products = [{"id": str(i), "title": str(i)} for i in range(count)]
     clock = [0.0]

@@ -8,6 +8,7 @@ import os
 import re
 import colorsys
 import urllib.request
+import urllib.error
 import urllib.parse
 import xml.etree.ElementTree as ET
 import random
@@ -455,16 +456,29 @@ def _shopify_stocked_prices(variants: dict) -> list[Decimal]:
     return prices
 
 
+class _ShopifyPartialTimeout(TimeoutError):
+    def __init__(self, products: list[dict]):
+        super().__init__("Shopify stock scan timed out after verifying part of the pool")
+        self.products = products
+
+
 def fetch_shopify_stock(store: str, token: str, version: str, count: int) -> tuple[str, list[dict]]:
     """Find newest eligible products without querying other stock locations."""
-    deadline = time.monotonic() + 30.0
+    deadline = time.monotonic() + 45.0
 
     def request(query, **variables):
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            raise TimeoutError("Shopify stock check timed out")
-        return _shopify_graphql(store, token, version, query,
-                                dict(variables, location=_SHOPIFY_LOCATION_ID), min(6.0, remaining))
+        for attempt in range(2):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("Shopify stock check timed out")
+            try:
+                return _shopify_graphql(store, token, version, query,
+                                        dict(variables, location=_SHOPIFY_LOCATION_ID), min(10.0, remaining))
+            except (TimeoutError, urllib.error.URLError) as exc:
+                if not isinstance(exc, TimeoutError) and not isinstance(getattr(exc, "reason", None), TimeoutError):
+                    raise
+                if attempt or deadline - time.monotonic() < 3.0:
+                    raise TimeoutError("Shopify stock check timed out") from exc
 
     recent = """query RecentStock($location: ID!, $cursor: String) {
       shop { name currencyCode }
@@ -479,37 +493,42 @@ def fetch_shopify_stock(store: str, token: str, version: str, count: int) -> tup
       product(id: $product) { variants(first: 100, after: $cursor) { %s } }
     }""" % _SHOPIFY_VARIANT_STOCK
     products, cursor = [], None
-    # Bound API use on catalogues with mostly supplier stock.
-    for _ in range(10):
-        data = request(recent, cursor=cursor)
-        shop = data["shop"]
-        page = data["products"]
-        for node in page["nodes"]:
-            if node.get("status") != "ACTIVE" or not node.get("id") or not str(node.get("title") or "").strip():
-                continue
-            variants = node["variants"]
-            prices = _shopify_stocked_prices(variants)
-            while variants["pageInfo"]["hasNextPage"]:
-                variant_cursor = variants["pageInfo"]["endCursor"]
-                result = request(more, product=node["id"], cursor=variant_cursor)["product"]
-                if not result:  # Deleted while the stock refresh was running.
-                    prices = []
-                    break
-                variants = result["variants"]
-                prices.extend(_shopify_stocked_prices(variants))
-            if not prices:
-                continue
-            products.append({
-                "id": node["id"], "title": node["title"].strip(),
-                "image": (node.get("featuredImage") or {}).get("url") or "",
-                "min": str(min(prices)), "max": str(max(prices)), "currency": shop["currencyCode"],
-            })
-            if len(products) >= count:
-                return shop["name"], products
-        if not page["pageInfo"]["hasNextPage"]:
-            break
-        cursor = page["pageInfo"]["endCursor"]
-    return shop["name"], products
+    try:
+        # Bound API use on catalogues with mostly supplier stock.
+        for _ in range(10):
+            data = request(recent, cursor=cursor)
+            shop = data["shop"]
+            page = data["products"]
+            for node in page["nodes"]:
+                if node.get("status") != "ACTIVE" or not node.get("id") or not str(node.get("title") or "").strip():
+                    continue
+                variants = node["variants"]
+                prices = _shopify_stocked_prices(variants)
+                while variants["pageInfo"]["hasNextPage"]:
+                    variant_cursor = variants["pageInfo"]["endCursor"]
+                    result = request(more, product=node["id"], cursor=variant_cursor)["product"]
+                    if not result:  # Deleted while the stock refresh was running.
+                        prices = []
+                        break
+                    variants = result["variants"]
+                    prices.extend(_shopify_stocked_prices(variants))
+                if not prices:
+                    continue
+                products.append({
+                    "id": node["id"], "title": node["title"].strip(),
+                    "image": (node.get("featuredImage") or {}).get("url") or "",
+                    "min": str(min(prices)), "max": str(max(prices)), "currency": shop["currencyCode"],
+                })
+                if len(products) >= count:
+                    return shop["name"], products
+            if not page["pageInfo"]["hasNextPage"]:
+                break
+            cursor = page["pageInfo"]["endCursor"]
+        return shop["name"], products
+    except TimeoutError as exc:
+        if not products:
+            raise
+        raise _ShopifyPartialTimeout(products) from exc
 
 
 def _shopify_stock_source(layer: dict) -> tuple[dict, str, int]:
@@ -528,13 +547,21 @@ def _shopify_products(layer: dict) -> list[dict]:
     key = f"shopify-stock:{store}:{count}"
 
     def fetch():
-        _, products = fetch_shopify_stock(store, token, str(config.get("api_version") or "2026-07"), count)
-        return json.dumps(products, separators=(",", ":"), ensure_ascii=False)
+        partial = False
+        try:
+            _, products = fetch_shopify_stock(store, token, str(config.get("api_version") or "2026-07"), count)
+        except _ShopifyPartialTimeout as exc:
+            # Use only products from this refresh, never stale results from the last one.
+            products, partial = exc.products, True
+            LOG.warning("Shopify stock scan timed out; using %d/%d verified products", len(products), count)
+        return json.dumps({"products": products, "partial_timeout": partial},
+                          separators=(",", ":"), ensure_ascii=False)
 
     raw = _live_fetch_async(key, refresh, fetch, placeholder="[]", error_value="[]",
-                            fetch_timeout=36, keep_on_error=False)
+                            fetch_timeout=55, keep_on_error=False)
     try:
-        products = json.loads(raw)
+        payload = json.loads(raw)
+        products = payload.get("products") if isinstance(payload, dict) else payload
         return products if isinstance(products, list) else []
     except Exception:
         return []
@@ -548,9 +575,12 @@ def _shopify_display_status(layer: dict) -> tuple[str, str]:
     with _LIVE_DATA_LOCK:
         entry = dict(_LIVE_DATA_CACHE.get(f"shopify-stock:{store}:{target}") or {})
     try:
-        verified = len(json.loads(entry.get("value") or "[]"))
+        data = json.loads(entry.get("value") or "[]")
+        partial = isinstance(data, dict) and data.get("partial_timeout")
+        verified = len(data.get("products", []) if isinstance(data, dict) else data)
     except (TypeError, ValueError):
         verified = 0
+        partial = False
     pool = f"POOL {verified}/{target}"
     if entry.get("fetching") or not entry:
         return "CHECKING STOCK", pool
@@ -571,7 +601,7 @@ def _shopify_display_status(layer: dict) -> tuple[str, str]:
         else:
             label = "SHOPIFY API ERROR"
         return label, pool
-    return ("STOCK FOUND" if verified else "NO STOCK MATCHES"), pool
+    return ("PARTIAL TIMEOUT" if partial else "STOCK FOUND" if verified else "NO STOCK MATCHES"), pool
 
 
 def _shopify_selected_product(layer: dict, elapsed: float) -> dict | None:
