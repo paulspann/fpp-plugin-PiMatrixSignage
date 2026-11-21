@@ -10,6 +10,29 @@ def test_shopify_variant_range_uses_from_price():
     assert renderer._shopify_price({"min": "12.5", "max": "12.50", "currency": "GBP"}) == "£12.50"
 
 
+def test_shopify_debug_display_distinguishes_empty_from_failed_refresh(monkeypatch, tmp_path):
+    monkeypatch.setattr(renderer, "_shopify_config", lambda: {"store": "fledglings", "token": "secret"})
+    entry = {"fetching": True, "value": "[]"}
+    monkeypatch.setattr(renderer, "_LIVE_DATA_CACHE", {"shopify-stock:fledglings.myshopify.com:24": entry})
+    layer = {"shopify_debug": True}
+    assert renderer._shopify_display_status(layer) == ("CHECKING STOCK", "POOL 0/24")
+    entry.update(fetching=False)
+    assert renderer._shopify_display_status(layer) == ("NO STOCK MATCHES", "POOL 0/24")
+    entry.update(value='[{"id":"one"}]')
+    assert renderer._shopify_display_status(layer) == ("STOCK FOUND", "POOL 1/24")
+    entry.update(value="[]", error="Shopify stock check timed out: secret")
+    assert renderer._shopify_display_status(layer) == ("SCAN TIMEOUT", "POOL 0/24")
+    entry.update(error="Query cost is 1600, which exceeds the maximum")
+    assert renderer._shopify_display_status(layer) == ("QUERY COST LIMIT", "POOL 0/24")
+
+    seen = []
+    monkeypatch.setattr(renderer, "_shopify_products", lambda _: seen.append("refresh"))
+    monkeypatch.setattr(renderer, "_render_scene_text",
+                        lambda child, *args: seen.append(child["text"]) or Image.new("RGBA", (64, 32)))
+    renderer._render_shopify_product(layer, 64, 32, 1, 0, datetime(2026, 11, 21), str(tmp_path))
+    assert seen == ["refresh", "QUERY COST LIMIT\nPOOL 0/24"]
+
+
 def test_shopify_stock_query_paginates_and_uses_only_local_available_variants(monkeypatch):
     def variant(price, quantity, tracked=True, name="available"):
         return {"price": price, "inventoryItem": {"tracked": tracked, "inventoryLevel":

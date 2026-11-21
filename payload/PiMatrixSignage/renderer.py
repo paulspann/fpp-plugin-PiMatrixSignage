@@ -512,14 +512,19 @@ def fetch_shopify_stock(store: str, token: str, version: str, count: int) -> tup
     return shop["name"], products
 
 
-def _shopify_products(layer: dict) -> list[dict]:
+def _shopify_stock_source(layer: dict) -> tuple[dict, str, int]:
     config = _shopify_config()
     store = _shopify_store_host(config.get("store", ""))
+    count = max(2, min(100, int(layer.get("shopify_product_count") or config.get("count") or 24)))
+    return config, store, count
+
+
+def _shopify_products(layer: dict) -> list[dict]:
+    config, store, count = _shopify_stock_source(layer)
     token = str(config.get("token") or "")
     if not store or not token:
         return []
     refresh = max(60.0, float(config.get("refresh") or 300))
-    count = max(2, min(100, int(layer.get("shopify_product_count") or config.get("count") or 24)))
     key = f"shopify-stock:{store}:{count}"
 
     def fetch():
@@ -533,6 +538,40 @@ def _shopify_products(layer: dict) -> list[dict]:
         return products if isinstance(products, list) else []
     except Exception:
         return []
+
+
+def _shopify_display_status(layer: dict) -> tuple[str, str]:
+    """Show only fixed diagnostic labels and counts; never echo API output."""
+    config, store, target = _shopify_stock_source(layer)
+    if not store or not config.get("token"):
+        return "SHOPIFY NOT SET", ""
+    with _LIVE_DATA_LOCK:
+        entry = dict(_LIVE_DATA_CACHE.get(f"shopify-stock:{store}:{target}") or {})
+    try:
+        verified = len(json.loads(entry.get("value") or "[]"))
+    except (TypeError, ValueError):
+        verified = 0
+    pool = f"POOL {verified}/{target}"
+    if entry.get("fetching") or not entry:
+        return "CHECKING STOCK", pool
+    error = str(entry.get("error") or "").lower()
+    if error:
+        if re.search(r"\b(?:429|throttled|throttling)\b|rate limit", error):
+            label = "API RATE LIMIT"
+        elif "cost" in error and any(term in error for term in ("limit", "exceed", "maximum", "max")):
+            label = "QUERY COST LIMIT"
+        elif "timeout" in error or "timed out" in error:
+            label = "SCAN TIMEOUT"
+        elif re.search(r"\b(?:401|403)\b|access denied|read_inventory|not authorized|unauthori[sz]ed", error):
+            label = "ACCESS DENIED"
+        elif match := re.search(r"http error ([1-5][0-9]{2})\b", error):
+            label = f"API HTTP {match[1]}"
+        elif any(term in error for term in ("urlopen error", "connection refused", "name resolution", "certificate")):
+            label = "NETWORK ERROR"
+        else:
+            label = "SHOPIFY API ERROR"
+        return label, pool
+    return ("STOCK FOUND" if verified else "NO STOCK MATCHES"), pool
 
 
 def _shopify_selected_product(layer: dict, elapsed: float) -> dict | None:
@@ -614,9 +653,19 @@ def _render_shopify_product(layer: dict, box_w: int, box_h: int, sy: float, elap
                             now: datetime, upload_fonts_dir: str) -> Image.Image:
     w, h = max(1, int(box_w)), max(1, int(box_h))
     out = Image.new("RGBA", (w, h), (*_hex_color(str(layer.get("shopify_background") or "#000000")), 255))
+    if layer.get("shopify_debug") is True:
+        _shopify_products(layer)  # Use the same background refresh as normal playback.
+        status, pool = _shopify_display_status(layer)
+        child = dict(layer, type="text", text="\n".join(filter(None, (status, pool))),
+                     animation="static", auto_fit=True, wrap=False, padding=1,
+                     align="center", valign="middle", color="#ffffff")
+        out.alpha_composite(_render_scene_text(child, w, h, sy, elapsed, now, upload_fonts_dir))
+        return out
     product = _shopify_selected_product(layer, elapsed)
     if product is None:
-        message = "Connect Fledglings Shopify" if not _shopify_config().get("token") else "No verified stock"
+        status, _ = _shopify_display_status(layer)
+        message = {"SHOPIFY NOT SET": "Connect Fledglings Shopify", "CHECKING STOCK": "Checking stock…",
+                   "NO STOCK MATCHES": "No stock matches"}.get(status, "Stock check failed")
         child = dict(layer); child.update(type="text", text=message, animation="static", auto_fit=True, wrap=True, padding=1)
         return _render_scene_text(child, w, h, sy, elapsed, now, upload_fonts_dir)
     gap = max(1, int(round(float(layer.get("shopify_gap") or 2) * sy)))
