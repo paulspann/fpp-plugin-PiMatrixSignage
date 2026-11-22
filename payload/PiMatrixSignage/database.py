@@ -98,6 +98,13 @@ class Database:
                     value TEXT NOT NULL
                 );
 
+                CREATE TABLE IF NOT EXISTS shutdown_schedule (
+                    id INTEGER PRIMARY KEY CHECK(id=1),
+                    config TEXT NOT NULL,
+                    armed_at REAL NOT NULL,
+                    last_attempt_date TEXT NOT NULL DEFAULT ''
+                );
+
                 CREATE TABLE IF NOT EXISTS settings (
                     key TEXT PRIMARY KEY,
                     value TEXT NOT NULL
@@ -369,6 +376,25 @@ class Database:
             except Exception:
                 out[row["key"]] = row["value"]
         return out
+
+    def get_shutdown_schedule(self) -> dict:
+        with self.conn() as con:
+            row = con.execute("SELECT * FROM shutdown_schedule WHERE id=1").fetchone()
+        if row is None:
+            return {"enabled": False, "days": [0, 1, 2, 3, 4, 5, 6], "time": "18:00", "armed_at": 0}
+        return {**json.loads(row["config"]), "armed_at": row["armed_at"]}
+
+    def save_shutdown_schedule(self, config: dict, armed_at: float):
+        with self.conn() as con:
+            con.execute("""INSERT INTO shutdown_schedule(id,config,armed_at) VALUES(1,?,?)
+                           ON CONFLICT(id) DO UPDATE SET config=excluded.config, armed_at=excluded.armed_at""",
+                        (json.dumps(config), armed_at))
+
+    def claim_shutdown_occurrence(self, armed_at: float, date: str) -> bool:
+        with self.conn() as con:
+            return con.execute("""UPDATE shutdown_schedule SET last_attempt_date=?
+                                  WHERE id=1 AND armed_at=? AND last_attempt_date < ?""",
+                               (date, armed_at, date)).rowcount == 1
 
     def update_settings(self, values: dict[str, Any]):
         allowed = set(DEFAULT_SETTINGS)

@@ -115,6 +115,7 @@
       <section id="schedules">
         <h2>Schedules, conditions and emergency priority</h2>
         <h3>Normal schedules</h3>
+        <p><strong>Scheduled shutdown</strong> is a separate option under Schedules for users with Schedules and Display setup permissions. Pick days and a local time, enable it and confirm. The operating system stops FPP and powers off the controller. It skips missed runs and active Emergency mode. It does not switch the Pi back on.</p>
         <p>A schedule selects a message or playlist for chosen days and times. Overnight periods may cross midnight. When multiple entries match, priority and specificity determine the active target.</p>
         <h3>Default content</h3>
         <p>The default message is shown when there is no emergency, manual override, matching conditional rule or matching timed schedule. Without a default, the canvas may be blank.</p>
@@ -167,7 +168,7 @@
         <h3>Live health</h3>
         <p>The page reports Pi CPU load and temperature, memory and storage, uptime and IP addresses, renderer frame rate and dropped frames, panel-output/DDP state, internet availability and live-widget fetch health.</p>
         <h3>Automatic recovery</h3>
-        <p>Automatic recovery can restart a stalled LED renderer and restart the panel-output service when it is genuinely inactive. Threshold and cooldown settings prevent repeated recovery loops. Pi Matrix Signage never automatically reboots or powers off the Raspberry Pi.</p>
+        <p>Automatic recovery can restart a stalled LED renderer and restart the panel-output service when it is genuinely inactive. Threshold and cooldown settings prevent repeated recovery loops. Automatic recovery itself never reboots or powers off the Raspberry Pi.</p>
         <h3>Manual recovery and history</h3>
         <p>Use <strong>Restart renderer now</strong> or <strong>Restart panel output service now</strong> when diagnosing a live fault. Recovery history records automatic and manual actions and can be cleared when no longer needed.</p>
         <h3>Engineering access</h3>

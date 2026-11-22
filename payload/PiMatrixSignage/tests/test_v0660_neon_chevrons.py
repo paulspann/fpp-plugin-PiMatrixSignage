@@ -48,4 +48,4 @@ def test_chevron_controls_have_safe_defaults_and_ranges():
 
 
 def test_release_version_is_v0660():
-    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.7.7"
+    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.7.8"

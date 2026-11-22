@@ -684,6 +684,25 @@
       </div>
 
       <div class="automation-stack">
+        <details class="card automation-card hidden" id="shutdownScheduleCard">
+          <summary><strong>Scheduled shutdown</strong><span>Safely stop FPP and power off the Raspberry Pi.</span></summary>
+          <div class="form-grid cols-2">
+            <label>Shutdown time<input id="scheduledShutdownTime" type="time" value="18:00"></label>
+            <label class="checkline"><input id="scheduledShutdownEnabled" type="checkbox"> Enable scheduled shutdown</label>
+          </div>
+          <fieldset><legend>Days</legend><div class="day-picker">
+            <label><input type="checkbox" data-shutdown-day="0" checked>Mon</label>
+            <label><input type="checkbox" data-shutdown-day="1" checked>Tue</label>
+            <label><input type="checkbox" data-shutdown-day="2" checked>Wed</label>
+            <label><input type="checkbox" data-shutdown-day="3" checked>Thu</label>
+            <label><input type="checkbox" data-shutdown-day="4" checked>Fri</label>
+            <label><input type="checkbox" data-shutdown-day="5" checked>Sat</label>
+            <label><input type="checkbox" data-shutdown-day="6" checked>Sun</label>
+          </div></fieldset>
+          <p id="scheduledShutdownStatus" class="muted" aria-live="polite"></p>
+          <div class="callout warn">This shuts down the entire Pi, not just the display. The next playback schedule cannot switch it back on. Missed shutdowns are not replayed at startup. Shutdown is skipped while Emergency mode is active.</div>
+          <div class="toolbar"><button class="btn primary" type="button" id="saveShutdownSchedule">Save shutdown schedule</button></div>
+        </details>
         <details class="card automation-card" open>
           <summary><strong>Conditional content</strong><span>Show content automatically when live conditions become true.</span></summary>
           <div class="automation-split">
@@ -948,7 +967,7 @@
               <button class="btn secondary" id="restartRenderer">Restart renderer now</button>
               <button class="btn secondary" id="restartFppd">Restart panel output service now</button>
             </div>
-            <div class="callout compact-callout"><strong>Safe recovery policy:</strong> Pi Matrix Signage will restart its renderer if frame output stalls and can restart the underlying panel-output service if it is inactive. The system service also restarts Pi Matrix Signage if the application process exits unexpectedly. It will never reboot or power off the Pi automatically.</div>
+            <div class="callout compact-callout"><strong>Safe recovery policy:</strong> Pi Matrix Signage will restart its renderer if frame output stalls and can restart the underlying panel-output service if it is inactive. The system service also restarts Pi Matrix Signage if the application process exits unexpectedly. Automatic recovery itself never reboots or powers off the Pi.</div>
           </details>
 
           <details class="diagnostic-history">

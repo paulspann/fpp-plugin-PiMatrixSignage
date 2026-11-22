@@ -177,6 +177,7 @@
     const settingsItems=$$('.settings-menu-item');
     $('settingsMenu').classList.toggle('hidden',!settingsItems.some(el=>can(el.dataset.permission)));
     if($('engineeringAccessCard'))$('engineeringAccessCard').classList.toggle('hidden',!(can('display_setup')&&can('users')));
+    $('shutdownScheduleCard').classList.toggle('hidden',!(can('schedules')&&can('display_setup')));
     const active=document.querySelector('[data-tab].active');if(active?.dataset.permission&&!can(active.dataset.permission))showDashboard();
   }
   async function refreshAuth(){state.auth=await api('/api/auth/me');applyPermissions();return state.auth;}
@@ -231,6 +232,7 @@
       if(can('playlists'))jobs.push(api('/api/playlists').then(v=>state.playlists=v));
       if(can('schedules'))jobs.push(Promise.all([api('/api/schedules'),api('/api/conditional-rules'),api('/api/brightness-schedules')]).then(([a,b,c])=>{state.schedules=a;state.conditionalRules=b;state.brightnessSchedules=c;}));
       if(can('users'))jobs.push(api('/api/users').then(v=>state.users=v));
+      if(can('schedules')&&can('display_setup'))jobs.push(loadShutdownSchedule());
       await Promise.all(jobs);
       populateSharedSelectors();
       if(can('messages')){renderMessageList();populateFonts();populateAssets();populateVideos();populateShaders();populateComponents();showMessageLibrary();}
@@ -1201,6 +1203,26 @@
     if(!confirm('Confirm safe shutdown. Wait for the Pi activity LED to stop before removing power.'))return;
     try{const r=await api('/api/shutdown',{method:'POST',body:{confirm:'SHUTDOWN'}});toast(r.message||'Raspberry Pi is shutting down');$('shutdownPi').disabled=true;$('statusPill').querySelector('span:last-child').textContent='Shutting down…';}catch(e){toast(e.message,true);}
   }
+
+  function showShutdownSchedule(config){
+    $('scheduledShutdownEnabled').checked=config.enabled;
+    $('scheduledShutdownTime').value=config.time;
+    $$('[data-shutdown-day]').forEach(el=>el.checked=config.days.includes(+el.dataset.shutdownDay));
+    $('scheduledShutdownStatus').textContent=`${config.enabled?'Enabled':'Disabled'} · ${config.timezone}${config.helper_ready?'':' · Shutdown helper unavailable'}`;
+  }
+  async function loadShutdownSchedule(){
+    try{showShutdownSchedule(await api('/api/shutdown-schedule'));}
+    catch(e){$('scheduledShutdownStatus').textContent=e.message;}
+  }
+  $('saveShutdownSchedule').addEventListener('click',async()=>{
+    const enabled=$('scheduledShutdownEnabled').checked,time=$('scheduledShutdownTime').value;
+    const days=$$('[data-shutdown-day]:checked').map(x=>+x.dataset.shutdownDay);
+    if(!time||!days.length){toast('Choose a time and at least one day',true);return;}
+    if(enabled&&!confirm(`Power off the entire Raspberry Pi at ${time} on the selected days? It will stay off until powered on again.`))return;
+    const button=$('saveShutdownSchedule');button.disabled=true;
+    try{showShutdownSchedule(await api('/api/shutdown-schedule',{method:'PUT',body:{enabled,time,days,confirm:enabled?'SHUTDOWN':''}}));toast(enabled?'Scheduled shutdown enabled':'Scheduled shutdown disabled');}
+    catch(e){toast(e.message,true);}finally{button.disabled=false;}
+  });
 
   // ----------------------- Browser upgrades -----------------------
   let upgradePollTimer=null;

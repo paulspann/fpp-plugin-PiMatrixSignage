@@ -35,6 +35,7 @@ from werkzeug.utils import secure_filename
 from database import Database
 from renderer import RendererEngine, list_fonts, render_message, shader_layer_status, configure_shopify
 from diagnostics import SystemDiagnostics
+from shutdown_schedule import ShutdownScheduler, validate_shutdown_schedule
 from shader_support import SHADER_EXTENSIONS, list_shader_assets, shader_asset_from_path
 from gpio_controls import GPIOControlManager, normalise_gpio_inputs
 from licensing import LicenseError, LicenseManager
@@ -1966,6 +1967,36 @@ def uploaded_file(kind: str, filename: str):
     return send_from_directory(str(UPLOAD_DIR / kind), filename)
 
 
+def _scheduled_poweroff():
+    # Only the installed root-owned helper is allowed for unattended use.
+    subprocess.run(["sudo", "-n", str(POWER_HELPER)], check=True, timeout=5)
+
+
+shutdown_scheduler = ShutdownScheduler(db, _scheduled_poweroff, lambda: bool(engine.status()["emergency"]), LOG)
+
+
+@app.route("/api/shutdown-schedule", methods=["GET", "PUT"])
+@permission_required("schedules")
+@permission_required("display_setup")
+def shutdown_schedule_api():
+    if request.method == "PUT":
+        data = request.get_json(silent=True)
+        try:
+            config = validate_shutdown_schedule(data)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        if config["enabled"] and data.get("confirm") != "SHUTDOWN":
+            return jsonify({"error": "Confirm that this schedule will power off the Raspberry Pi."}), 400
+        if config["enabled"] and not POWER_HELPER.is_file():
+            return jsonify({"error": "The shutdown helper is not installed on this controller."}), 409
+        db.save_shutdown_schedule(config, time.time())
+        LOG.info("Shutdown schedule %s by %s", "enabled" if config["enabled"] else "disabled",
+                 g.current_user["username"])
+    config = db.get_shutdown_schedule()
+    config.pop("armed_at", None)
+    return jsonify({**config, "timezone": db.get_settings().get("timezone"), "helper_ready": POWER_HELPER.is_file()})
+
+
 @app.post("/api/shutdown")
 @permission_required("display_setup")
 def shutdown_api():
@@ -2932,11 +2963,13 @@ def main():
     license_manager.start()
     engine.start()
     diagnostics.start()
+    shutdown_scheduler.start()
     gpio_controls.start()
     start_software_update_monitor(APP_VERSION, LOG)
     LOG.info("Pi Matrix Signage v%s starting on %s:%s", APP_VERSION, args.host, args.port)
 
     def stop_handler(*_):
+        shutdown_scheduler.stop()
         stop_software_update_monitor()
         gpio_controls.stop()
         license_manager.stop()
@@ -2949,6 +2982,7 @@ def main():
     try:
         app.run(host=args.host, port=args.port, threaded=True, use_reloader=False)
     finally:
+        shutdown_scheduler.stop()
         stop_software_update_monitor()
         gpio_controls.stop()
         license_manager.stop()
