@@ -24,6 +24,7 @@ from zoneinfo import ZoneInfo
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageSequence, ImageFilter, ImageChops
 
+from database import _playlist_scene_duration
 from ddp import DDPSender
 from shader_support import ShaderClient
 
@@ -4097,6 +4098,8 @@ def render_scene(scene: dict, width: int, height: int, elapsed: float, now: date
         elif timing in ("message-change", "none"):
             layer["exit_after"] = 0
         layer["exit_timing"] = timing
+        layer_forced_exit = (None if scene.get("_playlist_scene_boundary") and timing == "scene-end"
+                             else forced_exit_elapsed)
         x = int(round(float(layer.get("x",0) or 0)*sx))
         y = int(round(float(layer.get("y",0) or 0)*sy))
         w = max(1,int(round(float(layer.get("w",design_w) or design_w)*sx)))
@@ -4104,7 +4107,7 @@ def render_scene(scene: dict, width: int, height: int, elapsed: float, now: date
         ltype = str(layer.get("type") or "text")
         content_layer, content_elapsed = _sequenced_text_layer(layer, elapsed, scene_duration)
         transition_effect, transition_progress, transition_entering, _transition_visible = _layer_transition_phase(
-            layer, elapsed, forced_exit_elapsed
+            layer, elapsed, layer_forced_exit
         )
         if ltype == "widget" and layer.get("widget_type") == "shopify-products" and (
             not _transition_visible or elapsed < float(layer.get("delay") or 0)
@@ -4142,7 +4145,7 @@ def render_scene(scene: dict, width: int, height: int, elapsed: float, now: date
             viewport,visible=_render_scroll_viewport(content_layer,content,w,h,sy,content_elapsed,animation)
             if not visible: continue
             crisp=layer_is_crisp
-            viewport,visible=_apply_layer_transition(viewport,layer,elapsed,crisp,forced_exit_elapsed)
+            viewport,visible=_apply_layer_transition(viewport,layer,elapsed,crisp,layer_forced_exit)
             if not visible: continue
             opacity=max(0.0,min(1.0,float(layer.get("opacity",100) or 0)/100.0))
             _alpha_composite_clipped(base,_apply_opacity(viewport,opacity),x,y,zone_clip);continue
@@ -4156,7 +4159,7 @@ def render_scene(scene: dict, width: int, height: int, elapsed: float, now: date
             viewport,visible=_render_bounce_viewport(content_layer,content,w,h,sy,content_elapsed,animation)
             if not visible: continue
             crisp=layer_is_crisp
-            viewport,visible=_apply_layer_transition(viewport,layer,elapsed,crisp,forced_exit_elapsed)
+            viewport,visible=_apply_layer_transition(viewport,layer,elapsed,crisp,layer_forced_exit)
             if not visible: continue
             opacity=max(0.0,min(1.0,float(layer.get("opacity",100) or 0)/100.0))
             _alpha_composite_clipped(base,_apply_opacity(viewport,opacity),x,y,zone_clip);continue
@@ -4178,7 +4181,7 @@ def render_scene(scene: dict, width: int, height: int, elapsed: float, now: date
             orig_w=max(1,int(round(float(layer.get("w",design_w) or design_w)*sx)));orig_h=max(1,int(round(float(layer.get("h",design_h) or design_h)*sy)))
             viewport=Image.new("RGBA",(orig_w,orig_h),(0,0,0,0));viewport.alpha_composite(lim,((orig_w-lim.width)//2,(orig_h-lim.height)//2))
             crisp=layer_is_crisp
-            viewport,visible=_apply_layer_transition(viewport,layer,elapsed,crisp,forced_exit_elapsed)
+            viewport,visible=_apply_layer_transition(viewport,layer,elapsed,crisp,layer_forced_exit)
             if not visible: continue
             opacity=max(0.0,min(1.0,float(layer.get("opacity",100) or 0)/100.0))*effect_alpha
             _alpha_composite_clipped(base,_apply_opacity(viewport,opacity),orig_x,orig_y,zone_clip)
@@ -4196,6 +4199,7 @@ def render_message(message: dict, width: int, height: int, elapsed: float, now: 
         try:
             scene = json.loads(str(message.get("scene_json") or "{}"))
             if isinstance(scene, dict):
+                scene["_playlist_scene_boundary"] = bool(message.get("_playlist_scene_boundary"))
                 return render_scene(scene, width, height, elapsed, now, upload_fonts_dir, forced_exit_elapsed, skip_scene_transition)
         except Exception:
             LOG.exception("Unable to render designer scene for message %s", message.get("id"))
@@ -4362,7 +4366,7 @@ def _message_scene_transition(message: dict | None, which: str) -> tuple[str,flo
     return effect,duration
 
 
-def _message_exit_duration(message: dict | None) -> float:
+def _message_exit_duration(message: dict | None, *, scene_boundary: bool = False) -> float:
     """Longest configured scene/layer exit duration used before a message cut."""
     scene=_message_scene(message)
     if not scene:
@@ -4377,6 +4381,9 @@ def _message_exit_duration(message: dict | None) -> float:
         if str(layer.get("type") or "text") not in ("text","cloud-text","image","video","widget","icon","shader"): continue
         if str(layer.get("exit_effect") or "none").lower()=="none": continue
         if str(layer.get("exit_timing") or "scene-end").lower()=="none": continue
+        if scene_boundary:
+            timing = layer.get("exit_timing") or ("after" if float(layer.get("exit_after") or 0) > 0 else "scene-end")
+            if str(timing).lower() == "scene-end": continue
         try: duration=max(duration,max(.05,float(layer.get("exit_duration",.5) or .5)))
         except Exception: duration=max(duration,.5)
     return duration
@@ -4853,11 +4860,10 @@ class RendererEngine:
         playlist = self.db.get_playlist(target.target_id)
         if not playlist or not playlist.get("items"):
             return None, elapsed, ""
-        total = sum(max(0.5, float(i.get("duration", 10))) for i in playlist["items"])
-        cursor = elapsed % max(0.5, total)
+        durations = [i.get("scene_duration") or max(0.5, float(i.get("duration", 10))) for i in playlist["items"]]
+        cursor = elapsed % sum(durations)
         acc = 0.0
-        for item in playlist["items"]:
-            duration = max(0.5, float(item.get("duration", 10)))
+        for item, duration in zip(playlist["items"], durations):
             if cursor < acc + duration:
                 return self.db.get_message(int(item["message_id"])), cursor - acc, playlist.get("name", "")
             acc += duration
@@ -5051,17 +5057,25 @@ class RendererEngine:
                     else:
                         current_id = self._display_message_id
                         if current_id is not None and desired_id != current_id and self._display_message is not None:
-                            exit_duration = _message_exit_duration(self._display_message)
+                            same_playlist = (desired_target is not None and desired_target is self._active
+                                             and desired_target.target_type == "playlist")
+                            scene_length = (_playlist_scene_duration(self._display_message.get("editor_mode", "quick"),
+                                                                     self._display_message.get("scene_json", ""))
+                                            if same_playlist else None)
+                            scene_boundary = scene_length is not None
+                            exit_duration = _message_exit_duration(self._display_message, scene_boundary=scene_boundary)
                             out_effect, out_scene_duration = _message_scene_transition(self._display_message, "out")
                             in_effect, in_scene_duration = _message_scene_transition(desired_msg, "in")
                             crossfade = (out_effect == "crossfade" or in_effect == "crossfade") and desired_msg is not None
                             transition_duration = max(exit_duration, in_scene_duration if crossfade else 0.0)
                             if transition_duration > 0:
+                                outgoing = dict(self._display_message, _playlist_scene_boundary=scene_boundary)
+                                outgoing_elapsed = scene_length if scene_boundary else self._display_elapsed
                                 self._transition = MessageTransition(
                                     started_monotonic=loop_start,
                                     duration=transition_duration,
-                                    outgoing_message=dict(self._display_message),
-                                    outgoing_elapsed=self._display_elapsed,
+                                    outgoing_message=outgoing,
+                                    outgoing_elapsed=outgoing_elapsed,
                                     outgoing_target=self._active,
                                     incoming_message=dict(desired_msg) if desired_msg is not None else None,
                                     incoming_target=desired_target,
@@ -5070,8 +5084,8 @@ class RendererEngine:
                                 # Keep the current active target/status until the
                                 # physical exit has actually completed.
                                 im = render_message(
-                                    self._display_message, logical_w, logical_h,
-                                    self._display_elapsed, now, self.font_dir,
+                                    outgoing, logical_w, logical_h,
+                                    outgoing_elapsed, now, self.font_dir,
                                     forced_exit_elapsed=0.0,
                                 )
                             else:

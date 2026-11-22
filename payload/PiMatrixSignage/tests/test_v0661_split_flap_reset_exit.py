@@ -93,4 +93,4 @@ def test_designer_only_offers_reset_slats_for_split_flap_text():
 
 
 def test_release_version_is_v0661():
-    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.7.6"
+    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() == "0.7.7"

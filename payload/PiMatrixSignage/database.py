@@ -1,14 +1,28 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import sqlite3
 import threading
 from contextlib import contextmanager
 from datetime import datetime
+from functools import lru_cache
 from typing import Any, Iterable
 
 SCHEMA_VERSION = 12
+
+
+@lru_cache(maxsize=128)
+def _playlist_scene_duration(editor_mode: str, scene_json: str) -> float | None:
+    """Designer scenes with a saved duration supply their own playlist length."""
+    if editor_mode != "designer" or not scene_json:
+        return None
+    try:
+        duration = float(json.loads(scene_json)["duration"])
+        return max(0.25, duration) if math.isfinite(duration) and duration > 0 else None
+    except (ValueError, TypeError, KeyError, OverflowError):
+        return None
 
 DEFAULT_SETTINGS = {
     "panel_width": 64,
@@ -541,8 +555,10 @@ class Database:
 
     def list_message_options(self) -> list[dict[str, Any]]:
         with self.conn() as con:
-            rows = con.execute("SELECT id,name FROM messages WHERE enabled=1 ORDER BY name COLLATE NOCASE").fetchall()
-        return [dict(r) for r in rows]
+            rows = con.execute("SELECT id,name,editor_mode,scene_json FROM messages WHERE enabled=1 ORDER BY name COLLATE NOCASE").fetchall()
+        return [{"id": row["id"], "name": row["name"],
+                 "scene_duration": _playlist_scene_duration(row["editor_mode"], row["scene_json"])}
+                for row in rows]
 
     def list_playlist_options(self) -> list[dict[str, Any]]:
         with self.conn() as con:
@@ -557,13 +573,17 @@ class Database:
                 d = dict(p)
                 items = con.execute(
                     """
-                    SELECT pi.*,m.name AS message_name FROM playlist_items pi
+                    SELECT pi.*,m.name AS message_name,m.editor_mode,m.scene_json FROM playlist_items pi
                     JOIN messages m ON m.id=pi.message_id
                     WHERE pi.playlist_id=? ORDER BY pi.position,pi.id
                     """,
                     (p["id"],),
                 ).fetchall()
-                d["items"] = [dict(i) for i in items]
+                d["items"] = []
+                for item in items:
+                    record = dict(item)
+                    record["scene_duration"] = _playlist_scene_duration(record.pop("editor_mode"), record.pop("scene_json"))
+                    d["items"].append(record)
                 result.append(d)
         return result
 

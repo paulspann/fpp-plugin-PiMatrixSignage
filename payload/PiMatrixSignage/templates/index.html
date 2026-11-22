@@ -659,7 +659,7 @@
           <div class="card-head"><div><h2>Playlist editor</h2><p>Messages play from top to bottom and repeat.</p></div><div class="toolbar compact"><button class="btn secondary" id="exportPlaylist">Export</button><label class="btn secondary file-btn compact-file-btn">Import<input type="file" id="importPlaylistFile" accept=".zip,application/zip"></label><button class="btn secondary" id="showPlaylist">Show now</button><button class="btn primary" id="savePlaylist">Save</button><button class="btn danger ghost" id="deletePlaylist">Delete</button></div></div>
           <input type="hidden" id="playlistId">
           <label>Playlist name<input id="playlistName" placeholder="e.g. Reception screen"></label>
-          <div class="row add-playlist-row"><label>Message<select id="playlistMessagePicker"></select></label><label>Duration (seconds)<input type="number" id="playlistDuration" min="0.5" step="0.5" value="10"></label><button class="btn secondary align-end" id="addPlaylistItem">Add</button></div>
+          <div class="row add-playlist-row"><label>Message<select id="playlistMessagePicker"></select></label><label>Duration (seconds · Designer uses scene length)<input type="number" id="playlistDuration" min="0.5" step="any" value="10"></label><button class="btn secondary align-end" id="addPlaylistItem">Add</button></div>
           <div id="playlistItems" class="playlist-items"></div>
         </article>
       </div>
