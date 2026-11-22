@@ -4998,26 +4998,24 @@ class RendererEngine:
                             outgoing_target = transition.outgoing_target
                             transition_duration = transition.duration
                             crossfade_finished = transition.crossfade
-                            incoming_snapshot = transition.incoming_message
                             incoming_target_snapshot = transition.incoming_target
                             self._transition = None
 
-                            if crossfade_finished and incoming_target_snapshot is not None:
-                                desired_target = incoming_target_snapshot
-
-                            # If this was simply the next item in the same
-                            # playlist, pause the playlist clock while a non-overlapping
-                            # exit ran. Crossfades deliberately count as incoming scene time.
+                            # Inside a playlist, a crossfade counts toward the
+                            # incoming item's time, not a new playlist run.
+                            # Keep the original playlist epoch so later items
+                            # are still reachable after the fade.
                             same_playlist = bool(
-                                desired_target and outgoing_target and
-                                desired_target.target_type == "playlist" and
-                                outgoing_target.target_type == "playlist" and
-                                desired_target.target_id == outgoing_target.target_id and
-                                desired_target.source == outgoing_target.source
+                                desired_target is not None and desired_target is outgoing_target and
+                                desired_target is incoming_target_snapshot and desired_target.target_type == "playlist"
                             )
-                            if same_playlist and not crossfade_finished:
-                                desired_target.activated_monotonic += transition_duration
-                            elif crossfade_finished and desired_target is not None:
+                            if same_playlist:
+                                if not crossfade_finished:
+                                    desired_target.activated_monotonic += transition_duration
+                            elif (crossfade_finished and desired_target is not None and incoming_target_snapshot is not None
+                                  and (desired_target.target_type, desired_target.target_id, desired_target.source) ==
+                                      (incoming_target_snapshot.target_type, incoming_target_snapshot.target_id,
+                                       incoming_target_snapshot.source)):
                                 desired_target = ActiveTarget(
                                     desired_target.target_type, desired_target.target_id, desired_target.source,
                                     transition.started_monotonic,
